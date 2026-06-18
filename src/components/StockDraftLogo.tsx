@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
 
+const LOGO_URL = "https://i.imgur.com/Gy3GSwy.jpeg";
+
 export function StockDraftLogo() {
   const [imgError, setImgError] = useState(false);
 
@@ -17,12 +19,13 @@ export function StockDraftLogo() {
 
   return (
     <Image
-      src="/stockdraft-logo.png"
+      src={LOGO_URL}
       alt="StockDraft"
       width={320}
       height={140}
       priority
-      className="w-[min(280px,75vw)] h-auto mx-auto drop-shadow-[0_0_40px_rgba(255,214,0,0.25)]"
+      unoptimized
+      className="w-[min(280px,75vw)] h-auto mx-auto block"
       onError={() => setImgError(true)}
     />
   );
