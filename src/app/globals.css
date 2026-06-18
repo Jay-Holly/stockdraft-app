@@ -5,10 +5,12 @@
   --color-primary-light: #1a5fbf;
   --color-gold: #ffd600;
   --color-gold-dark: #e6c200;
-  --color-dark: #0a0e17;
-  --color-dark-card: #111827;
-  --color-dark-border: #1f2937;
-  --color-muted: #9ca3af;
+  --color-ember: #c45a1a;
+  --color-ember-light: #e07030;
+  --color-dark: #0d0a06;
+  --color-dark-card: #16120c;
+  --color-dark-border: #2a2218;
+  --color-muted: #a89880;
 }
 
 body {
@@ -17,4 +19,180 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ── Landing page fire (pure CSS) ── */
+.fire-scene {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 140px;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.fire-glow {
+  position: absolute;
+  bottom: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120%;
+  height: 100px;
+  background: radial-gradient(
+    ellipse at center bottom,
+    rgba(196, 90, 26, 0.45) 0%,
+    rgba(255, 214, 0, 0.15) 35%,
+    transparent 70%
+  );
+  animation: fire-glow-pulse 2.4s ease-in-out infinite alternate;
+}
+
+.fire-base {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 18px;
+  background: linear-gradient(
+    to top,
+    #c45a1a 0%,
+    #ffd600 40%,
+    transparent 100%
+  );
+  opacity: 0.9;
+}
+
+.flames {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  height: 110px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 2px;
+  filter: blur(1px);
+}
+
+.flame {
+  flex: 1;
+  max-width: 52px;
+  border-radius: 50% 50% 20% 20%;
+  transform-origin: bottom center;
+  animation: flame-dance var(--duration, 1.2s) ease-in-out infinite alternate;
+  animation-delay: var(--delay, 0s);
+}
+
+.flame-1 {
+  height: 70px;
+  background: linear-gradient(to top, #c45a1a 0%, #ffd600 55%, #fff5cc 100%);
+  --duration: 1.1s;
+  --delay: 0s;
+}
+
+.flame-2 {
+  height: 95px;
+  background: linear-gradient(to top, #8b3a0f 0%, #c45a1a 30%, #ffd600 70%, #fff 100%);
+  --duration: 0.9s;
+  --delay: 0.15s;
+  max-width: 64px;
+}
+
+.flame-3 {
+  height: 110px;
+  background: linear-gradient(to top, #6b2808 0%, #c45a1a 25%, #ffd600 60%, #fff8e0 100%);
+  --duration: 1.3s;
+  --delay: 0.05s;
+  max-width: 72px;
+}
+
+.flame-4 {
+  height: 95px;
+  background: linear-gradient(to top, #8b3a0f 0%, #c45a1a 30%, #ffd600 70%, #fff 100%);
+  --duration: 1s;
+  --delay: 0.2s;
+  max-width: 64px;
+}
+
+.flame-5 {
+  height: 70px;
+  background: linear-gradient(to top, #c45a1a 0%, #ffd600 55%, #fff5cc 100%);
+  --duration: 1.15s;
+  --delay: 0.1s;
+}
+
+.flame-6 {
+  height: 55px;
+  background: linear-gradient(to top, #c45a1a 0%, #ffd600 50%, transparent 100%);
+  --duration: 0.85s;
+  --delay: 0.25s;
+  max-width: 44px;
+  opacity: 0.85;
+}
+
+.flame-7 {
+  height: 55px;
+  background: linear-gradient(to top, #c45a1a 0%, #ffd600 50%, transparent 100%);
+  --duration: 0.95s;
+  --delay: 0.3s;
+  max-width: 44px;
+  opacity: 0.85;
+}
+
+@keyframes flame-dance {
+  0% {
+    transform: scaleX(1) scaleY(1) rotate(-2deg);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scaleX(1.08) scaleY(1.05) rotate(1deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(0.92) scaleY(0.88) rotate(3deg);
+    opacity: 0.75;
+  }
+}
+
+@keyframes fire-glow-pulse {
+  0% {
+    opacity: 0.7;
+    transform: translateX(-50%) scaleX(1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1.05);
+  }
+}
+
+@media (min-width: 640px) {
+  .fire-scene {
+    height: 160px;
+  }
+
+  .flames {
+    max-width: 640px;
+    height: 130px;
+  }
+
+  .flame-3 {
+    height: 130px;
+  }
+
+  .flame-2,
+  .flame-4 {
+    height: 110px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flame,
+  .fire-glow {
+    animation: none;
+  }
 }

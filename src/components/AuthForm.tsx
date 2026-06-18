@@ -7,8 +7,15 @@ import { Logo } from "@/components/Logo";
 import { Button } from "@/components/Button";
 
 type AuthMode = "login" | "signup";
+type AuthVariant = "default" | "daytrader";
 
-export function AuthForm({ initialMode }: { initialMode: AuthMode }) {
+export function AuthForm({
+  initialMode,
+  variant = "default",
+}: {
+  initialMode: AuthMode;
+  variant?: AuthVariant;
+}) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -87,7 +94,11 @@ export function AuthForm({ initialMode }: { initialMode: AuthMode }) {
       <div className="text-center mb-8">
         <Logo size="lg" />
         <p className="text-muted mt-3 text-sm">
-          {mode === "login" ? "Welcome back, trader." : "Build your fantasy portfolio."}
+          {mode === "login"
+            ? "Welcome back, trader."
+            : variant === "daytrader"
+              ? "Jump in free — no league required."
+              : "Build your fantasy portfolio."}
         </p>
       </div>
 

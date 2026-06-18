@@ -8,10 +8,12 @@ export default async function AuthPage({
   searchParams: Promise<{ mode?: string }>;
 }) {
   const params = await searchParams;
-  const mode = params.mode === "signup" ? "signup" : "login";
+  const isDayTrader = params.mode === "daytrader";
+  const mode =
+    params.mode === "login" ? "login" : "signup";
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-dark">
       <header className="px-4 py-4">
         <Link href="/" className="inline-block">
           <Logo />
@@ -19,7 +21,7 @@ export default async function AuthPage({
       </header>
 
       <main className="flex-1 flex items-center justify-center px-4 py-8">
-        <AuthForm initialMode={mode} />
+        <AuthForm initialMode={mode} variant={isDayTrader ? "daytrader" : "default"} />
       </main>
     </div>
   );
