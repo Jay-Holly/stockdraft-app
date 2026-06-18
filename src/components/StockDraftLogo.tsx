@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
 
-const LOGO_URL = "https://i.imgur.com/Gy3GSwy.jpeg";
+const LOGO_URL = "https://i.imgur.com/NG4fikb.png";
 
 export function StockDraftLogo() {
   const [imgError, setImgError] = useState(false);
