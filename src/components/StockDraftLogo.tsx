@@ -21,11 +21,11 @@ export function StockDraftLogo() {
     <Image
       src={LOGO_URL}
       alt="StockDraft"
-      width={320}
-      height={140}
+      width={380}
+      height={166}
       priority
       unoptimized
-      className="w-[min(280px,75vw)] h-auto mx-auto block"
+      className="w-[min(380px,90vw)] h-auto mx-auto block"
       onError={() => setImgError(true)}
     />
   );

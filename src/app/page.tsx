@@ -9,13 +9,13 @@ export default function HomePage() {
 
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 pb-36 pt-10 sm:pb-44">
         <div className="w-full max-w-sm mx-auto flex flex-col items-center text-center">
-          <StockDraftLogo />
-
-          <h1 className="mt-8 text-xl sm:text-2xl font-bold tracking-tight text-white leading-snug">
+          <h1 className="mb-6 text-xl sm:text-2xl font-bold tracking-tight text-white leading-snug">
             Where Real Markets Meet Fantasy Sports
           </h1>
 
-          <p className="mt-4 text-sm sm:text-base text-muted leading-relaxed max-w-[320px]">
+          <StockDraftLogo />
+
+          <p className="mt-6 text-sm sm:text-base text-muted leading-relaxed max-w-[320px]">
             Draft stocks like players. Win your league. Learn the markets.
             They&apos;ve never had a season.{" "}
             <span className="text-gold font-semibold">Until now.</span>
