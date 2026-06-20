@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "generate:draft-pool": "node scripts/generate-draft-pool-sql.mjs",
+    "fetch:market-cap-ranks": "node scripts/fetch-market-cap-ranks.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

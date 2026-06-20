@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardContent } from "@/components/DashboardContent";
 import { Logo } from "@/components/Logo";
+import type { DraftPick } from "@/lib/draft/types";
 import type { Profile } from "@/lib/types";
 
 export default async function DashboardPage() {
@@ -61,6 +62,26 @@ export default async function DashboardPage() {
     );
   }
 
+  const { data: draft } = await supabase
+    .from("drafts")
+    .select("id, status")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  let draftPicks: DraftPick[] = [];
+  const draftComplete = draft?.status === "complete";
+
+  if (draft?.id && draftComplete) {
+    const { data: picks } = await supabase
+      .from("draft_picks")
+      .select("*")
+      .eq("draft_id", draft.id)
+      .neq("pick_type", "skip")
+      .order("pick_order", { ascending: true });
+
+    draftPicks = (picks ?? []) as DraftPick[];
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="px-4 py-4 border-b border-dark-border">
@@ -76,6 +97,8 @@ export default async function DashboardPage() {
         <DashboardContent
           profile={profile as Profile}
           email={user.email ?? ""}
+          draftComplete={draftComplete}
+          draftPicks={draftPicks}
         />
       </main>
     </div>

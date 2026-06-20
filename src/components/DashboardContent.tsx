@@ -9,13 +9,20 @@ import {
   type Profile,
 } from "@/lib/types";
 import { Button } from "@/components/Button";
+import { LiveTickerTape } from "@/components/LiveTickerTape";
+import { DraftCallToAction, DraftRoster } from "@/components/draft/DraftRoster";
+import type { DraftPick } from "@/lib/draft/types";
 
 export function DashboardContent({
   profile,
   email,
+  draftComplete = false,
+  draftPicks = [],
 }: {
   profile: Profile;
   email: string;
+  draftComplete?: boolean;
+  draftPicks?: DraftPick[];
 }) {
   const [username, setUsername] = useState(profile.username);
   const [teamName, setTeamName] = useState(profile.team_name);
@@ -81,6 +88,8 @@ export function DashboardContent({
           </div>
         </div>
       </section>
+
+      <LiveTickerTape />
 
       <section className="bg-dark-card border border-dark-border rounded-2xl p-6">
         <h2 className="text-lg font-semibold mb-1">Your profile</h2>
@@ -148,23 +157,30 @@ export function DashboardContent({
         </form>
       </section>
 
-      <section className="bg-dark-card border border-dark-border rounded-2xl p-6">
-        <h2 className="text-lg font-semibold mb-2">Coming soon</h2>
-        <p className="text-muted text-sm mb-4">
-          Draft stocks, join leagues, and compete on the leaderboard. Phase 2 is
-          on the way.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {["Draft Room", "My Portfolio", "Leagues", "Leaderboard"].map((item) => (
-            <div
-              key={item}
-              className="rounded-xl border border-dashed border-dark-border p-4 text-center text-sm text-muted"
-            >
-              {item}
-            </div>
-          ))}
-        </div>
-      </section>
+      {draftComplete && draftPicks.length > 0 ? (
+        <DraftRoster picks={draftPicks} />
+      ) : (
+        <DraftCallToAction />
+      )}
+
+      {!draftComplete && (
+        <section className="bg-dark-card border border-dark-border rounded-2xl p-6">
+          <h2 className="text-lg font-semibold mb-2">Coming soon</h2>
+          <p className="text-muted text-sm mb-4">
+            Leagues, matchups, and the leaderboard arrive in the next phase.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {["My Portfolio", "Leagues", "Matchups", "Leaderboard"].map((item) => (
+              <div
+                key={item}
+                className="rounded-xl border border-dashed border-dark-border p-4 text-center text-sm text-muted"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <Button variant="ghost" onClick={handleSignOut} className="w-full">
         Sign out
