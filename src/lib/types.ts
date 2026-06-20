@@ -8,7 +8,7 @@ export type Profile = {
 
 export const AVATAR_COLORS = [
   { id: "blue", label: "Blue", hex: "#0a3d8f" },
-  { id: "gold", label: "Gold", hex: "#ffd600" },
+  { id: "gold", label: "Gold", hex: "#d0ab48" },
   { id: "green", label: "Green", hex: "#10b981" },
   { id: "red", label: "Red", hex: "#ef4444" },
   { id: "purple", label: "Purple", hex: "#8b5cf6" },
