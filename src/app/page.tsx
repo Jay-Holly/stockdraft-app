@@ -1,11 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
+import { StockTickers } from "@/components/StockTickers";
 
 const LANDING_HERO_URL = "https://i.imgur.com/wYIIeAO.png";
 
 export default function HomePage() {
   return (
     <div className="landing-screen">
+      <StockTickers />
+
       <main className="landing-main">
         <div className="landing-hero-frame">
           <Image
@@ -16,7 +19,7 @@ export default function HomePage() {
             priority
             unoptimized
             className="landing-hero-image"
-            sizes="100vw"
+            sizes="calc(100vw - 120px)"
           />
 
           <nav className="landing-hero-hotspots" aria-label="Get started">

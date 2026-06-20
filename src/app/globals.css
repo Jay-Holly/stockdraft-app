@@ -23,33 +23,48 @@ body {
 
 /* ── Landing page ── */
 .landing-screen {
+  --landing-ticker-width: 60px;
+
   position: relative;
-  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   background-color: var(--color-dark);
 }
 
 body:has(.landing-screen) {
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .landing-main {
+  --landing-max-height: calc(
+    100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
+
+  position: relative;
+  z-index: 10;
   width: 100%;
-  min-height: 100dvh;
+  height: 100%;
+  max-height: 100dvh;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
+  box-sizing: border-box;
   padding:
     env(safe-area-inset-top)
-    env(safe-area-inset-right)
+    calc(var(--landing-ticker-width) + env(safe-area-inset-right))
     env(safe-area-inset-bottom)
-    env(safe-area-inset-left);
-  box-sizing: border-box;
+    calc(var(--landing-ticker-width) + env(safe-area-inset-left));
 }
 
 .landing-hero-frame {
   position: relative;
+  display: block;
   width: 100%;
+  min-width: 90%;
   max-width: 100%;
+  max-height: var(--landing-max-height);
+  align-self: stretch;
   line-height: 0;
 }
 
@@ -58,6 +73,9 @@ body:has(.landing-screen) {
   width: 100%;
   height: auto;
   max-width: 100%;
+  max-height: var(--landing-max-height);
+  object-fit: contain;
+  object-position: center;
 }
 
 .landing-hero-hotspots {
@@ -100,5 +118,137 @@ body:has(.landing-screen) {
   left: 40%;
   width: 20%;
   height: 3.5%;
+}
+
+/* ── Stock tickers (fixed narrow side columns) ── */
+.stock-tickers-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 12;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.stock-ticker {
+  position: fixed;
+  top: 0;
+  width: 60px;
+  max-width: 60px;
+  min-width: 0;
+  height: 100dvh;
+  overflow: hidden;
+  pointer-events: none;
+  box-sizing: border-box;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 8%,
+    black 92%,
+    transparent 100%
+  );
+}
+
+.stock-ticker--up {
+  left: 0;
+}
+
+.stock-ticker--down {
+  right: 0;
+  left: auto;
+}
+
+.stock-ticker-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 60px;
+  max-width: 60px;
+  min-width: 0;
+  will-change: transform;
+  backface-visibility: hidden;
+  animation: ticker-scroll 36s linear infinite;
+}
+
+.stock-ticker-track--down {
+  animation-direction: reverse;
+}
+
+.stock-ticker-set {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 60px;
+  max-width: 60px;
+  flex-shrink: 0;
+}
+
+.stock-ticker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 60px;
+  max-width: 60px;
+  min-width: 0;
+  padding: 8px 2px;
+  flex-shrink: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.stock-ticker-symbol {
+  display: block;
+  width: 100%;
+  max-width: 56px;
+  min-width: 0;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.stock-ticker-change {
+  display: block;
+  width: 100%;
+  max-width: 56px;
+  min-width: 0;
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.stock-ticker-change--up {
+  color: rgba(74, 222, 128, 0.6);
+}
+
+.stock-ticker-change--down {
+  color: rgba(248, 113, 113, 0.6);
+}
+
+@keyframes ticker-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stock-ticker-track {
+    animation: none;
+  }
 }
 
