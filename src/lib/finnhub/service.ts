@@ -162,45 +162,55 @@ export async function fetchFinnhubQuotes(
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
   const quotes: Record<string, FinnhubQuote> = {};
 
-  const chunkSize = 30;
-  for (let i = 0; i < unique.length; i += chunkSize) {
-    const chunk = unique.slice(i, i + chunkSize);
-    const entries = await Promise.all(
-      chunk.map(async (symbol) => {
+  const batchSize = 8;
+
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const batch = unique.slice(i, i + batchSize);
+
+    for (const symbol of batch) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const response = await fetch(
             `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${token}`,
             { next: { revalidate: 60 } }
           );
 
-          if (!response.ok) return null;
+          if (!response.ok) {
+            await sleep(200);
+            continue;
+          }
 
           const data = (await response.json()) as FinnhubQuoteResponse;
           const price = data.c ?? 0;
           const prevClose = data.pc ?? price;
 
-          if (price <= 0) return null;
+          if (price <= 0) {
+            await sleep(200);
+            continue;
+          }
 
-          return [
-            symbol,
-            {
-              price,
-              prevClose,
-              changePercent: calcChangePercent(price, prevClose),
-            },
-          ] as const;
+          quotes[symbol] = {
+            price,
+            prevClose,
+            changePercent: calcChangePercent(price, prevClose),
+          };
+          break;
         } catch {
-          return null;
+          await sleep(200);
         }
-      })
-    );
+      }
+    }
 
-    for (const entry of entries) {
-      if (entry) quotes[entry[0]] = entry[1];
+    if (i + batchSize < unique.length) {
+      await sleep(150);
     }
   }
 
   return quotes;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function searchFinnhubSymbols(

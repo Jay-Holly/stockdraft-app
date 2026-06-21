@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchFinnhubQuotes } from "@/lib/finnhub/service";
+import { mergeQuotesWithFallback } from "@/lib/market/fallback-quotes";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -16,12 +17,19 @@ export async function GET(request: Request) {
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean)
-    .slice(0, 50);
+    .slice(0, 100);
 
   if (symbols.length === 0) {
     return NextResponse.json({});
   }
 
-  const quotes = await fetchFinnhubQuotes(symbols);
+  const live = await fetchFinnhubQuotes(symbols);
+  const missing = symbols.filter((s) => !live[s]);
+  if (missing.length > 0) {
+    const retried = await fetchFinnhubQuotes(missing);
+    Object.assign(live, retried);
+  }
+
+  const quotes = mergeQuotesWithFallback(symbols, live);
   return NextResponse.json(quotes);
 }

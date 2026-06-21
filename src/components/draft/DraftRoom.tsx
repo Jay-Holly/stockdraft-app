@@ -1,20 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCryptoQuotes } from "@/hooks/useCryptoQuotes";
 import { useDraftPool } from "@/hooks/useDraftPool";
+import { useLiveDraftFeed } from "@/hooks/useLiveDraftFeed";
 import { usePoolQuotes } from "@/hooks/usePoolQuotes";
 import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import { getTop100PoolSymbols } from "@/lib/market/draft-pool";
 import { getMyDraftedSymbols, isCryptoSymbol } from "@/lib/draft/engine";
-import type { Draft, DraftState } from "@/lib/draft/types";
+import type { Draft, DraftFeedEvent, DraftState } from "@/lib/draft/types";
 import type { Profile } from "@/lib/types";
 import type { MarketQuote } from "@/lib/market/types";
 import { ConfirmPickModal } from "./ConfirmPickModal";
-import { DraftBoard } from "./DraftBoard";
+import { DraftBoardTabs } from "./DraftBoardTabs";
+import { LiveDraftTicker } from "./LiveDraftTicker";
+import { OnClockBanner } from "./OnClockBanner";
 import { SalaryCapBar } from "./SalaryCapBar";
 import { StockPool } from "./StockPool";
+import type { BotDraftBoard } from "@/lib/league/ai-league";
 
 const POOL_QUOTE_BATCH = 80;
 
@@ -34,8 +38,14 @@ export function DraftRoom({
   const [pendingSymbol, setPendingSymbol] = useState<string | null>(null);
   const [pendingQuote, setPendingQuote] = useState<MarketQuote | null>(null);
   const [pendingSearchPick, setPendingSearchPick] = useState(false);
+  const [botDraftBoards, setBotDraftBoards] = useState<BotDraftBoard[]>([]);
 
   const readOnly = initialDraft?.status === "complete";
+  const liveDraft = state?.liveDraft ?? null;
+  const isLiveDraft = Boolean(liveDraft);
+  const liveInProgress = liveDraft?.status === "in_progress";
+  const canPick =
+    !readOnly && (!isLiveDraft || liveDraft?.isMyTurn === true);
 
   const { stocks: poolStocks, loading: poolLoading, error: poolError } =
     useDraftPool();
@@ -68,22 +78,102 @@ export function DraftRoom({
     [state]
   );
 
+  const skipRecoveryAttempts = useRef(0);
+
+  const applyDraftPayload = useCallback((data: Record<string, unknown>) => {
+    setState(data as DraftState);
+    setBotDraftBoards(
+      Array.isArray(data.botDraftBoards)
+        ? (data.botDraftBoards as BotDraftBoard[])
+        : []
+    );
+  }, []);
+
   const loadDraft = useCallback(async () => {
     setError(null);
-    const res = await fetch("/api/draft");
+    const res = await fetch("/api/draft", { cache: "no-store" });
     const data = await res.json();
+
     if (!res.ok) {
+      if (data.draft && data.turn) {
+        applyDraftPayload(data);
+      }
       setError(data.error ?? "Could not load draft");
       setLoading(false);
       return;
     }
-    setState(data as DraftState);
+
+    applyDraftPayload(data);
+
+    if (
+      !data.liveDraft &&
+      data.turn?.type === "pushback_skip" &&
+      data.draft?.status !== "complete"
+    ) {
+      if (skipRecoveryAttempts.current < 3) {
+        skipRecoveryAttempts.current += 1;
+        window.setTimeout(() => {
+          void loadDraft();
+        }, 400);
+        return;
+      }
+      setError(
+        "Pushback skip could not auto-advance. Try refreshing again or undo your last crypto pick."
+      );
+    } else {
+      skipRecoveryAttempts.current = 0;
+    }
+
+    if (data.liveDraft?.status === "complete") {
+      window.setTimeout(() => router.replace("/dashboard"), 2500);
+    } else if (data.complete || data.draft?.status === "complete") {
+      if (!data.liveDraft) {
+        router.replace("/dashboard");
+      }
+    }
+
     setLoading(false);
-  }, []);
+  }, [applyDraftPayload, router]);
 
   useEffect(() => {
     loadDraft();
   }, [loadDraft]);
+
+  useEffect(() => {
+    if (!liveInProgress) return;
+    const id = window.setInterval(() => {
+      void loadDraft();
+    }, 2500);
+    return () => window.clearInterval(id);
+  }, [liveInProgress, loadDraft]);
+
+  const appendFeedEvent = useCallback((event: DraftFeedEvent) => {
+    setState((prev) => {
+      if (!prev) return prev;
+      const existing = prev.draftFeed ?? [];
+      if (existing.some((e) => e.id === event.id)) return prev;
+      return { ...prev, draftFeed: [...existing, event] };
+    });
+  }, []);
+
+  useLiveDraftFeed(state?.leagueId, state?.draftFeed ?? [], appendFeedEvent);
+
+  const handleSetSafetyPick = useCallback(async (symbol: string | null) => {
+    setError(null);
+    const res = await fetch("/api/draft/safety-pick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Could not set safety pick");
+      return;
+    }
+    setState((prev) =>
+      prev ? { ...prev, safetyPickSymbol: data.safetyPickSymbol ?? null } : prev
+    );
+  }, []);
 
   const submitPick = useCallback(
     async (
@@ -92,7 +182,7 @@ export function DraftRoom({
       allocation?: number,
       isSearchPick = false
     ) => {
-      if (readOnly || busy) return;
+      if (readOnly || busy || !canPick) return;
 
       setBusy(true);
       setDraftingSymbol(symbol);
@@ -117,13 +207,17 @@ export function DraftRoom({
           return;
         }
 
-        setState(data as DraftState);
+        applyDraftPayload(data);
         setPendingSymbol(null);
         setPendingQuote(null);
         setPendingSearchPick(false);
 
-        if (data.complete || data.draft?.status === "complete") {
-          router.replace("/dashboard");
+        if (data.liveDraft?.status === "complete") {
+          window.setTimeout(() => router.replace("/dashboard"), 2500);
+        } else if (data.complete || data.draft?.status === "complete") {
+          if (!data.liveDraft) {
+            router.replace("/dashboard");
+          }
         }
       } catch {
         setError("Pick failed — check your connection and try again.");
@@ -132,7 +226,7 @@ export function DraftRoom({
         setDraftingSymbol(null);
       }
     },
-    [busy, readOnly, router]
+    [applyDraftPayload, busy, canPick, readOnly, router]
   );
 
   function handleDraft(
@@ -140,7 +234,7 @@ export function DraftRoom({
     quote: MarketQuote,
     isSearchPick = false
   ) {
-    if (readOnly || busy) return;
+    if (readOnly || busy || !canPick) return;
 
     if (isCryptoSymbol(symbol)) {
       setPendingSymbol(symbol);
@@ -163,6 +257,7 @@ export function DraftRoom({
   }
 
   async function handleUndo() {
+    if (liveInProgress) return;
     if (!confirm("Undo your last pick?")) return;
     setBusy(true);
     const res = await fetch("/api/draft/undo", { method: "POST" });
@@ -176,6 +271,7 @@ export function DraftRoom({
   }
 
   async function handleReset() {
+    if (liveInProgress) return;
     if (!confirm("Reset your entire draft board?")) return;
     setBusy(true);
     const res = await fetch("/api/draft/reset", { method: "POST" });
@@ -208,18 +304,32 @@ export function DraftRoom({
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Draft Room — 2026 Season</h1>
-          <p className="text-muted text-sm mt-0.5">{state.turn.label}</p>
+          <p className="text-muted text-sm mt-0.5">
+            {isLiveDraft && !liveDraft?.isMyTurn
+              ? `Watching live draft · ${state.turn.label}`
+              : state.turn.label}
+          </p>
         </div>
         <span
           className={
-            state.turn.type === "complete"
+            state.turn.type === "complete" || liveDraft?.status === "complete"
               ? "draft-phase-pill draft-phase-pill--done"
               : "draft-phase-pill"
           }
         >
-          Round {state.draft.current_round} / 15
+          {isLiveDraft
+            ? `Pick ${Math.min(liveDraft!.globalPickNumber + 1, liveDraft!.totalPickSlots)} / ${liveDraft!.totalPickSlots}`
+            : `Round ${state.draft.current_round} / 15`}
         </span>
       </div>
+
+      {liveDraft && (
+        <OnClockBanner
+          liveDraft={liveDraft}
+          myTeamName={profile.team_name}
+          onTimerExpired={() => void loadDraft()}
+        />
+      )}
 
       {readOnly && (
         <div
@@ -234,12 +344,39 @@ export function DraftRoom({
         </div>
       )}
 
-      {!readOnly && state.draft.pushback_skips_remaining > 0 && (
-        <div className="draft-pushback-banner">
-          Pushback active — {state.draft.pushback_skips_remaining} stock turn
-          {state.draft.pushback_skips_remaining > 1 ? "s" : ""} will be skipped
+      {liveDraft?.status === "complete" && (
+        <div
+          className="draft-pushback-banner"
+          style={{
+            borderColor: "rgba(52,211,153,0.35)",
+            background: "rgba(16,185,129,0.08)",
+            color: "#6ee7b7",
+          }}
+        >
+          Live draft complete — matchups are being scheduled. Redirecting to
+          dashboard…
         </div>
       )}
+
+      {!readOnly && !isLiveDraft && state.turn.type === "pushback_skip" && (
+        <div className="draft-pushback-banner">
+          Round skipped — crypto pushback penalty. Processing skip
+          {state.draft.pushback_skips_remaining > 1
+            ? ` (${state.draft.pushback_skips_remaining} queued)…`
+            : "…"}
+        </div>
+      )}
+
+      {!readOnly &&
+        !isLiveDraft &&
+        state.draft.pushback_skips_remaining > 0 &&
+        state.turn.type !== "pushback_skip" && (
+          <div className="draft-pushback-banner">
+            Pushback — {state.draft.pushback_skips_remaining} delayed turn
+            {state.draft.pushback_skips_remaining > 1 ? "s" : ""} remaining
+            (you still get all 10 stock picks)
+          </div>
+        )}
 
       {poolError && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -259,29 +396,45 @@ export function DraftRoom({
         picks={state.picks}
       />
 
-      <div className="draft-layout">
-        <StockPool
-          poolStocks={poolStocks}
-          poolLoading={poolLoading}
-          quotes={quotes}
-          turn={state.turn}
-          buyerCounts={state.buyerCounts}
-          leagueOffBoard={leagueOffBoard}
-          myDrafted={myDrafted}
-          onDraft={handleDraft}
-          draftingSymbol={draftingSymbol}
-          quotesLoading={poolQuotesLoading}
-          busy={busy}
-        />
-        <DraftBoard
-          teamName={profile.team_name}
-          picks={state.picks}
-          summary={state.summary}
-          currentRound={state.draft.current_round}
-          onUndo={handleUndo}
-          onReset={handleReset}
-          busy={busy || readOnly}
-        />
+      <div className="draft-layout draft-layout--live">
+        <div className="draft-layout-main">
+          <StockPool
+            poolStocks={poolStocks}
+            poolLoading={poolLoading}
+            pushbackSkipsRemaining={state.draft.pushback_skips_remaining}
+            quotes={quotes}
+            turn={state.turn}
+            buyerCounts={state.buyerCounts}
+            leagueOffBoard={leagueOffBoard}
+            myDrafted={myDrafted}
+            onDraft={handleDraft}
+            draftingSymbol={draftingSymbol}
+            quotesLoading={poolQuotesLoading}
+            busy={busy}
+            canPick={canPick}
+            safetyPickSymbol={state.safetyPickSymbol ?? null}
+            onSetSafetyPick={
+              isLiveDraft && liveInProgress ? handleSetSafetyPick : undefined
+            }
+          />
+          <DraftBoardTabs
+            teamName={profile.team_name}
+            myPicks={state.picks}
+            mySummary={state.summary}
+            myCurrentRound={state.draft.current_round}
+            botDraftBoards={botDraftBoards}
+            onUndo={handleUndo}
+            onReset={handleReset}
+            busy={busy || readOnly || liveInProgress}
+          />
+        </div>
+
+        {isLiveDraft && (
+          <LiveDraftTicker
+            feed={state.draftFeed ?? []}
+            status={liveDraft?.status}
+          />
+        )}
       </div>
 
       <p className="text-xs text-muted text-center">

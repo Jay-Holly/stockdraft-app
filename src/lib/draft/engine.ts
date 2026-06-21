@@ -2,10 +2,10 @@ import { MIN_STOCK_PRICE_USD } from "@/lib/market/draft-pool";
 import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import {
   BENCH_ROUNDS,
-  CRYPTO_EARLY_MAX_ROUND,
-  CRYPTO_FLEX_ROUNDS,
+  BENCH_START_ROUND,
   CRYPTO_POOL,
   CRYPTO_SURCHARGE_TIERS,
+  OPEN_ROUNDS,
   STOCK_BUDGET,
   STOCK_CAP,
   STOCK_ROUNDS,
@@ -92,82 +92,104 @@ export function getMyDraftedSymbols(picks: DraftPick[]): Set<string> {
   );
 }
 
-export function calculatePushback(
-  cryptoPicksInStockPhase: DraftPick[]
-): number {
-  if (cryptoPicksInStockPhase.length === 0) return 0;
+export function getOpenPhaseCryptoPicks(picks: DraftPick[]): DraftPick[] {
+  return picks.filter(
+    (p) => p.pick_type === "crypto" && p.round_number <= OPEN_ROUNDS
+  );
+}
 
-  const total = cryptoPicksInStockPhase.reduce(
+export function isOpenPhaseComplete(picks: DraftPick[]): boolean {
+  const summary = summarizePicks(picks);
+  return (
+    summary.stockPicks >= STOCK_ROUNDS && summary.cryptoRemaining <= 0
+  );
+}
+
+export function calculatePushback(cryptoPicksInOpenPhase: DraftPick[]): number {
+  if (cryptoPicksInOpenPhase.length === 0) return 0;
+
+  const total = cryptoPicksInOpenPhase.reduce(
     (sum, p) => sum + p.budget_spent,
     0
   );
   if (total < CRYPTO_POOL) return 0;
 
-  if (cryptoPicksInStockPhase.length === 1) return 2;
-  if (cryptoPicksInStockPhase.length === 2) return 1;
+  if (cryptoPicksInOpenPhase.length === 1) return 2;
+  if (cryptoPicksInOpenPhase.length === 2) return 1;
   return 0;
+}
+
+function openTurnLabel(
+  round: number,
+  canPickStock: boolean,
+  canPickCrypto: boolean
+): string {
+  if (canPickStock && canPickCrypto) {
+    return `Round ${round} — open pick (stock $${formatCompact(STOCK_BUDGET)} or crypto)`;
+  }
+  if (canPickStock) {
+    return `Round ${round} — stock pick ($${formatCompact(STOCK_BUDGET)})`;
+  }
+  if (canPickCrypto) {
+    return `Round ${round} — crypto pick (from flex pool)`;
+  }
+  return `Round ${round} — open pick`;
 }
 
 export function getTurn(draft: Draft, picks: DraftPick[]): DraftTurn {
   const summary = summarizePicks(picks);
+  const round = draft.current_round;
 
   if (draft.status === "complete" || isDraftComplete(picks)) {
     return {
       type: "complete",
-      round: draft.current_round,
+      round,
       label: "Draft complete",
+      canPickStock: false,
       canPickCrypto: false,
       stockBudget: 0,
       cryptoRemaining: summary.cryptoRemaining,
     };
   }
 
-  const round = draft.current_round;
+  const inOpenPhase =
+    round <= OPEN_ROUNDS && !isOpenPhaseComplete(picks);
 
-  if (summary.stockPicks < STOCK_ROUNDS) {
+  if (inOpenPhase) {
     if (draft.pushback_skips_remaining > 0) {
       return {
         type: "pushback_skip",
         round,
-        label: `Round ${round} — pushback skip (${draft.pushback_skips_remaining} left)`,
+        label: `Round ${round} — auto-skipped (crypto pushback)`,
+        canPickStock: false,
         canPickCrypto: false,
         stockBudget: 0,
         cryptoRemaining: summary.cryptoRemaining,
       };
     }
 
+    const canPickStock = summary.stockPicks < STOCK_ROUNDS;
+    const canPickCrypto = summary.cryptoRemaining > 0;
+
     return {
-      type: "stock",
+      type: "open",
       round,
-      label: `Round ${round} — stock pick ($${formatCompact(STOCK_BUDGET)})`,
-      canPickCrypto:
-        round <= CRYPTO_EARLY_MAX_ROUND && summary.cryptoRemaining > 0,
-      stockBudget: STOCK_BUDGET,
+      label: openTurnLabel(round, canPickStock, canPickCrypto),
+      canPickStock,
+      canPickCrypto,
+      stockBudget: canPickStock ? STOCK_BUDGET : 0,
       cryptoRemaining: summary.cryptoRemaining,
     };
   }
 
   if (summary.benchPicks < BENCH_ROUNDS) {
-    const benchRound = STOCK_ROUNDS + summary.benchPicks + 1;
+    const benchRound = Math.max(round, BENCH_START_ROUND);
     return {
       type: "bench",
-      round: Math.max(round, benchRound),
-      label: `Round ${Math.max(round, benchRound)} — bench pick (free)`,
-      canPickCrypto:
-        round <= CRYPTO_EARLY_MAX_ROUND && summary.cryptoRemaining > 0,
-      stockBudget: 0,
-      cryptoRemaining: summary.cryptoRemaining,
-    };
-  }
-
-  if (summary.cryptoRemaining > 0) {
-    const flexRound =
-      STOCK_ROUNDS + BENCH_ROUNDS + summary.cryptoPicks + 1;
-    return {
-      type: "crypto_flex",
-      round: Math.max(round, flexRound),
-      label: `Round ${Math.max(round, flexRound)} — crypto flex`,
-      canPickCrypto: true,
+      round: benchRound,
+      label: `Round ${benchRound} — bench pick (free)`,
+      canPickStock: true,
+      canPickCrypto: false,
       stockBudget: 0,
       cryptoRemaining: summary.cryptoRemaining,
     };
@@ -177,18 +199,18 @@ export function getTurn(draft: Draft, picks: DraftPick[]): DraftTurn {
     type: "complete",
     round,
     label: "Draft complete",
+    canPickStock: false,
     canPickCrypto: false,
     stockBudget: 0,
-    cryptoRemaining: 0,
+    cryptoRemaining: summary.cryptoRemaining,
   };
 }
 
 export function isDraftComplete(picks: DraftPick[]): boolean {
   const summary = summarizePicks(picks);
   return (
-    summary.stockPicks >= STOCK_ROUNDS &&
-    summary.benchPicks >= BENCH_ROUNDS &&
-    summary.cryptoRemaining <= 0
+    isOpenPhaseComplete(picks) &&
+    summary.benchPicks >= BENCH_ROUNDS
   );
 }
 
@@ -200,7 +222,26 @@ export function getNextRoundAfterPick(
   const round = draft.current_round;
 
   if (pickType === "skip") {
-    return round + 1;
+    if (round < OPEN_ROUNDS) {
+      return round + 1;
+    }
+    return BENCH_START_ROUND;
+  }
+
+  if (pickType === "stock" || pickType === "crypto") {
+    if (isOpenPhaseComplete(picks)) {
+      return BENCH_START_ROUND;
+    }
+    if (round < OPEN_ROUNDS) {
+      return round + 1;
+    }
+    return BENCH_START_ROUND;
+  }
+
+  if (pickType === "bench") {
+    if (round < BENCH_START_ROUND + BENCH_ROUNDS - 1) {
+      return round + 1;
+    }
   }
 
   return round + 1;
@@ -233,9 +274,9 @@ export {
   STOCK_BUDGET,
   STOCK_CAP,
   BENCH_ROUNDS,
-  CRYPTO_FLEX_ROUNDS,
+  OPEN_ROUNDS,
+  BENCH_START_ROUND,
   TOTAL_ROUNDS,
   CRYPTO_POOL,
   TOTAL_CAP,
-  CRYPTO_EARLY_MAX_ROUND,
 };

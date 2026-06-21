@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
+import type { DraftPoolFilter, DraftPoolStock } from "@/lib/market/draft-pool";
 import {
   CRYPTO_DISPLAY_NAMES,
   DRAFT_POOL_FILTER_BUTTONS,
+  enrichDraftPoolStocks,
   filterDraftPoolStocks,
-  type DraftPoolFilter,
-  type DraftPoolStock,
+  getMarketCapRank,
 } from "@/lib/market/draft-pool";
 import {
   formatMoney,
@@ -18,6 +19,10 @@ import {
 } from "@/lib/draft/engine";
 import type { CryptoBuyerCounts, DraftTurn } from "@/lib/draft/types";
 import type { MarketQuote } from "@/lib/market/types";
+import {
+  StockDetailChartButton,
+  StockDetailModal,
+} from "@/components/market/StockDetailModal";
 
 type SearchResult = {
   symbol: string;
@@ -48,6 +53,10 @@ export function StockPool({
   draftingSymbol = null,
   quotesLoading = false,
   busy = false,
+  pushbackSkipsRemaining = 0,
+  canPick = true,
+  safetyPickSymbol = null,
+  onSetSafetyPick,
 }: {
   poolStocks: DraftPoolStock[];
   poolLoading?: boolean;
@@ -60,16 +69,31 @@ export function StockPool({
   draftingSymbol?: string | null;
   quotesLoading?: boolean;
   busy?: boolean;
+  pushbackSkipsRemaining?: number;
+  canPick?: boolean;
+  safetyPickSymbol?: string | null;
+  onSetSafetyPick?: (symbol: string | null) => void;
 }) {
   const [poolFilter, setPoolFilter] = useState<DraftPoolFilter>("All");
   const [localFilter, setLocalFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
+  const [detailMeta, setDetailMeta] = useState<{
+    name: string;
+    sector: string;
+  } | null>(null);
+  const [detailQuote, setDetailQuote] = useState<MarketQuote | null>(null);
+
+  const enrichedPool = useMemo(
+    () => enrichDraftPoolStocks(poolStocks),
+    [poolStocks]
+  );
 
   const poolSymbolSet = useMemo(
-    () => new Set(poolStocks.map((s) => s.symbol)),
-    [poolStocks]
+    () => new Set(enrichedPool.map((s) => s.symbol)),
+    [enrichedPool]
   );
 
   const quoteMap = useMemo(() => {
@@ -79,9 +103,14 @@ export function StockPool({
   }, [quotes]);
 
   const filteredPool = useMemo(
-    () => filterDraftPoolStocks(poolStocks, { filter: poolFilter, query: localFilter }),
-    [poolStocks, poolFilter, localFilter]
+    () =>
+      filterDraftPoolStocks(enrichedPool, { filter: poolFilter, query: localFilter }),
+    [enrichedPool, poolFilter, localFilter]
   );
+
+  const isTop100View = poolFilter === "Top 100";
+  const isCryptoView = poolFilter === "Crypto";
+  const isPushbackSkip = turn.type === "pushback_skip";
 
   const poolVisibleLimit =
     poolFilter === "Top 100" ? TOP_100_PAGE_SIZE : POOL_PAGE_SIZE;
@@ -119,11 +148,17 @@ export function StockPool({
     return () => window.clearTimeout(timer);
   }, [searchQuery, poolSymbolSet]);
 
-  function getEligibility(symbol: string, quote?: MarketQuote) {
+  function getEligibility(
+    symbol: string,
+    quote?: MarketQuote
+  ): { eligible: boolean; label: string; skipped?: boolean } {
     const crypto = isCryptoSymbol(symbol);
 
     if (draftingSymbol === symbol) {
       return { eligible: false, label: "Drafting…" };
+    }
+    if (!canPick) {
+      return { eligible: false, label: "Watching" };
     }
     if (busy && !crypto) {
       return { eligible: false, label: "Wait…" };
@@ -135,27 +170,41 @@ export function StockPool({
       return { eligible: false, label: "Off board" };
     }
     if (turn.type === "complete") return { eligible: false, label: "Done" };
-    if (turn.type === "pushback_skip") {
-      return { eligible: false, label: "Pushback…" };
+    if (isPushbackSkip) {
+      return { eligible: false, label: "Round skipped", skipped: true };
     }
     if (!quote && !crypto) {
       return { eligible: false, label: quotesLoading ? "Loading…" : "No price" };
     }
 
     if (crypto) {
-      if (!turn.canPickCrypto) return { eligible: false, label: "Not yet" };
+      if (!turn.canPickCrypto) return { eligible: false, label: "Crypto done" };
       return { eligible: true, label: "Draft" };
     }
 
-    if (turn.type === "crypto_flex") {
-      return { eligible: false, label: "Crypto only" };
+    if (turn.type === "bench") {
+      return { eligible: Boolean(quote), label: "Draft" };
     }
 
-    if (turn.type === "bench" || turn.type === "stock") {
+    if (turn.type === "open") {
+      if (!turn.canPickStock) {
+        return { eligible: false, label: "Stock limit" };
+      }
       return { eligible: Boolean(quote), label: "Draft" };
     }
 
     return { eligible: false, label: "Wait" };
+  }
+
+  function openDetail(
+    symbol: string,
+    name: string,
+    sectorLabel: string,
+    quote: MarketQuote | undefined
+  ) {
+    setDetailSymbol(symbol);
+    setDetailMeta({ name, sector: sectorLabel });
+    setDetailQuote(quote ?? null);
   }
 
   function renderRow(
@@ -163,10 +212,11 @@ export function StockPool({
     name: string,
     sectorLabel: string,
     quote: MarketQuote | undefined,
-    isSearchPick: boolean
+    isSearchPick: boolean,
+    rank?: number | null
   ) {
     const crypto = isCryptoSymbol(symbol);
-    const { eligible, label } = getEligibility(symbol, quote);
+    const { eligible, label, skipped } = getEligibility(symbol, quote);
     const price = quote?.price ?? 0;
     const change = quote?.changePercent ?? 0;
     const surcharge = crypto ? getSurchargePercent(buyerCounts[symbol] ?? 0) : 0;
@@ -176,7 +226,7 @@ export function StockPool({
     return (
       <div
         key={`${isSearchPick ? "search" : "pool"}-${symbol}`}
-        className={`draft-pool-row ${offBoard || mine ? "draft-pool-row--drafted" : ""} ${mine ? "draft-pool-row--mine" : ""}`}
+        className={`draft-pool-row ${offBoard || mine ? "draft-pool-row--drafted" : ""} ${mine ? "draft-pool-row--mine" : ""} ${skipped ? "draft-pool-row--skipped" : ""}`}
       >
         <span
           className={`draft-ticker-badge ${crypto ? "draft-ticker-badge--crypto" : ""} ${offBoard ? "draft-ticker-badge--taken" : ""}`}
@@ -186,7 +236,7 @@ export function StockPool({
         <div className="draft-pool-info">
           <p className="draft-pool-name">{name}</p>
           <p className="draft-pool-meta">
-            {sectorLabel}
+            {rank != null ? `#${rank} · ${sectorLabel}` : sectorLabel}
             {isSearchPick && (
               <span className="text-primary-light/80"> · NYSE/NASDAQ search</span>
             )}
@@ -206,14 +256,32 @@ export function StockPool({
         >
           {price > 0 ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%` : "—"}
         </p>
-        <button
-          type="button"
-          disabled={!eligible || (!quote && !crypto)}
-          className={`draft-pick-btn ${crypto ? "draft-pick-btn--crypto" : ""}`}
-          onClick={() => quote && eligible && onDraft(symbol, quote, isSearchPick)}
-        >
-          {label}
-        </button>
+        <div className="draft-pool-actions">
+          <StockDetailChartButton
+            onClick={() => openDetail(symbol, name, sectorLabel, quote)}
+          />
+          {!crypto && onSetSafetyPick && canPick && turn.type !== "complete" && (
+            <button
+              type="button"
+              className={`draft-safety-btn ${safetyPickSymbol === symbol ? "draft-safety-btn--active" : ""}`}
+              title="Queue safety pick (auto-drafts if timer expires)"
+              disabled={busy || isPushbackSkip}
+              onClick={() =>
+                onSetSafetyPick(safetyPickSymbol === symbol ? null : symbol)
+              }
+            >
+              Q
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={!eligible || (!quote && !crypto)}
+            className={`draft-pick-btn ${crypto ? "draft-pick-btn--crypto" : ""} ${skipped ? "draft-pick-btn--skipped" : ""}`}
+            onClick={() => quote && eligible && onDraft(symbol, quote, isSearchPick)}
+          >
+            {label}
+          </button>
+        </div>
       </div>
     );
   }
@@ -225,7 +293,7 @@ export function StockPool({
           <h2 className="draft-pool-title">Draft Pool</h2>
           <p className="draft-pool-subtitle">
             {isReferenceMode ? "Reference — " : ""}
-            {turn.label} · S&P 500 ({poolLoading ? "…" : poolStocks.length} stocks)
+            {turn.label} · S&P 500 ({poolLoading ? "…" : enrichedPool.length} stocks)
           </p>
         </div>
       </div>
@@ -284,7 +352,7 @@ export function StockPool({
           <button
             key={filter}
             type="button"
-            className={`draft-filter-btn ${poolFilter === filter ? "draft-filter-btn--active" : ""} ${filter === "Top 100" ? "draft-filter-btn--top100" : ""}`}
+            className={`draft-filter-btn ${poolFilter === filter ? "draft-filter-btn--active" : ""} ${filter === "Top 100" ? "draft-filter-btn--top100" : ""} ${filter === "Crypto" ? "draft-filter-btn--crypto-tab" : ""}`}
             onClick={() => setPoolFilter(filter)}
           >
             {filterButtonLabel(filter)}
@@ -292,38 +360,100 @@ export function StockPool({
         ))}
       </div>
 
+      {onSetSafetyPick && canPick && !isReferenceMode && (
+        <p className="draft-safety-hint">
+          Tap <strong>Q</strong> on a stock to queue your safety pick — used if the
+          2:00 timer expires{ safetyPickSymbol ? ` (queued: ${safetyPickSymbol})` : ""}.
+        </p>
+      )}
+
+      {!canPick && !isReferenceMode && (
+        <p className="draft-watching-hint">
+          You&apos;re watching the live draft — picks unlock when it&apos;s your turn.
+        </p>
+      )}
+
+      {isPushbackSkip && (
+        <div className="draft-pool-skip-banner" role="status">
+          <p className="draft-pool-skip-title">Round skipped — crypto pushback penalty</p>
+          <p className="draft-pool-skip-detail">
+            You cannot draft this round. Your pick slot will resume automatically after{" "}
+            {pushbackSkipsRemaining} skip{pushbackSkipsRemaining === 1 ? "" : "s"}.
+            You still keep all 10 stock picks — this only delays your turn.
+          </p>
+        </div>
+      )}
+
       <p className="draft-pool-meta-line">
         {poolLoading
           ? "Loading S&P 500 from database…"
-          : poolFilter === "Top 100"
-            ? `Top 100 by market cap · showing ${poolVisible.length} of ${filteredPool.length}`
-            : `Showing ${poolVisible.length} of ${filteredPool.length} S&P 500 · Crypto always available`}
+          : isCryptoView
+            ? "Crypto flex — always on the board · BTC, ETH, SOL, DOGE"
+            : isTop100View
+              ? `Top 100 S&P 500 by market cap · showing ${poolVisible.length} of ${filteredPool.length} stocks`
+              : `Showing ${poolVisible.length} of ${filteredPool.length} S&P 500 stocks`}
         {isReferenceMode && !poolLoading && " · Browse anytime after your draft is complete"}
       </p>
 
-      <div className="draft-pool-list">
-        {poolVisible.map((stock) =>
-          renderRow(
-            stock.symbol,
-            stock.name,
-            stock.sector,
-            quoteMap.get(stock.symbol),
-            false
-          )
+      <div
+        className={`draft-pool-list ${isPushbackSkip ? "draft-pool-list--locked" : ""}`}
+      >
+        {poolVisible.length === 0 && !poolLoading && isTop100View && (
+          <p className="draft-pool-empty-msg">
+            No ranked stocks loaded. Run migration 004_draft_pool.sql or refresh the page.
+          </p>
         )}
 
-        <div className="draft-pool-divider">Crypto flex — always on the board</div>
+        {!isCryptoView &&
+          poolVisible.map((stock) =>
+            renderRow(
+              stock.symbol,
+              stock.name,
+              stock.sector,
+              quoteMap.get(stock.symbol),
+              false,
+              isTop100View ? getMarketCapRank(stock) : null
+            )
+          )}
 
-        {CRYPTO_SYMBOLS.map((symbol) =>
-          renderRow(
-            symbol,
-            CRYPTO_DISPLAY_NAMES[symbol] ?? symbol,
-            "Crypto",
-            quoteMap.get(symbol),
-            false
-          )
+        {isCryptoView && (
+          <>
+            <div className="draft-pool-divider">Crypto flex — always on the board</div>
+            {CRYPTO_SYMBOLS.map((symbol) =>
+              renderRow(
+                symbol,
+                CRYPTO_DISPLAY_NAMES[symbol] ?? symbol,
+                "Crypto",
+                quoteMap.get(symbol),
+                false
+              )
+            )}
+          </>
         )}
       </div>
+
+      <StockDetailModal
+        open={!!detailSymbol}
+        symbol={detailSymbol}
+        meta={
+          detailMeta
+            ? { name: detailMeta.name, sector: detailMeta.sector }
+            : undefined
+        }
+        quote={
+          detailQuote
+            ? {
+                price: detailQuote.price,
+                changePercent: detailQuote.changePercent,
+              }
+            : null
+        }
+        onClose={() => {
+          setDetailSymbol(null);
+          setDetailMeta(null);
+          setDetailQuote(null);
+        }}
+      />
     </section>
   );
 }

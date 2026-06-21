@@ -1,4 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  getAiLeagueById,
+  resolveActiveAiLeagueId,
+} from "@/lib/league/active-league";
 
 export type League = {
   id: string;
@@ -15,8 +19,9 @@ export async function getOrCreateSoloLeague(
 
   const { data: membership, error: membershipError } = await supabase
     .from("league_members")
-    .select("league_id")
+    .select("league_id, leagues!inner(id, name, is_solo, created_at)")
     .eq("user_id", userId)
+    .eq("leagues.is_solo", true)
     .limit(1)
     .maybeSingle();
 
@@ -27,11 +32,21 @@ export async function getOrCreateSoloLeague(
     };
   }
 
+  if (membership?.leagues) {
+    const leagueRow = Array.isArray(membership.leagues)
+      ? membership.leagues[0]
+      : membership.leagues;
+    if (leagueRow) {
+      return { league: leagueRow as League };
+    }
+  }
+
   if (membership?.league_id) {
     const { data: existing, error: leagueLookupError } = await supabase
       .from("leagues")
       .select("id, name, is_solo, created_at")
       .eq("id", membership.league_id)
+      .eq("is_solo", true)
       .single();
 
     if (leagueLookupError) {
@@ -88,6 +103,72 @@ export async function getLeagueOffBoardSymbols(
   return new Set(
     (data as { symbol: string }[]).map((row) => row.symbol.toUpperCase())
   );
+}
+
+export async function resolveDraftLeague(
+  userId: string,
+  teamName: string,
+  options?: { leagueId?: string }
+): Promise<{ league: League | null; error?: string }> {
+  const supabase = await createClient();
+
+  if (options?.leagueId) {
+    const { data, error } = await supabase
+      .from("leagues")
+      .select("id, name, is_solo, created_at")
+      .eq("id", options.leagueId)
+      .single();
+
+    if (error || !data) {
+      return {
+        league: null,
+        error: error?.message ?? "League not found",
+      };
+    }
+
+    return { league: data as League };
+  }
+
+  const activeLeagueId = await resolveActiveAiLeagueId(userId);
+  if (activeLeagueId) {
+    const activeLeague = await getAiLeagueById(activeLeagueId);
+    if (activeLeague) {
+      return { league: activeLeague as League };
+    }
+  }
+
+  const { data: aiLeague, error: aiError } = await supabase
+    .from("leagues")
+    .select("id, name, is_solo, created_at")
+    .eq("owner_user_id", userId)
+    .eq("league_type", "ai")
+    .in("status", ["drafting", "active"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (aiError) {
+    return { league: null, error: aiError.message };
+  }
+
+  if (aiLeague) {
+    return { league: aiLeague as League };
+  }
+
+  const { data: latestAiLeague } = await supabase
+    .from("leagues")
+    .select("id, name, is_solo, created_at")
+    .eq("owner_user_id", userId)
+    .eq("league_type", "ai")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestAiLeague) {
+    return { league: latestAiLeague as League };
+  }
+
+  return getOrCreateSoloLeague(userId, teamName);
 }
 
 export async function getPlatformRosteredSymbols(): Promise<string[]> {

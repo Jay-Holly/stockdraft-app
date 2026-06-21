@@ -1,6 +1,16 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { loadDraftStateDetailed } from "@/lib/draft/server";
+import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
+import {
+  getAiLeagueSummary,
+  listAiLeagueListItems,
+} from "@/lib/league/ai-league";
+import {
+  ensureAiLeagueReadyForMatchups,
+  scoreAllActiveAiMatchups,
+} from "@/lib/matchup/scoring";
 import { DashboardContent } from "@/components/DashboardContent";
 import { Logo } from "@/components/Logo";
 import type { DraftPick } from "@/lib/draft/types";
@@ -62,24 +72,29 @@ export default async function DashboardPage() {
     );
   }
 
-  const { data: draft } = await supabase
-    .from("drafts")
-    .select("id, status")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  await ensureAiLeagueReadyForMatchups(user.id);
+  await scoreAllActiveAiMatchups(user.id);
+
+  const [leagues, activeLeagueId] = await Promise.all([
+    listAiLeagueListItems(user.id),
+    resolveActiveAiLeagueId(user.id),
+  ]);
+
+  const activeSummary = activeLeagueId
+    ? await getAiLeagueSummary(user.id, activeLeagueId)
+    : null;
 
   let draftPicks: DraftPick[] = [];
-  const draftComplete = draft?.status === "complete";
+  let draftComplete = false;
 
-  if (draft?.id && draftComplete) {
-    const { data: picks } = await supabase
-      .from("draft_picks")
-      .select("*")
-      .eq("draft_id", draft.id)
-      .neq("pick_type", "skip")
-      .order("pick_order", { ascending: true });
-
-    draftPicks = (picks ?? []) as DraftPick[];
+  if (activeLeagueId && activeSummary) {
+    const draftState = await loadDraftStateDetailed(user.id, {
+      leagueId: activeLeagueId,
+    });
+    if (draftState.ok) {
+      draftComplete = draftState.state.draft.status === "complete";
+      draftPicks = draftState.state.picks.filter((p) => p.pick_type !== "skip");
+    }
   }
 
   return (
@@ -99,6 +114,9 @@ export default async function DashboardPage() {
           email={user.email ?? ""}
           draftComplete={draftComplete}
           draftPicks={draftPicks}
+          leagues={leagues}
+          activeLeagueId={activeLeagueId}
+          activeSummary={activeSummary}
         />
       </main>
     </div>

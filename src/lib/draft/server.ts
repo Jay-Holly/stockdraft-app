@@ -4,7 +4,7 @@ import { MIN_STOCK_PRICE_USD } from "@/lib/market/draft-pool";
 import { isDraftPoolStock } from "@/lib/draft-pool/server";
 import {
   getLeagueOffBoardSymbols,
-  getOrCreateSoloLeague,
+  resolveDraftLeague,
 } from "@/lib/league/server";
 import {
   calculatePushback,
@@ -12,9 +12,11 @@ import {
   computeStockPick,
   getMyDraftedSymbols,
   getNextRoundAfterPick,
+  getOpenPhaseCryptoPicks,
   getTurn,
   isCryptoSymbol,
   isDraftComplete,
+  isOpenPhaseComplete,
   isStockPickEligible,
   summarizePicks,
 } from "./engine";
@@ -24,9 +26,9 @@ import type {
   DraftPick,
   DraftState,
 } from "./types";
-import { CRYPTO_POOL, STOCK_ROUNDS } from "./types";
+import { CRYPTO_POOL, OPEN_ROUNDS } from "./types";
 
-async function incrementLeagueCryptoCount(
+export async function incrementLeagueCryptoCount(
   supabase: Awaited<ReturnType<typeof createClient>>,
   leagueId: string,
   symbol: string,
@@ -110,13 +112,69 @@ export type LoadDraftResult =
   | { ok: true; state: DraftState }
   | { ok: false; error: string };
 
+async function fetchLeagueDraftRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leagueId: string,
+  userId: string
+): Promise<Draft | null> {
+  const { data: rpcDraft, error: rpcError } = await supabase.rpc(
+    "get_league_draft",
+    {
+      p_league_id: leagueId,
+      p_user_id: userId,
+    }
+  );
+
+  if (!rpcError && rpcDraft) {
+    return rpcDraft as Draft;
+  }
+
+  const { data, error } = await supabase
+    .from("drafts")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("league_id", leagueId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as Draft;
+}
+
+async function fetchLeagueDraftPicks(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leagueId: string,
+  userId: string,
+  draftId: string
+): Promise<DraftPick[]> {
+  const { data: rpcPicks, error: rpcError } = await supabase.rpc(
+    "get_league_draft_picks",
+    {
+      p_league_id: leagueId,
+      p_user_id: userId,
+    }
+  );
+
+  if (!rpcError && rpcPicks) {
+    return (rpcPicks as DraftPick[]) ?? [];
+  }
+
+  const { data: picks } = await supabase
+    .from("draft_picks")
+    .select("*")
+    .eq("draft_id", draftId)
+    .order("pick_order", { ascending: true });
+
+  return (picks ?? []) as DraftPick[];
+}
+
 export async function loadDraftState(userId: string): Promise<DraftState | null> {
   const result = await loadDraftStateDetailed(userId);
   return result.ok ? result.state : null;
 }
 
 export async function loadDraftStateDetailed(
-  userId: string
+  userId: string,
+  options?: { leagueId?: string }
 ): Promise<LoadDraftResult> {
   const supabase = await createClient();
 
@@ -126,9 +184,10 @@ export async function loadDraftStateDetailed(
     .eq("id", userId)
     .single();
 
-  const { league, error: leagueError } = await getOrCreateSoloLeague(
+  const { league, error: leagueError } = await resolveDraftLeague(
     userId,
-    profile?.team_name ?? "My Team"
+    profile?.team_name ?? "My Team",
+    options
   );
   if (!league) {
     return {
@@ -139,19 +198,7 @@ export async function loadDraftStateDetailed(
     };
   }
 
-  let { data: draft, error: draftLookupError } = await supabase
-    .from("drafts")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("league_id", league.id)
-    .maybeSingle();
-
-  if (draftLookupError) {
-    return {
-      ok: false,
-      error: `drafts lookup (league_id) failed: ${draftLookupError.message}. Confirm drafts.league_id exists (003_leagues.sql).`,
-    };
-  }
+  let draft = await fetchLeagueDraftRow(supabase, league.id, userId);
 
   if (!draft) {
     const { data: legacyDraft, error: legacyError } = await supabase
@@ -230,15 +277,21 @@ export async function loadDraftStateDetailed(
     }
   }
 
-  const { data: picks } = await supabase
-    .from("draft_picks")
-    .select("*")
-    .eq("draft_id", draft.id)
-    .order("pick_order", { ascending: true });
+  if (!draft) {
+    return {
+      ok: false,
+      error: "No draft found for this league member.",
+    };
+  }
 
-  const buyerCounts = await fetchBuyerCounts(supabase, league.id);
-  const pickList = (picks ?? []) as DraftPick[];
+  const pickList = await fetchLeagueDraftPicks(
+    supabase,
+    league.id,
+    userId,
+    draft.id
+  );
   const draftRow = draft as Draft;
+  const buyerCounts = await fetchBuyerCounts(supabase, league.id);
   const summary = summarizePicks(pickList);
   const turn = getTurn(draftRow, pickList);
   const leagueOffBoardSet = await getLeagueOffBoardSymbols(league.id);
@@ -257,16 +310,20 @@ export async function loadDraftStateDetailed(
       leagueId: league.id,
       leagueOffBoard: [...leagueOffBoardSet],
       myStockSymbols,
+      safetyPickSymbol: draftRow.safety_pick_symbol ?? null,
     },
   };
 }
 
-export async function processPushbackSkip(userId: string) {
-  const state = await loadDraftState(userId);
-  if (!state) return { error: "Could not load draft" };
+export async function processPushbackSkipForLeague(
+  userId: string,
+  leagueId: string
+) {
+  const stateResult = await loadDraftStateDetailed(userId, { leagueId });
+  if (!stateResult.ok) return { error: stateResult.error };
 
-  const { draft, picks } = state;
-  if (state.turn.type !== "pushback_skip") {
+  const { draft, picks } = stateResult.state;
+  if (stateResult.state.turn.type !== "pushback_skip") {
     return { error: "No pushback skip to process" };
   }
 
@@ -303,17 +360,87 @@ export async function processPushbackSkip(userId: string) {
   return { success: true };
 }
 
-export async function makeDraftPick(
-  userId: string,
-  symbol: string,
-  allocation?: number,
-  price?: number,
-  isSearchPick = false
-) {
+export async function processPushbackSkip(userId: string) {
   const state = await loadDraftState(userId);
   if (!state) return { error: "Could not load draft" };
 
-  const { draft, picks, turn, buyerCounts, leagueId, leagueOffBoard } = state;
+  return processPushbackSkipForLeague(userId, state.leagueId);
+}
+
+export async function processAllPushbackSkips(
+  userId: string,
+  options?: { leagueId?: string }
+): Promise<{ error?: string; processed: number }> {
+  let processed = 0;
+  const supabase = await createClient();
+
+  for (let i = 0; i < 15; i++) {
+    const stateResult = await loadDraftStateDetailed(userId, options);
+    if (!stateResult.ok) {
+      return { error: stateResult.error, processed };
+    }
+
+    const { turn, draft, picks } = stateResult.state;
+
+    if (
+      isOpenPhaseComplete(picks) &&
+      draft.pushback_skips_remaining > 0 &&
+      turn.type !== "pushback_skip"
+    ) {
+      await supabase
+        .from("drafts")
+        .update({ pushback_skips_remaining: 0 })
+        .eq("id", draft.id);
+      break;
+    }
+
+    if (turn.type !== "pushback_skip" || draft.status === "complete") {
+      break;
+    }
+
+    const skipResult = await processPushbackSkipForLeague(
+      userId,
+      stateResult.state.leagueId
+    );
+    if (skipResult.error) {
+      return { error: skipResult.error, processed };
+    }
+
+    processed += 1;
+  }
+
+  return { processed };
+}
+
+export async function makeDraftPickForLeague(
+  userId: string,
+  leagueId: string,
+  symbol: string,
+  allocation?: number,
+  price?: number,
+  isSearchPick = false,
+  options?: {
+    skipLiveGate?: boolean;
+    isAutoPick?: boolean;
+    autoPickReason?: "safety_queue" | "highest_price" | "bot" | "timer";
+    skipLiveAdvance?: boolean;
+  }
+) {
+  const stateResult = await loadDraftStateDetailed(userId, { leagueId });
+  if (!stateResult.ok) return { error: stateResult.error };
+
+  if (!options?.skipLiveGate) {
+    const { assertOnClock, isLiveDraftLeague, advanceAfterPick } = await import(
+      "./live-draft"
+    );
+    const live = await isLiveDraftLeague(leagueId);
+    if (live) {
+      const onClock = await assertOnClock(leagueId, userId);
+      if (!onClock.ok) return { error: onClock.error };
+    }
+  }
+
+  const { draft, picks, turn, buyerCounts, leagueOffBoard } = stateResult.state;
   if (draft.status === "complete" || turn.type === "complete") {
     return { error: "Draft is already complete" };
   }
@@ -341,7 +468,7 @@ export async function makeDraftPick(
 
   if (isCryptoSymbol(upperSymbol)) {
     if (!turn.canPickCrypto) {
-      return { error: "Crypto picks are not available this round" };
+      return { error: "Crypto picks are only available during open rounds 1–13" };
     }
 
     const cryptoAmount = allocation ?? summary.cryptoRemaining;
@@ -369,17 +496,14 @@ export async function makeDraftPick(
       buyerCount
     );
 
-    if (draft.current_round <= STOCK_ROUNDS) {
-      const existingEarlyCrypto = picks.filter(
-        (p) => p.pick_type === "crypto" && p.round_number <= STOCK_ROUNDS
-      );
+    if (draft.current_round <= OPEN_ROUNDS) {
       const afterPick = [
-        ...existingEarlyCrypto,
+        ...getOpenPhaseCryptoPicks(picks),
         { budget_spent: budgetSpent } as DraftPick,
       ];
       const newTotal = afterPick.reduce((s, p) => s + p.budget_spent, 0);
       if (newTotal >= CRYPTO_POOL) {
-        pushbackDelta = calculatePushback(afterPick as DraftPick[]);
+        pushbackDelta = calculatePushback(afterPick);
       }
     }
   } else if (turn.type === "bench") {
@@ -395,7 +519,10 @@ export async function makeDraftPick(
       return { error: "Use search to draft stocks outside the S&P 500 pool" };
     }
     pickType = "bench";
-  } else if (turn.type === "stock") {
+  } else if (turn.type === "open") {
+    if (!turn.canPickStock) {
+      return { error: "All 10 stock picks are already made — choose crypto or finish open rounds" };
+    }
     if (!isStockPickEligible(upperSymbol, priceAtPick)) {
       return {
         error: `Stock must trade at $${MIN_STOCK_PRICE_USD}+ per share`,
@@ -428,6 +555,8 @@ export async function makeDraftPick(
     surcharge_percent: surchargePercent,
     effective_value: effectiveValue,
     pick_order: pickOrder,
+    is_auto_pick: options?.isAutoPick ?? false,
+    auto_pick_reason: options?.autoPickReason ?? null,
   });
 
   if (pickError) return { error: pickError.message };
@@ -457,7 +586,50 @@ export async function makeDraftPick(
 
   if (draftError) return { error: draftError.message };
 
+  if (!options?.skipLiveAdvance) {
+    const { isLiveDraftLeague, advanceAfterPick } = await import("./live-draft");
+    const live = await isLiveDraftLeague(leagueId);
+    if (live) {
+      const { data: insertedPick } = await supabase
+        .from("draft_picks")
+        .select("*")
+        .eq("draft_id", draft.id)
+        .eq("pick_order", pickOrder)
+        .single();
+
+      if (insertedPick) {
+        const advance = await advanceAfterPick(
+          leagueId,
+          userId,
+          insertedPick as DraftPick,
+          options?.isAutoPick ?? false
+        );
+        if (advance.error) return { error: advance.error };
+      }
+    }
+  }
+
   return { success: true, complete };
+}
+
+export async function makeDraftPick(
+  userId: string,
+  symbol: string,
+  allocation?: number,
+  price?: number,
+  isSearchPick = false
+) {
+  const state = await loadDraftState(userId);
+  if (!state) return { error: "Could not load draft" };
+
+  return makeDraftPickForLeague(
+    userId,
+    state.leagueId,
+    symbol,
+    allocation,
+    price,
+    isSearchPick
+  );
 }
 
 export async function undoLastPick(userId: string) {
@@ -513,9 +685,7 @@ export async function undoLastPick(userId: string) {
 
   if (error) return { error: error.message };
 
-  const earlyCrypto = cleaned.filter(
-    (p) => p.pick_type === "crypto" && p.round_number <= STOCK_ROUNDS
-  );
+  const earlyCrypto = getOpenPhaseCryptoPicks(cleaned);
   const pushback = calculatePushback(earlyCrypto);
   const usedSkips = cleaned.filter((p) => p.pick_type === "skip").length;
 

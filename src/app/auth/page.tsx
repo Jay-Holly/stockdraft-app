@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { AuthForm } from "@/components/AuthForm";
 import { Logo } from "@/components/Logo";
 
@@ -15,9 +14,7 @@ export default async function AuthPage({
   return (
     <div className="min-h-screen flex flex-col bg-dark">
       <header className="px-4 py-4">
-        <Link href="/" className="inline-block">
-          <Logo />
-        </Link>
+        <Logo />
       </header>
 
       <main className="flex-1 flex items-center justify-center px-4 py-8">

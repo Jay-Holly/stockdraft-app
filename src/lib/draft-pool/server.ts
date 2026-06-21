@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { DraftPoolStock } from "@/lib/market/draft-pool";
-import marketCapRanks from "@/data/sp500-market-cap-ranks.json";
-
-const RANKS = marketCapRanks.ranks as Record<string, number>;
+import { enrichDraftPoolStocks, getMarketCapRank } from "@/lib/market/draft-pool";
 
 export async function fetchDraftPool(): Promise<DraftPoolStock[]> {
   const supabase = await createClient();
@@ -12,15 +10,13 @@ export async function fetchDraftPool(): Promise<DraftPoolStock[]> {
     .order("symbol");
 
   if (error || !data) return [];
-  return data.map((row) => {
-    const symbol = row.symbol.toUpperCase();
-    return {
-      symbol,
+  return enrichDraftPoolStocks(
+    data.map((row) => ({
+      symbol: row.symbol.toUpperCase(),
       name: row.name,
       sector: row.sector as DraftPoolStock["sector"],
-      marketCapRank: RANKS[symbol] ?? null,
-    };
-  });
+    }))
+  );
 }
 
 export async function isDraftPoolStock(symbol: string): Promise<boolean> {

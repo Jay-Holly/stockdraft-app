@@ -32,9 +32,7 @@ export default function GameRulesPage() {
   return (
     <div className="min-h-screen flex flex-col bg-dark">
       <header className="px-4 py-4 border-b border-dark-border">
-        <Link href="/" className="inline-block">
-          <Logo />
-        </Link>
+        <Logo />
       </header>
 
       <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">

@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { DraftPoolStock } from "@/lib/market/draft-pool";
+import {
+  enrichDraftPoolStocks,
+  type DraftPoolStock,
+} from "@/lib/market/draft-pool";
 
 export function useDraftPool() {
   const [stocks, setStocks] = useState<DraftPoolStock[]>([]);
@@ -24,7 +27,7 @@ export function useDraftPool() {
           return;
         }
 
-        setStocks(data.stocks ?? []);
+        setStocks(enrichDraftPoolStocks(data.stocks ?? []));
         setError(null);
       } catch {
         if (!cancelled) {

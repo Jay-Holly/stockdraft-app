@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
 import type { MarketQuote } from "@/lib/market/types";
 
 function buildStockQuote(
@@ -44,7 +45,7 @@ export function usePoolQuotes(symbols: string[]) {
 
     try {
       const merged: Record<string, MarketQuote> = {};
-      const chunkSize = 40;
+      const chunkSize = 25;
 
       for (let i = 0; i < list.length; i += chunkSize) {
         const chunk = list.slice(i, i + chunkSize);
@@ -70,9 +71,35 @@ export function usePoolQuotes(symbols: string[]) {
         }
       }
 
+      for (const symbol of list) {
+        if (merged[symbol]) continue;
+        const fallback = getFallbackStockQuote(symbol);
+        if (!fallback) continue;
+        merged[symbol] = buildStockQuote(
+          symbol,
+          fallback.price,
+          fallback.prevClose,
+          fallback.changePercent
+        );
+      }
+
       setQuotes(merged);
     } catch {
-      setError("Unable to load stock prices for this view.");
+      const merged: Record<string, MarketQuote> = {};
+      for (const symbol of list) {
+        const fallback = getFallbackStockQuote(symbol);
+        if (!fallback) continue;
+        merged[symbol] = buildStockQuote(
+          symbol,
+          fallback.price,
+          fallback.prevClose,
+          fallback.changePercent
+        );
+      }
+      setQuotes(merged);
+      if (Object.keys(merged).length === 0) {
+        setError("Unable to load stock prices for this view.");
+      }
     } finally {
       setLoading(false);
     }
