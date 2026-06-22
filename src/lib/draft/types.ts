@@ -1,3 +1,5 @@
+import type { DraftChatMessage } from "@/lib/draft/chat-types";
+
 export const STOCK_ROUNDS = 10;
 export const STOCK_BUDGET = 80_000;
 export const STOCK_CAP = 800_000;
@@ -116,5 +118,6 @@ export type DraftState = {
   myStockSymbols: string[];
   liveDraft?: LiveDraftView | null;
   draftFeed?: DraftFeedEvent[];
+  draftChat?: DraftChatMessage[];
   safetyPickSymbol?: string | null;
 };

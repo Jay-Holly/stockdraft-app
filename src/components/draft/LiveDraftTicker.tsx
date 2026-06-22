@@ -1,56 +1,94 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useMemo } from "react";
 import type { DraftFeedEvent } from "@/lib/draft/types";
+import type { LiveDraftFeedConnection } from "@/hooks/useLiveDraftFeed";
+
+export type LiveDraftFeedSyncStatus =
+  | "live"
+  | "reconnecting"
+  | "polling"
+  | "offline";
 
 export function LiveDraftTicker({
   feed,
   status,
+  syncStatus = "live",
+  syncDetail,
 }: {
   feed: DraftFeedEvent[];
   status?: "waiting" | "in_progress" | "complete";
+  syncStatus?: LiveDraftFeedSyncStatus;
+  syncDetail?: string | null;
 }) {
-  const listRef = useRef<HTMLDivElement>(null);
+  const latestPick = useMemo(() => {
+    if (feed.length === 0) return null;
+    return [...feed].sort(
+      (a, b) => a.global_pick_number - b.global_pick_number
+    )[feed.length - 1];
+  }, [feed]);
 
-  useEffect(() => {
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [feed.length]);
+  const statusLabel =
+    status === "complete"
+      ? "Draft complete"
+      : status === "waiting"
+        ? "Waiting"
+        : syncStatus === "live"
+          ? "Live"
+          : syncStatus === "reconnecting"
+            ? "Reconnecting"
+            : syncStatus === "polling"
+              ? "Polling"
+              : "Offline";
+
+  const statusClass =
+    status === "complete"
+      ? "complete"
+      : syncStatus === "live"
+        ? "in_progress"
+        : syncStatus === "offline"
+          ? "offline"
+          : "reconnecting";
 
   return (
-    <section className="live-draft-ticker" aria-live="polite">
+    <section
+      className={`live-draft-ticker ${syncStatus !== "live" && status !== "complete" ? "live-draft-ticker--degraded" : ""}`}
+      aria-live="polite"
+    >
       <div className="live-draft-ticker__header">
         <h2 className="live-draft-ticker__title">Live Draft Feed</h2>
         <span
-          className={`live-draft-ticker__status live-draft-ticker__status--${status ?? "in_progress"}`}
+          className={`live-draft-ticker__status live-draft-ticker__status--${statusClass}`}
+          title={syncDetail ?? undefined}
         >
-          {status === "complete"
-            ? "Draft complete"
-            : status === "waiting"
-              ? "Waiting"
-              : "Live"}
+          {statusLabel}
         </span>
       </div>
-      <div className="live-draft-ticker__list" ref={listRef}>
-        {feed.length === 0 ? (
+      {syncDetail && status !== "complete" && syncStatus !== "live" && (
+        <p className="live-draft-ticker__sync-warning" role="status">
+          {syncDetail}
+        </p>
+      )}
+      <div className="live-draft-ticker__current">
+        {!latestPick ? (
           <p className="live-draft-ticker__empty">
-            Picks will appear here as the draft unfolds…
+            The most recent pick will appear here as the draft unfolds…
           </p>
         ) : (
-          feed.map((event) => (
-            <div
-              key={event.id}
-              className={`live-draft-ticker__item ${event.is_auto_pick ? "live-draft-ticker__item--auto" : ""}`}
-            >
-              <span className="live-draft-ticker__pick-num">
-                #{event.global_pick_number}
-              </span>
-              <p className="live-draft-ticker__message">{event.message}</p>
-              {event.is_auto_pick && (
-                <span className="live-draft-ticker__auto-tag">Auto</span>
-              )}
+          <div
+            className={`live-draft-ticker__item live-draft-ticker__item--featured ${latestPick.is_auto_pick ? "live-draft-ticker__item--auto" : ""}`}
+          >
+            <span className="live-draft-ticker__pick-num">
+              #{latestPick.global_pick_number}
+            </span>
+            <div className="live-draft-ticker__featured-copy">
+              <p className="live-draft-ticker__featured-label">Latest pick</p>
+              <p className="live-draft-ticker__message">{latestPick.message}</p>
             </div>
-          ))
+            {latestPick.is_auto_pick && (
+              <span className="live-draft-ticker__auto-tag">Auto</span>
+            )}
+          </div>
         )}
       </div>
     </section>

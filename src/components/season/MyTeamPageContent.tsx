@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatMoney, formatPct, formatSignedMoney } from "@/lib/format";
-import { formatShares } from "@/lib/draft/engine";
+import { computeCryptoPick, formatShares } from "@/lib/draft/engine";
 import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import type { RosterPickView, RosterView } from "@/lib/roster/types";
 import { Button } from "@/components/Button";
@@ -11,6 +11,10 @@ import {
   type StockDetailContext,
 } from "@/components/market/StockDetailModal";
 import { useStockMetaLookup } from "@/hooks/useStockMetaLookup";
+import {
+  fetchJsonWithTimeout,
+  formatFetchError,
+} from "@/lib/fetch-client";
 
 export function MyTeamPageContent() {
   const [roster, setRoster] = useState<RosterView | null>(null);
@@ -27,16 +31,98 @@ export function MyTeamPageContent() {
 
   const { getMeta } = useStockMetaLookup();
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/roster", { cache: "no-store" });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json.error ?? "Could not load roster");
-      setLoading(false);
-      return;
+  const selectedCryptoPick = useMemo(
+    () => roster?.crypto.find((p) => p.id === cryptoPickId) ?? null,
+    [roster, cryptoPickId]
+  );
+
+  const cryptoBuyOptions = useMemo(() => {
+    if (!selectedCryptoPick) return [...CRYPTO_SYMBOLS];
+    const source = selectedCryptoPick.symbol.toUpperCase();
+    return CRYPTO_SYMBOLS.filter((symbol) => symbol !== source);
+  }, [selectedCryptoPick]);
+
+  useEffect(() => {
+    if (!selectedCryptoPick) return;
+    if (cryptoTarget.toUpperCase() === selectedCryptoPick.symbol.toUpperCase()) {
+      setCryptoTarget(cryptoBuyOptions[0] ?? CRYPTO_SYMBOLS[0]);
     }
-    setRoster(json as RosterView);
-    setLoading(false);
+  }, [selectedCryptoPick, cryptoTarget, cryptoBuyOptions]);
+
+  const cryptoRebalancePreview = useMemo(() => {
+    if (!roster || !selectedCryptoPick) return null;
+
+    const fraction = cryptoSellPercent / 100;
+    const soldBudget = selectedCryptoPick.budget_spent * fraction;
+    const soldShares = selectedCryptoPick.shares * fraction;
+    const remainingBudget = Math.max(
+      0,
+      selectedCryptoPick.budget_spent - soldBudget
+    );
+    const targetUpper = cryptoTarget.toUpperCase();
+    const targetPrice = roster.cryptoQuotes[targetUpper]?.price ?? 0;
+
+    const existingTarget = roster.crypto.find(
+      (p) =>
+        p.id !== selectedCryptoPick.id &&
+        p.symbol.toUpperCase() === targetUpper &&
+        p.budget_spent > 0.01
+    );
+
+    if (existingTarget) {
+      const buyShares = targetPrice > 0 ? soldBudget / targetPrice : 0;
+      return {
+        soldBudget,
+        soldShares,
+        remainingBudget,
+        targetPrice,
+        buyShares,
+        surchargePercent: 0,
+        effectiveBuy: soldBudget,
+        mergesIntoExisting: true,
+        existingSymbol: existingTarget.symbol,
+        createsNewPosition: false,
+      };
+    }
+
+    const buyerCount = roster.cryptoBuyerCounts[targetUpper] ?? 0;
+    const computed = computeCryptoPick(soldBudget, targetPrice, buyerCount);
+
+    return {
+      soldBudget,
+      soldShares,
+      remainingBudget,
+      targetPrice,
+      buyShares: computed.shares,
+      surchargePercent: computed.surchargePercent,
+      effectiveBuy: computed.effectiveValue,
+      mergesIntoExisting: false,
+      createsNewPosition: true,
+    };
+  }, [roster, selectedCryptoPick, cryptoSellPercent, cryptoTarget]);
+
+  const load = useCallback(async () => {
+    try {
+      const { res, data: json } = await fetchJsonWithTimeout<{
+        error?: string;
+      } & RosterView>("/api/roster", {
+        cache: "no-store",
+        timeoutMs: 30_000,
+        label: "Roster load",
+      });
+
+      if (!res.ok) {
+        setError(json.error ?? `Could not load roster (HTTP ${res.status})`);
+        setLoading(false);
+        return;
+      }
+
+      setRoster(json as RosterView);
+      setLoading(false);
+    } catch (err) {
+      setError(formatFetchError(err, "Roster load"));
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -50,26 +136,34 @@ export function MyTeamPageContent() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/roster/ir-swap", {
+      const { res, data: json } = await fetchJsonWithTimeout<{
+        error?: string;
+        step?: string;
+        success?: boolean;
+      }>("/api/roster/ir-swap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           starterPickId: irStarterId,
           benchPickId: irBenchId,
         }),
+        timeoutMs: 30_000,
+        label: "IR swap",
       });
-      const json = (await res.json().catch(() => ({}))) as {
-        error?: string;
-      };
+
       if (!res.ok) {
-        setError(json.error ?? `IR swap failed (${res.status})`);
+        const detail = json.step ? ` [${json.step}]` : "";
+        setError(json.error ?? `IR swap failed (HTTP ${res.status})${detail}`);
         return;
       }
+
       setIrStarterId(null);
       setIrBenchId(null);
-      await load();
+      void load().catch((reloadErr) => {
+        setError(formatFetchError(reloadErr, "IR swap saved, but roster refresh"));
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error during IR swap");
+      setError(formatFetchError(err, "IR swap"));
     } finally {
       setBusy(false);
     }
@@ -80,7 +174,11 @@ export function MyTeamPageContent() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/roster/crypto-swap", {
+      const { res, data: json } = await fetchJsonWithTimeout<{
+        error?: string;
+        step?: string;
+        success?: boolean;
+      }>("/api/roster/crypto-swap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -88,20 +186,26 @@ export function MyTeamPageContent() {
           newSymbol: cryptoTarget,
           sellPercent: cryptoSellPercent,
         }),
+        timeoutMs: 30_000,
+        label: "Crypto rebalance",
       });
-      const json = (await res.json().catch(() => ({}))) as {
-        error?: string;
-      };
+
       if (!res.ok) {
-        setError(json.error ?? `Crypto rebalance failed (${res.status})`);
+        const detail = json.step ? ` [${json.step}]` : "";
+        setError(
+          json.error ?? `Crypto rebalance failed (HTTP ${res.status})${detail}`
+        );
         return;
       }
+
       setCryptoPickId(null);
-      await load();
+      void load().catch((reloadErr) => {
+        setError(
+          formatFetchError(reloadErr, "Crypto rebalance saved, but roster refresh")
+        );
+      });
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Network error during crypto rebalance"
-      );
+      setError(formatFetchError(err, "Crypto rebalance"));
     } finally {
       setBusy(false);
     }
@@ -215,7 +319,7 @@ export function MyTeamPageContent() {
 
       <RosterBlock
         title="Crypto flex"
-        subtitle="Scores in matchups · day-trade anytime"
+        subtitle="Scores in matchups · tap Sell to rebalance · multiple coins OK"
         tone="crypto"
         picks={roster.crypto}
         selectable
@@ -231,10 +335,25 @@ export function MyTeamPageContent() {
       <section className="season-card">
         <h2 className="season-card-title">Crypto rebalance</h2>
         <p className="text-sm text-muted mb-3">
-          Sell part of a crypto position and buy a different coin with the
-          proceeds. You can hold multiple coins at once. A league surcharge applies
-          the first time you buy a coin you do not already hold.
+          Sell a portion of one coin and buy another with the proceeds. Your
+          original position stays open at the remaining size — you can hold
+          multiple coins at once. League surcharge tiers apply only when you
+          buy a coin you don&apos;t already hold on your roster.
         </p>
+
+        {!cryptoPickId && (
+          <p className="text-xs text-muted mb-3">
+            Select a coin under Crypto flex (tap <strong>Sell</strong>) to start.
+          </p>
+        )}
+
+        {selectedCryptoPick && (
+          <p className="text-xs text-primary-light mb-3">
+            Selling from: <strong>{selectedCryptoPick.symbol}</strong> (
+            {formatMoney(selectedCryptoPick.budget_spent)} budget)
+          </p>
+        )}
+
         <label className="text-xs text-muted block mb-1">
           Sell percentage
         </label>
@@ -261,8 +380,13 @@ export function MyTeamPageContent() {
           className="w-full mb-1"
         />
         <p className="text-xs text-muted mb-3">
-          Selling {cryptoSellPercent}% of the selected position
+          Selling {cryptoSellPercent}% of{" "}
+          {selectedCryptoPick?.symbol ?? "selected position"}
+          {cryptoRebalancePreview
+            ? ` · ${formatMoney(cryptoRebalancePreview.soldBudget)} proceeds`
+            : ""}
         </p>
+
         <label className="text-xs text-muted block mb-1">Buy with proceeds</label>
         <select
           className="season-select w-full mb-3"
@@ -270,19 +394,75 @@ export function MyTeamPageContent() {
           onChange={(e) => setCryptoTarget(e.target.value)}
           disabled={!cryptoPickId || busy}
         >
-          {CRYPTO_SYMBOLS.map((symbol) => (
+          {cryptoBuyOptions.map((symbol) => (
             <option key={symbol} value={symbol}>
               {symbol}
+              {roster?.crypto.some(
+                (p) =>
+                  p.symbol.toUpperCase() === symbol && p.budget_spent > 0.01
+              )
+                ? " (already held — no surcharge)"
+                : ""}
             </option>
           ))}
         </select>
+
+        {cryptoRebalancePreview && cryptoRebalancePreview.soldBudget >= 0.01 && (
+          <div className="crypto-rebalance-preview mb-3">
+            <p className="crypto-rebalance-preview__title">Preview</p>
+            <ul className="crypto-rebalance-preview__list">
+              <li>
+                Sell {formatShares(cryptoRebalancePreview.soldShares)}{" "}
+                {selectedCryptoPick?.symbol} for{" "}
+                {formatMoney(cryptoRebalancePreview.soldBudget)}
+              </li>
+              {cryptoRebalancePreview.remainingBudget >= 0.01 && (
+                <li>
+                  Keep {formatMoney(cryptoRebalancePreview.remainingBudget)} in{" "}
+                  {selectedCryptoPick?.symbol}
+                </li>
+              )}
+              {cryptoRebalancePreview.mergesIntoExisting ? (
+                <li>
+                  Add to existing {cryptoRebalancePreview.existingSymbol} position
+                  (no surcharge)
+                </li>
+              ) : cryptoRebalancePreview.surchargePercent > 0 ? (
+                <li>
+                  {cryptoRebalancePreview.surchargePercent}% league surcharge on
+                  new {cryptoTarget} · effective buy{" "}
+                  {formatMoney(cryptoRebalancePreview.effectiveBuy)}
+                </li>
+              ) : (
+                <li>Open new {cryptoTarget} position (no surcharge)</li>
+              )}
+              <li>
+                Receive ~{formatShares(cryptoRebalancePreview.buyShares)}{" "}
+                {cryptoTarget}
+                {cryptoRebalancePreview.targetPrice > 0
+                  ? ` @ ${formatMoney(cryptoRebalancePreview.targetPrice)}`
+                  : ""}
+              </li>
+            </ul>
+          </div>
+        )}
+
         <Button
           variant="secondary"
           className="w-full"
-          disabled={busy || !cryptoPickId}
+          disabled={
+            busy ||
+            !cryptoPickId ||
+            !cryptoRebalancePreview ||
+            cryptoRebalancePreview.soldBudget < 0.01
+          }
           onClick={handleCryptoSwap}
         >
-          {busy ? "Processing…" : "Rebalance crypto"}
+          {busy
+            ? "Processing…"
+            : cryptoSellPercent === 100
+              ? `Swap ${selectedCryptoPick?.symbol ?? "coin"} → ${cryptoTarget}`
+              : `Rebalance ${cryptoSellPercent}% → ${cryptoTarget}`}
         </Button>
       </section>
 
@@ -357,12 +537,21 @@ function RosterBlock({
                 <button
                   type="button"
                   className="stock-detail-symbol-btn"
-                  onClick={() => onOpenDetail?.(pick)}
+                  onClick={() =>
+                    pick.symbol.toUpperCase() !== "__OPEN__"
+                      ? onOpenDetail?.(pick)
+                      : undefined
+                  }
+                  disabled={pick.symbol.toUpperCase() === "__OPEN__"}
                 >
-                  {pick.symbol}
+                  {pick.symbol.toUpperCase() === "__OPEN__"
+                    ? "Empty slot"
+                    : pick.symbol}
                 </button>
                 <p className="text-xs text-muted">
-                  {pick.pick_type === "bench" && pick.budget_spent === 0
+                  {pick.symbol.toUpperCase() === "__OPEN__"
+                    ? "Released to free agency"
+                    : pick.pick_type === "bench" && pick.budget_spent === 0
                     ? pick.acquired_via === "waiver"
                       ? "Waiver pickup · $0 until promoted"
                       : "Bench · does not score"

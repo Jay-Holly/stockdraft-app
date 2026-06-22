@@ -65,6 +65,30 @@ export function FreeAgentsPageContent() {
     setDropPickId(null);
   }
 
+  async function handleDropOnly() {
+    if (!dropPickId || !data) return;
+    const slot = data.benchSlots.find((s) => s.pickId === dropPickId);
+    if (!slot || slot.isOpen || slot.symbol.toUpperCase() === "__OPEN__") {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/free-agents/drop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ benchPickId: dropPickId }),
+    });
+    const json = await res.json();
+    setBusy(false);
+    if (!res.ok) {
+      setError(json.error ?? "Drop failed");
+      return;
+    }
+    setData(json as FreeAgentsPageData);
+    setSelectedSymbol(null);
+  }
+
   if (loading) {
     return (
       <p className="text-muted text-sm py-12 text-center">Loading free agents…</p>
@@ -98,7 +122,10 @@ export function FreeAgentsPageContent() {
       )}
 
       <section className="season-card">
-        <h2 className="season-card-title">Drop bench slot</h2>
+        <h2 className="season-card-title">Bench slot</h2>
+        <p className="text-xs text-muted mt-1 mb-2">
+          Pick a bench player to drop, or an empty slot if you already released one.
+        </p>
         <div className="flex flex-wrap gap-2 mt-2">
           {data.benchSlots.map((slot) => (
             <button
@@ -111,7 +138,9 @@ export function FreeAgentsPageContent() {
                 )
               }
             >
-              Drop {slot.symbol}
+              {slot.isOpen || slot.symbol.toUpperCase() === "__OPEN__"
+                ? "Use open bench slot"
+                : `Drop ${slot.symbol}`}
             </button>
           ))}
         </div>
@@ -160,6 +189,27 @@ export function FreeAgentsPageContent() {
           ))}
         </div>
       </section>
+
+      {dropPickId &&
+        data.benchSlots.some(
+          (s) =>
+            s.pickId === dropPickId &&
+            !s.isOpen &&
+            s.symbol.toUpperCase() !== "__OPEN__"
+        ) && (
+          <Button
+            variant="secondary"
+            className="w-full"
+            disabled={busy}
+            onClick={handleDropOnly}
+          >
+            {busy
+              ? "Releasing…"
+              : `Release ${
+                  data.benchSlots.find((s) => s.pickId === dropPickId)?.symbol
+                } to free agency only`}
+          </Button>
+        )}
 
       <Button
         variant="primary"

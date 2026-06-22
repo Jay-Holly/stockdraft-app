@@ -3,12 +3,14 @@ import {
   getAiLeagueById,
   resolveActiveAiLeagueId,
 } from "@/lib/league/active-league";
+import { LEAGUE_BASE_FIELDS } from "@/lib/league/fields";
 
 export type League = {
   id: string;
   name: string;
   is_solo: boolean;
   created_at: string;
+  support_code: string;
 };
 
 export async function getOrCreateSoloLeague(
@@ -19,7 +21,7 @@ export async function getOrCreateSoloLeague(
 
   const { data: membership, error: membershipError } = await supabase
     .from("league_members")
-    .select("league_id, leagues!inner(id, name, is_solo, created_at)")
+    .select(`league_id, leagues!inner(${LEAGUE_BASE_FIELDS})`)
     .eq("user_id", userId)
     .eq("leagues.is_solo", true)
     .limit(1)
@@ -44,7 +46,7 @@ export async function getOrCreateSoloLeague(
   if (membership?.league_id) {
     const { data: existing, error: leagueLookupError } = await supabase
       .from("leagues")
-      .select("id, name, is_solo, created_at")
+      .select(LEAGUE_BASE_FIELDS)
       .eq("id", membership.league_id)
       .eq("is_solo", true)
       .single();
@@ -98,11 +100,38 @@ export async function getLeagueOffBoardSymbols(
     p_league_id: leagueId,
   });
 
-  if (error || !data) return new Set();
+  if (error) {
+    console.error("get_league_drafted_stock_symbols failed:", error.message);
+    throw new Error(
+      `Could not load league off-board symbols: ${error.message}. Confirm migrations 003 and 022 are applied in Supabase.`
+    );
+  }
+
+  if (!data) return new Set();
 
   return new Set(
     (data as { symbol: string }[]).map((row) => row.symbol.toUpperCase())
   );
+}
+
+export async function countLeagueRosteredSymbol(
+  leagueId: string,
+  symbol: string
+): Promise<number> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("count_league_rostered_symbol", {
+    p_league_id: leagueId,
+    p_symbol: symbol.toUpperCase(),
+  });
+
+  if (error) {
+    console.error("count_league_rostered_symbol failed:", error.message);
+    throw new Error(
+      `Could not verify league roster for ${symbol}: ${error.message}. Confirm migration 022 is applied in Supabase.`
+    );
+  }
+
+  return typeof data === "number" ? data : 0;
 }
 
 export async function resolveDraftLeague(
@@ -115,7 +144,7 @@ export async function resolveDraftLeague(
   if (options?.leagueId) {
     const { data, error } = await supabase
       .from("leagues")
-      .select("id, name, is_solo, created_at")
+      .select(LEAGUE_BASE_FIELDS)
       .eq("id", options.leagueId)
       .single();
 
@@ -139,7 +168,7 @@ export async function resolveDraftLeague(
 
   const { data: aiLeague, error: aiError } = await supabase
     .from("leagues")
-    .select("id, name, is_solo, created_at")
+    .select(LEAGUE_BASE_FIELDS)
     .eq("owner_user_id", userId)
     .eq("league_type", "ai")
     .in("status", ["drafting", "active"])
@@ -157,7 +186,7 @@ export async function resolveDraftLeague(
 
   const { data: latestAiLeague } = await supabase
     .from("leagues")
-    .select("id, name, is_solo, created_at")
+    .select(LEAGUE_BASE_FIELDS)
     .eq("owner_user_id", userId)
     .eq("league_type", "ai")
     .order("created_at", { ascending: false })

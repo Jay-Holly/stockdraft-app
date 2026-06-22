@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
 import { DraftRoom } from "@/components/draft/DraftRoom";
 import { Logo } from "@/components/Logo";
 import type { Draft } from "@/lib/draft/types";
@@ -27,11 +28,18 @@ export default async function DraftPage() {
     redirect("/dashboard");
   }
 
-  const { data: draft } = await supabase
-    .from("drafts")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const activeLeagueId = await resolveActiveAiLeagueId(user.id);
+  let draft: Draft | null = null;
+
+  if (activeLeagueId) {
+    const { data } = await supabase
+      .from("drafts")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("league_id", activeLeagueId)
+      .maybeSingle();
+    draft = (data as Draft | null) ?? null;
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -55,7 +63,7 @@ export default async function DraftPage() {
       <main className="flex-1 px-4 py-6 max-w-5xl mx-auto w-full">
         <DraftRoom
           profile={profile as Profile}
-          initialDraft={draft as Draft | null}
+          initialDraft={draft}
         />
       </main>
     </div>

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import type { AiLeague } from "@/lib/league/ai-league";
+import { AI_LEAGUE_FIELDS } from "@/lib/league/fields";
 
 export const ACTIVE_LEAGUE_COOKIE = "stockdraft_active_league_id";
 
@@ -19,6 +20,11 @@ export async function getActiveLeagueIdFromCookie(): Promise<string | null> {
 export async function setActiveLeagueCookie(leagueId: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(ACTIVE_LEAGUE_COOKIE, leagueId, COOKIE_OPTIONS);
+}
+
+export async function clearActiveLeagueCookie(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.delete(ACTIVE_LEAGUE_COOKIE);
 }
 
 export async function verifyUserOwnsLeague(
@@ -43,7 +49,7 @@ export async function getAiLeagueById(
   const supabase = await createClient();
   const { data } = await supabase
     .from("leagues")
-    .select("id, name, is_solo, created_at, league_type, status, owner_user_id")
+    .select(AI_LEAGUE_FIELDS)
     .eq("id", leagueId)
     .eq("league_type", "ai")
     .maybeSingle();
@@ -57,7 +63,7 @@ export async function listAiLeaguesForUser(
   const supabase = await createClient();
   const { data } = await supabase
     .from("leagues")
-    .select("id, name, is_solo, created_at, league_type, status, owner_user_id")
+    .select(AI_LEAGUE_FIELDS)
     .eq("owner_user_id", userId)
     .eq("league_type", "ai")
     .order("created_at", { ascending: false });

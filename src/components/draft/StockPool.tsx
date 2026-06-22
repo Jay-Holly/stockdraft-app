@@ -79,6 +79,7 @@ export function StockPool({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
   const [detailMeta, setDetailMeta] = useState<{
     name: string;
@@ -122,30 +123,85 @@ export function StockPool({
 
   const isReferenceMode = turn.type === "complete";
 
+  function clearSearch() {
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchError(null);
+    setSearchLoading(false);
+  }
+
   useEffect(() => {
     const q = searchQuery.trim();
     if (q.length < 2) {
       setSearchResults([]);
+      setSearchError(null);
+      setSearchLoading(false);
       return;
     }
 
-    const timer = window.setTimeout(async () => {
+    const controller = new AbortController();
+    let requestId = 0;
+
+    const timer = window.setTimeout(() => {
+      const currentRequest = ++requestId;
       setSearchLoading(true);
-      try {
-        const res = await fetch(`/api/market/search?q=${encodeURIComponent(q)}`);
-        const data = (await res.json()) as { results: SearchResult[] };
-        const outsidePool = (data.results ?? []).filter(
-          (item) => !poolSymbolSet.has(item.symbol)
-        );
-        setSearchResults(outsidePool);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setSearchLoading(false);
-      }
+      setSearchError(null);
+
+      const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+
+      void (async () => {
+        try {
+          const res = await fetch(
+            `/api/market/search?q=${encodeURIComponent(q)}`,
+            { signal: controller.signal, cache: "no-store" }
+          );
+          const data = (await res.json()) as {
+            results?: SearchResult[];
+            error?: string;
+          };
+
+          if (currentRequest !== requestId || controller.signal.aborted) {
+            return;
+          }
+
+          if (!res.ok) {
+            setSearchResults([]);
+            setSearchError(
+              data.error ?? `Search failed (${res.status}). Try again.`
+            );
+            return;
+          }
+
+          const outsidePool = (data.results ?? []).filter(
+            (item) => !poolSymbolSet.has(item.symbol)
+          );
+          setSearchResults(outsidePool);
+          if (outsidePool.length === 0) {
+            setSearchError(`No eligible NYSE/NASDAQ matches for “${q}”.`);
+          }
+        } catch (err) {
+          if (controller.signal.aborted || currentRequest !== requestId) {
+            return;
+          }
+          setSearchResults([]);
+          setSearchError(
+            err instanceof Error && err.name === "AbortError"
+              ? "Search timed out — try an exact ticker."
+              : "Search failed — try again."
+          );
+        } finally {
+          window.clearTimeout(timeoutId);
+          if (currentRequest === requestId) {
+            setSearchLoading(false);
+          }
+        }
+      })();
     }, 350);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [searchQuery, poolSymbolSet]);
 
   function getEligibility(
@@ -299,15 +355,30 @@ export function StockPool({
       </div>
 
       <div className="draft-pool-search">
-        <input
-          type="search"
-          placeholder="Search any NYSE/NASDAQ ticker (Finnhub)…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="draft-input"
-        />
+        <div className="draft-pool-search-row">
+          <input
+            type="search"
+            placeholder="Search any NYSE/NASDAQ ticker (Finnhub)…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="draft-input"
+          />
+          {searchQuery.length > 0 && (
+            <button
+              type="button"
+              className="draft-search-clear"
+              aria-label="Clear ticker search"
+              onClick={clearSearch}
+            >
+              ×
+            </button>
+          )}
+        </div>
         {searchLoading && (
           <p className="text-xs text-muted mt-1">Searching Finnhub…</p>
+        )}
+        {searchError && !searchLoading && (
+          <p className="text-xs text-amber-400/90 mt-1">{searchError}</p>
         )}
       </div>
 

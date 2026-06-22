@@ -9,18 +9,27 @@ import { usePoolQuotes } from "@/hooks/usePoolQuotes";
 import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import { getTop100PoolSymbols } from "@/lib/market/draft-pool";
 import { getMyDraftedSymbols, isCryptoSymbol } from "@/lib/draft/engine";
+import {
+  fetchJsonWithTimeout,
+  formatFetchError,
+} from "@/lib/fetch-client";
 import type { Draft, DraftFeedEvent, DraftState } from "@/lib/draft/types";
+import type { DraftChatMessage } from "@/lib/draft/chat-types";
 import type { Profile } from "@/lib/types";
 import type { MarketQuote } from "@/lib/market/types";
 import { ConfirmPickModal } from "./ConfirmPickModal";
 import { DraftBoardTabs } from "./DraftBoardTabs";
-import { LiveDraftTicker } from "./LiveDraftTicker";
+import { DraftChatBox } from "./DraftChatBox";
+import { LiveDraftTicker, type LiveDraftFeedSyncStatus } from "./LiveDraftTicker";
+import { DraftRoundSelector } from "./DraftRoundSelector";
 import { OnClockBanner } from "./OnClockBanner";
 import { SalaryCapBar } from "./SalaryCapBar";
 import { StockPool } from "./StockPool";
 import type { BotDraftBoard } from "@/lib/league/ai-league";
 
 const POOL_QUOTE_BATCH = 80;
+const POLL_STALE_MS = 10000;
+const DRAFT_LOAD_TIMEOUT_MS = 45_000;
 
 export function DraftRoom({
   profile,
@@ -79,60 +88,159 @@ export function DraftRoom({
   );
 
   const skipRecoveryAttempts = useRef(0);
+  const loadDraftInFlight = useRef<Promise<void> | null>(null);
+  const lastPollOkAt = useRef(Date.now());
+  const activeLeagueIdRef = useRef<string | null>(null);
+  const [pollStale, setPollStale] = useState(false);
 
-  const applyDraftPayload = useCallback((data: Record<string, unknown>) => {
-    setState(data as DraftState);
-    setBotDraftBoards(
-      Array.isArray(data.botDraftBoards)
-        ? (data.botDraftBoards as BotDraftBoard[])
-        : []
-    );
-  }, []);
+  const mergeDraftFeed = useCallback(
+    (
+      existing: DraftFeedEvent[],
+      incoming: DraftFeedEvent[]
+    ): DraftFeedEvent[] => {
+      const byId = new Map<string, DraftFeedEvent>();
+      for (const event of existing) byId.set(event.id, event);
+      for (const event of incoming) byId.set(event.id, event);
+      return [...byId.values()].sort(
+        (a, b) => a.global_pick_number - b.global_pick_number
+      );
+    },
+    []
+  );
+
+  const mergeDraftChat = useCallback(
+    (
+      existing: DraftChatMessage[],
+      incoming: DraftChatMessage[]
+    ): DraftChatMessage[] => {
+      const byId = new Map<string, DraftChatMessage>();
+      for (const message of existing) byId.set(message.id, message);
+      for (const message of incoming) byId.set(message.id, message);
+      return [...byId.values()].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+    },
+    []
+  );
+
+  const applyDraftPayload = useCallback(
+    (data: Record<string, unknown>) => {
+      setState((prev) => {
+        const incoming = data as DraftState;
+        const incomingFeed = incoming.draftFeed ?? [];
+        const draftFeed = prev?.draftFeed?.length
+          ? mergeDraftFeed(prev.draftFeed, incomingFeed)
+          : incomingFeed;
+
+        const incomingChat = incoming.draftChat ?? [];
+        const draftChat = prev?.draftChat?.length
+          ? mergeDraftChat(prev.draftChat, incomingChat)
+          : incomingChat;
+
+        if (incoming.leagueId) {
+          activeLeagueIdRef.current = incoming.leagueId;
+        }
+
+        return { ...incoming, draftFeed, draftChat };
+      });
+      setBotDraftBoards(
+        Array.isArray(data.botDraftBoards)
+          ? (data.botDraftBoards as BotDraftBoard[])
+          : []
+      );
+    },
+    [mergeDraftFeed, mergeDraftChat]
+  );
 
   const loadDraft = useCallback(async () => {
-    setError(null);
-    const res = await fetch("/api/draft", { cache: "no-store" });
-    const data = await res.json();
+    if (loadDraftInFlight.current) {
+      return loadDraftInFlight.current;
+    }
 
-    if (!res.ok) {
-      if (data.draft && data.turn) {
+    const run = (async () => {
+      setError(null);
+      try {
+        const leagueQuery = activeLeagueIdRef.current
+          ? `?leagueId=${encodeURIComponent(activeLeagueIdRef.current)}`
+          : "";
+        const { res, data } = await fetchJsonWithTimeout<Record<string, unknown>>(
+          `/api/draft${leagueQuery}`,
+          {
+            cache: "no-store",
+            timeoutMs: DRAFT_LOAD_TIMEOUT_MS,
+            label: "Draft load",
+          }
+        );
+
+        if (!res.ok) {
+          if (data.draft && data.turn) {
+            applyDraftPayload(data);
+            lastPollOkAt.current = Date.now();
+            setPollStale(false);
+          }
+          const apiError =
+            typeof data.error === "string" ? data.error : "Could not load draft";
+          setError(`Draft API HTTP ${res.status}: ${apiError}`);
+          return;
+        }
+
         applyDraftPayload(data);
+        lastPollOkAt.current = Date.now();
+        setPollStale(false);
+
+        if (
+          !data.liveDraft &&
+          data.turn &&
+          typeof data.turn === "object" &&
+          (data.turn as { type?: string }).type === "pushback_skip" &&
+          data.draft &&
+          typeof data.draft === "object" &&
+          (data.draft as { status?: string }).status !== "complete"
+        ) {
+          if (skipRecoveryAttempts.current < 3) {
+            skipRecoveryAttempts.current += 1;
+            window.setTimeout(() => {
+              void loadDraft();
+            }, 400);
+            return;
+          }
+          setError(
+            "Pushback skip could not auto-advance. Try refreshing again or undo your last crypto pick."
+          );
+        } else {
+          skipRecoveryAttempts.current = 0;
+        }
+
+        if (
+          data.liveDraft &&
+          typeof data.liveDraft === "object" &&
+          (data.liveDraft as { status?: string }).status === "complete"
+        ) {
+          window.setTimeout(() => router.replace("/dashboard"), 2500);
+        } else if (
+          data.complete ||
+          (data.draft &&
+            typeof data.draft === "object" &&
+            (data.draft as { status?: string }).status === "complete")
+        ) {
+          if (!data.liveDraft) {
+            router.replace("/dashboard");
+          }
+        }
+      } catch (err) {
+        setError(formatFetchError(err, "Could not load draft"));
+      } finally {
+        setLoading(false);
       }
-      setError(data.error ?? "Could not load draft");
-      setLoading(false);
-      return;
+    })();
+
+    loadDraftInFlight.current = run;
+    try {
+      await run;
+    } finally {
+      loadDraftInFlight.current = null;
     }
-
-    applyDraftPayload(data);
-
-    if (
-      !data.liveDraft &&
-      data.turn?.type === "pushback_skip" &&
-      data.draft?.status !== "complete"
-    ) {
-      if (skipRecoveryAttempts.current < 3) {
-        skipRecoveryAttempts.current += 1;
-        window.setTimeout(() => {
-          void loadDraft();
-        }, 400);
-        return;
-      }
-      setError(
-        "Pushback skip could not auto-advance. Try refreshing again or undo your last crypto pick."
-      );
-    } else {
-      skipRecoveryAttempts.current = 0;
-    }
-
-    if (data.liveDraft?.status === "complete") {
-      window.setTimeout(() => router.replace("/dashboard"), 2500);
-    } else if (data.complete || data.draft?.status === "complete") {
-      if (!data.liveDraft) {
-        router.replace("/dashboard");
-      }
-    }
-
-    setLoading(false);
   }, [applyDraftPayload, router]);
 
   useEffect(() => {
@@ -147,7 +255,22 @@ export function DraftRoom({
     return () => window.clearInterval(id);
   }, [liveInProgress, loadDraft]);
 
+  useEffect(() => {
+    if (!liveInProgress) {
+      setPollStale(false);
+      return;
+    }
+
+    const id = window.setInterval(() => {
+      setPollStale(Date.now() - lastPollOkAt.current > POLL_STALE_MS);
+    }, 2000);
+
+    return () => window.clearInterval(id);
+  }, [liveInProgress]);
+
   const appendFeedEvent = useCallback((event: DraftFeedEvent) => {
+    lastPollOkAt.current = Date.now();
+    setPollStale(false);
     setState((prev) => {
       if (!prev) return prev;
       const existing = prev.draftFeed ?? [];
@@ -156,7 +279,35 @@ export function DraftRoom({
     });
   }, []);
 
-  useLiveDraftFeed(state?.leagueId, state?.draftFeed ?? [], appendFeedEvent);
+  const triggerDraftPoll = useCallback(() => {
+    void loadDraft();
+  }, [loadDraft]);
+
+  const feedConnection = useLiveDraftFeed(
+    state?.leagueId,
+    state?.draftFeed ?? [],
+    appendFeedEvent,
+    { onDisconnected: triggerDraftPoll }
+  );
+
+  const feedSyncStatus = useMemo((): LiveDraftFeedSyncStatus => {
+    if (!liveInProgress) return "live";
+    if (feedConnection === "connected" && !pollStale) return "live";
+    if (!pollStale) return "reconnecting";
+    if (feedConnection === "connected") return "polling";
+    return "offline";
+  }, [feedConnection, liveInProgress, pollStale]);
+
+  const feedSyncDetail = useMemo(() => {
+    if (!liveInProgress || feedSyncStatus === "live") return null;
+    if (feedSyncStatus === "reconnecting") {
+      return "Live feed reconnecting — picks still load via polling.";
+    }
+    if (feedSyncStatus === "polling") {
+      return "Draft polling is slow — waiting for the next refresh.";
+    }
+    return "Live feed offline — refresh the page if picks stop appearing.";
+  }, [feedSyncStatus, liveInProgress]);
 
   const handleSetSafetyPick = useCallback(async (symbol: string | null) => {
     setError(null);
@@ -197,36 +348,41 @@ export function DraftRoom({
             allocation,
             price: quote.price,
             isSearchPick,
+            leagueId: state?.leagueId,
           }),
         });
 
-        const data = await res.json();
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          complete?: boolean;
+        };
 
         if (!res.ok) {
-          setError(data.error ?? "Pick failed");
+          setError(data.error ?? `Pick failed (${res.status})`);
           return;
         }
 
-        applyDraftPayload(data);
         setPendingSymbol(null);
         setPendingQuote(null);
         setPendingSearchPick(false);
 
-        if (data.liveDraft?.status === "complete") {
+        await loadDraft();
+
+        if (data.complete) {
           window.setTimeout(() => router.replace("/dashboard"), 2500);
-        } else if (data.complete || data.draft?.status === "complete") {
-          if (!data.liveDraft) {
-            router.replace("/dashboard");
-          }
         }
-      } catch {
-        setError("Pick failed — check your connection and try again.");
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Pick failed — check your connection and try again."
+        );
       } finally {
         setBusy(false);
         setDraftingSymbol(null);
       }
     },
-    [applyDraftPayload, busy, canPick, readOnly, router]
+    [busy, canPick, loadDraft, readOnly, router, state?.leagueId]
   );
 
   function handleDraft(
@@ -430,10 +586,25 @@ export function DraftRoom({
         </div>
 
         {isLiveDraft && (
-          <LiveDraftTicker
-            feed={state.draftFeed ?? []}
-            status={liveDraft?.status}
-          />
+          <div className="live-draft-sidebar">
+            <LiveDraftTicker
+              feed={state.draftFeed ?? []}
+              status={liveDraft?.status}
+              syncStatus={feedSyncStatus}
+              syncDetail={feedSyncDetail}
+            />
+            <DraftRoundSelector
+              feed={state.draftFeed ?? []}
+              liveDraft={liveDraft}
+              compact
+            />
+            <DraftChatBox
+              leagueId={state.leagueId}
+              initialMessages={state.draftChat ?? []}
+              myUserId={profile.id}
+              disabled={liveDraft?.status === "complete"}
+            />
+          </div>
         )}
       </div>
 

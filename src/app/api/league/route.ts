@@ -6,19 +6,39 @@ import {
   scoreCurrentAiMatchup,
 } from "@/lib/matchup/scoring";
 
+export const dynamic = "force-dynamic";
+
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}
+
 export async function GET() {
-  const { user } = await getAuthenticatedUserId();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const { user } = await getAuthenticatedUserId();
+    if (!user) {
+      return jsonError("Unauthorized", 401);
+    }
+
+    try {
+      await ensureAiLeagueReadyForMatchups(user.id);
+      await scoreCurrentAiMatchup(user.id);
+    } catch (sideEffectError) {
+      console.error("GET /api/league scoring side effect failed:", sideEffectError);
+    }
+
+    const result = await loadLeaguePageData(user.id);
+    if (!result.ok) {
+      return jsonError(result.error, 400);
+    }
+
+    return NextResponse.json(result.data);
+  } catch (error) {
+    console.error("GET /api/league failed:", error);
+    return jsonError(
+      error instanceof Error
+        ? error.message
+        : "Internal server error loading league data.",
+      500
+    );
   }
-
-  await ensureAiLeagueReadyForMatchups(user.id);
-  await scoreCurrentAiMatchup(user.id);
-
-  const result = await loadLeaguePageData(user.id);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
-  }
-
-  return NextResponse.json(result.data);
 }

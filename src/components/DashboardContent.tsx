@@ -14,6 +14,7 @@ import type {
   AiLeagueSummary,
 } from "@/lib/league/ai-league";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
+import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import type { BotPersonality } from "@/lib/league/bots";
 import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
@@ -136,6 +137,9 @@ export function DashboardContent({
   const [switchingLeagueId, setSwitchingLeagueId] = useState<string | null>(
     null
   );
+  const [deletingLeagueId, setDeletingLeagueId] = useState<string | null>(
+    null
+  );
   const [showBotSelection, setShowBotSelection] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [leagueError, setLeagueError] = useState<string | null>(null);
@@ -193,6 +197,34 @@ export function DashboardContent({
       }
     } finally {
       setSwitchingLeagueId(null);
+    }
+  }
+
+  async function handleDeleteLeague(leagueId: string) {
+    const confirmed = window.confirm(
+      "Are you sure? This will permanently delete this league and all associated draft picks, matchups, and standings."
+    );
+    if (!confirmed) return;
+
+    setDeletingLeagueId(leagueId);
+    setLeagueError(null);
+
+    try {
+      const res = await fetch("/api/leagues", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leagueId }),
+      });
+      const data = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        setLeagueError(data.error ?? "Could not delete league");
+        return;
+      }
+
+      router.refresh();
+    } finally {
+      setDeletingLeagueId(null);
     }
   }
 
@@ -294,7 +326,10 @@ export function DashboardContent({
 
           {leagues.map((item) => {
             const isActive = item.league.id === activeLeagueId;
-            const busy = switchingLeagueId === item.league.id;
+            const busy =
+              switchingLeagueId === item.league.id ||
+              deletingLeagueId === item.league.id;
+            const isDeleting = deletingLeagueId === item.league.id;
 
             return (
               <div
@@ -307,6 +342,9 @@ export function DashboardContent({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    <div className="mb-2">
+                      <LeagueSupportId code={item.league.support_code} />
+                    </div>
                     <p className="font-semibold truncate">{item.league.name}</p>
                     <p className="text-xs text-muted capitalize">
                       {leagueStatusLabel(item.league.status)}
@@ -385,6 +423,14 @@ export function DashboardContent({
                       </Button>
                     </>
                   )}
+                  <Button
+                    variant="ghost"
+                    className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 ml-auto"
+                    disabled={busy}
+                    onClick={() => void handleDeleteLeague(item.league.id)}
+                  >
+                    {isDeleting ? "Deleting…" : "Delete League"}
+                  </Button>
                 </div>
               </div>
             );
@@ -396,6 +442,9 @@ export function DashboardContent({
         <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
+              <div className="mb-2">
+                <LeagueSupportId code={activeSummary.league.support_code} size="md" />
+              </div>
               <h2 className="text-lg font-semibold">Selected league</h2>
               <p className="text-muted text-sm">{activeSummary.league.name}</p>
               <p className="text-muted text-xs capitalize mt-1">

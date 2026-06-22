@@ -4,7 +4,7 @@ import {
   getScoringPicks,
 } from "@/lib/draft/ai-strategy";
 import { isCryptoSymbol, isStockPickEligible } from "@/lib/draft/engine";
-import { loadDraftStateDetailed } from "@/lib/draft/server";
+import { loadDraftStateDetailed, fetchBuyerCounts } from "@/lib/draft/server";
 import type { DraftPick } from "@/lib/draft/types";
 import {
   type AiLeague,
@@ -73,7 +73,10 @@ export async function requireSeasonLeague(
 
 async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
   const stockSymbols = picks
-    .filter((p) => !isCryptoSymbol(p.symbol))
+    .filter(
+      (p) =>
+        !isCryptoSymbol(p.symbol) && p.symbol.toUpperCase() !== "__OPEN__"
+    )
     .map((p) => p.symbol);
   const needsCrypto = picks.some((p) => isCryptoSymbol(p.symbol));
 
@@ -86,6 +89,20 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
 
   return picks.map((pick) => {
     const symbol = pick.symbol.toUpperCase();
+    if (symbol === "__OPEN__") {
+      return {
+        ...pick,
+        acquired_via: (pick as DraftPick & { acquired_via?: string }).acquired_via,
+        currentPrice: 0,
+        changePercent: 0,
+        currentValue: 0,
+        gainPercent: 0,
+        weekOpenValue: 0,
+        weekDollarGain: 0,
+        scores: false,
+      };
+    }
+
     let price = 0;
     let changePercent = 0;
 
@@ -139,6 +156,17 @@ export async function loadRosterView(
 
   const picks = state.state.picks.filter((p) => p.pick_type !== "skip");
   const enriched = await enrichPicks(picks);
+  const buyerCounts = await fetchBuyerCounts(supabase, leagueId);
+  const cryptoQuoteMap = await getCryptoQuotesMap();
+  const cryptoQuotes: Record<string, { price: number; changePercent: number }> =
+    {};
+  for (const symbol of Object.keys(cryptoQuoteMap)) {
+    const quote = cryptoQuoteMap[symbol as CryptoSymbol];
+    cryptoQuotes[symbol] = {
+      price: quote?.price ?? 0,
+      changePercent: quote?.changePercent ?? 0,
+    };
+  }
   const currentWeek = await getCurrentWeek(supabase, leagueId, userId);
   const baselineMap = await ensureWeekBaselines(
     supabase,
@@ -192,6 +220,8 @@ export async function loadRosterView(
       crypto: withWeekMetrics.filter(
         (p) => p.pick_type === "crypto" && isActiveCryptoPick(p)
       ),
+      cryptoBuyerCounts: buyerCounts,
+      cryptoQuotes,
       scoringGainPercent: calculateRosterGainPercent(
         state.state.picks,
         quoteMap
@@ -323,6 +353,7 @@ export async function loadLeaguePageData(
     ok: true,
     data: {
       leagueId: league.id,
+      leagueSupportCode: league.support_code,
       leagueName: league.name,
       leagueStatus: league.status,
       currentWeek,
@@ -379,6 +410,7 @@ export async function loadFreeAgentsPageData(
       benchSlots: roster.roster.bench.map((p) => ({
         pickId: p.id,
         symbol: p.symbol,
+        isOpen: p.symbol.toUpperCase() === "__OPEN__",
       })),
     },
   };

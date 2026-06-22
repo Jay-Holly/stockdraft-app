@@ -7,7 +7,10 @@ import {
 } from "@/lib/draft/server";
 import type { DraftPick } from "@/lib/draft/types";
 import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
-import { getLeagueOffBoardSymbols } from "@/lib/league/server";
+import {
+  countLeagueRosteredSymbol,
+  getLeagueOffBoardSymbols,
+} from "@/lib/league/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   computeSharesFromBudget,
@@ -33,6 +36,21 @@ type PickPatch = {
   acquired_via?: string;
 };
 
+function findActiveCryptoPick(
+  picks: DraftPick[],
+  symbol: string,
+  excludePickId?: string
+): DraftPick | undefined {
+  const upper = symbol.toUpperCase();
+  return picks.find(
+    (p) =>
+      p.pick_type === "crypto" &&
+      p.id !== excludePickId &&
+      p.symbol.toUpperCase() === upper &&
+      p.budget_spent > 0.01
+  );
+}
+
 async function patchDraftPick(
   supabase: SupabaseClient,
   userId: string,
@@ -44,13 +62,29 @@ async function patchDraftPick(
     p_updates: updates,
   });
 
-  if (!error && data) return {};
+  if (!error) {
+    const row = (Array.isArray(data) ? data[0] : data) as DraftPick | null | undefined;
+    if (!row?.id) {
+      return {
+        error:
+          "Pick update returned no row. Run migration 017 (patch_my_draft_pick) in Supabase.",
+      };
+    }
+    if (
+      updates.symbol &&
+      row.symbol.toUpperCase() !== updates.symbol.toUpperCase()
+    ) {
+      return {
+        error: `Pick symbol did not update (still ${row.symbol}). Run migrations 017 and 022 in Supabase.`,
+      };
+    }
+    return {};
+  }
 
   if (
-    error &&
-    (error.code === "42883" ||
-      error.message.includes("patch_my_draft_pick") ||
-      error.message.includes("Could not find the function"))
+    error.code === "42883" ||
+    error.message.includes("patch_my_draft_pick") ||
+    error.message.includes("Could not find the function")
   ) {
     const { data: row, error: directError } = await supabase
       .from("draft_picks")
@@ -70,7 +104,7 @@ async function patchDraftPick(
     return {};
   }
 
-  return { error: error?.message ?? "Pick update failed." };
+  return { error: error.message ?? "Pick update failed." };
 }
 
 async function insertDraftPick(
@@ -104,11 +138,17 @@ async function insertDraftPick(
 
   if (!error && data) return { pick: data as DraftPick };
 
+  if (!error) {
+    return {
+      error:
+        "Pick insert returned no row. Run migration 017 (insert_my_draft_pick) in Supabase.",
+    };
+  }
+
   if (
-    error &&
-    (error.code === "42883" ||
-      error.message.includes("insert_my_draft_pick") ||
-      error.message.includes("Could not find the function"))
+    error.code === "42883" ||
+    error.message.includes("insert_my_draft_pick") ||
+    error.message.includes("Could not find the function")
   ) {
     const { data: row, error: directError } = await supabase
       .from("draft_picks")
@@ -141,7 +181,12 @@ async function logRosterMove(
   entry: {
     league_id: string;
     user_id: string;
-    move_type: "ir_swap" | "crypto_swap" | "crypto_rebalance" | "waiver_add";
+    move_type:
+      | "ir_swap"
+      | "crypto_swap"
+      | "crypto_rebalance"
+      | "waiver_add"
+      | "waiver_drop";
     pick_id?: string;
     related_pick_id?: string;
     symbol: string;
@@ -181,6 +226,9 @@ export async function applyIrSwap(
   }
   if (!bench || bench.pick_type !== "bench") {
     return { error: "Select a valid bench stock to promote." };
+  }
+  if (bench.symbol.toUpperCase() === "__OPEN__") {
+    return { error: "Select a rostered bench stock to promote, not an empty slot." };
   }
 
   const starterQuote = await getStockQuote(starter.symbol);
@@ -295,12 +343,10 @@ export async function applyCryptoRebalance(
     return { error: "Could not fetch price for the target coin." };
   }
 
-  const existingTarget = state.state.picks.find(
-    (p) =>
-      p.pick_type === "crypto" &&
-      p.id !== source.id &&
-      p.symbol.toUpperCase() === upper &&
-      p.budget_spent > 0.01
+  const existingTarget = findActiveCryptoPick(
+    state.state.picks,
+    upper,
+    source.id
   );
 
   const supabase = await createClient();
@@ -314,6 +360,7 @@ export async function applyCryptoRebalance(
 
   if (existingTarget) {
     buyShares = computeSharesFromBudget(soldBudget, targetQuote.price);
+    buyEffective = soldBudget;
   } else {
     const buyerCount = buyerCounts[upper] ?? 0;
     const computed = computeCryptoPick(soldBudget, targetQuote.price, buyerCount);
@@ -324,10 +371,16 @@ export async function applyCryptoRebalance(
     await incrementLeagueCryptoCount(supabase, league.id, upper, buyerCount);
   }
 
+  const normalizedRemaining = {
+    budget_spent: remainingBudget < 0.01 ? 0 : remainingBudget,
+    shares: remainingShares < 0.000001 ? 0 : remainingShares,
+    effective_value: remainingEffective < 0.01 ? 0 : remainingEffective,
+  };
+
   const sourcePatch = await patchDraftPick(supabase, userId, source.id, {
-    budget_spent: remainingBudget,
-    shares: remainingShares,
-    effective_value: remainingEffective,
+    budget_spent: normalizedRemaining.budget_spent,
+    shares: normalizedRemaining.shares,
+    effective_value: normalizedRemaining.effective_value,
   });
   if (sourcePatch.error) return sourcePatch;
 
@@ -397,7 +450,7 @@ export async function applyCryptoRebalance(
     prior_pick_type: "crypto",
     new_pick_type: "crypto",
     budget_before: source.budget_spent,
-    budget_after: remainingBudget,
+    budget_after: normalizedRemaining.budget_spent,
     price_at_move: targetQuote.price,
     shares_after: buyShares,
     notes: `Sold ${sellPercent}% of ${source.symbol} ($${soldBudget.toFixed(2)}) → ${upper}${
@@ -434,6 +487,9 @@ export async function applyWaiverClaim(
     return { error: "Select a bench slot to drop." };
   }
 
+  const droppedSymbol = benchPick.symbol.toUpperCase();
+  const isOpenSlot = droppedSymbol === "__OPEN__";
+
   const offBoard = await getLeagueOffBoardSymbols(league.id);
   if (offBoard.has(upper)) {
     return { error: `${upper} is already rostered in this league.` };
@@ -461,21 +517,116 @@ export async function applyWaiverClaim(
   });
   if (patchResult.error) return patchResult;
 
+  const addedCount = await countLeagueRosteredSymbol(league.id, upper);
+  if (addedCount < 1) {
+    return {
+      error: `${upper} was not added to your league roster. Run migrations 017 and 022 in Supabase.`,
+    };
+  }
+
+  if (droppedSymbol !== upper && !isOpenSlot) {
+    const droppedCount = await countLeagueRosteredSymbol(league.id, droppedSymbol);
+    if (droppedCount === 0) {
+      const offAfter = await getLeagueOffBoardSymbols(league.id);
+      if (offAfter.has(droppedSymbol)) {
+        return {
+          error: `${droppedSymbol} was dropped but is still off-board. Run migration 022 in Supabase.`,
+        };
+      }
+
+      await logRosterMove(supabase, {
+        league_id: league.id,
+        user_id: userId,
+        move_type: "waiver_drop",
+        pick_id: benchPick.id,
+        symbol: droppedSymbol,
+        prior_pick_type: "bench",
+        budget_before: benchPick.budget_spent,
+        budget_after: 0,
+        notes: `Released ${droppedSymbol} to league free agency`,
+      });
+    }
+  }
+
   await logRosterMove(supabase, {
     league_id: league.id,
     user_id: userId,
     move_type: "waiver_add",
     pick_id: benchPick.id,
     symbol: upper,
-    prior_symbol: benchPick.symbol,
+    prior_symbol: isOpenSlot ? undefined : droppedSymbol,
     prior_pick_type: "bench",
     new_pick_type: "bench",
     budget_before: benchPick.budget_spent,
     budget_after: 0,
     price_at_move: quote.price,
     shares_after: 0,
-    notes: `Dropped ${benchPick.symbol}, added FA ${upper} to bench at $0 until IR promote`,
+    notes: isOpenSlot
+      ? `Added FA ${upper} to open bench slot at $0 until IR promote`
+      : `Dropped ${droppedSymbol}, added FA ${upper} to bench at $0 until IR promote`,
   });
 
   return {};
+}
+
+export async function applyBenchDrop(
+  userId: string,
+  benchPickId: string
+): Promise<{ error?: string; releasedSymbol?: string }> {
+  const season = await requireSeasonLeague(userId);
+  if ("error" in season) return { error: season.error };
+
+  const { league } = season;
+  const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
+  if (!state.ok) return { error: state.error };
+
+  const benchPick = state.state.picks.find((p) => p.id === benchPickId);
+  if (!benchPick || benchPick.pick_type !== "bench") {
+    return { error: "Select a valid bench slot to drop." };
+  }
+
+  const droppedSymbol = benchPick.symbol.toUpperCase();
+  if (droppedSymbol === "__OPEN__") {
+    return { error: "This bench slot is already empty." };
+  }
+
+  const supabase = await createClient();
+  const patchResult = await patchDraftPick(supabase, userId, benchPick.id, {
+    symbol: "__OPEN__",
+    pick_type: "bench",
+    budget_spent: 0,
+    effective_value: 0,
+    shares: 0,
+    price_at_pick: 0,
+    acquired_via: "waiver",
+  });
+  if (patchResult.error) return patchResult;
+
+  const droppedCount = await countLeagueRosteredSymbol(league.id, droppedSymbol);
+  if (droppedCount > 0) {
+    return {
+      error: `${droppedSymbol} is still rostered in this league and was not released.`,
+    };
+  }
+
+  const offAfter = await getLeagueOffBoardSymbols(league.id);
+  if (offAfter.has(droppedSymbol)) {
+    return {
+      error: `${droppedSymbol} was dropped but is still off-board. Run migration 022 in Supabase.`,
+    };
+  }
+
+  await logRosterMove(supabase, {
+    league_id: league.id,
+    user_id: userId,
+    move_type: "waiver_drop",
+    pick_id: benchPick.id,
+    symbol: droppedSymbol,
+    prior_pick_type: "bench",
+    budget_before: benchPick.budget_spent,
+    budget_after: 0,
+    notes: `Released ${droppedSymbol} to league free agency (empty bench slot)`,
+  });
+
+  return { releasedSymbol: droppedSymbol };
 }

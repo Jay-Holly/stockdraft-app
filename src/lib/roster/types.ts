@@ -1,4 +1,4 @@
-import type { DraftPick } from "@/lib/draft/types";
+import type { DraftPick, CryptoBuyerCounts } from "@/lib/draft/types";
 
 export type RosterPickView = DraftPick & {
   acquired_via?: string;
@@ -18,6 +18,8 @@ export type RosterView = {
   starters: RosterPickView[];
   bench: RosterPickView[];
   crypto: RosterPickView[];
+  cryptoBuyerCounts: CryptoBuyerCounts;
+  cryptoQuotes: Record<string, { price: number; changePercent: number }>;
   /** Season-to-date % on scoring picks (legacy label). */
   scoringGainPercent: number;
   /** Weekly % on starters + crypto — matchup scoring metric. */
@@ -51,6 +53,7 @@ export type MatchupLiveView = {
 
 export type LeaguePageData = {
   leagueId: string;
+  leagueSupportCode: string;
   leagueName: string;
   leagueStatus: string;
   currentWeek: number;
@@ -70,5 +73,5 @@ export type FreeAgentStock = {
 export type FreeAgentsPageData = {
   leagueId: string;
   freeAgents: FreeAgentStock[];
-  benchSlots: Array<{ pickId: string; symbol: string }>;
+  benchSlots: Array<{ pickId: string; symbol: string; isOpen?: boolean }>;
 };

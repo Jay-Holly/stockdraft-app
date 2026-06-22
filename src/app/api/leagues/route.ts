@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import {
+  clearActiveLeagueCookie,
+  getActiveLeagueIdFromCookie,
   resolveActiveAiLeagueId,
   setActiveLeagueCookie,
   verifyUserOwnsLeague,
 } from "@/lib/league/active-league";
 import {
+  deleteAiLeagueForUser,
   getAiLeagueSummary,
   listAiLeagueListItems,
 } from "@/lib/league/ai-league";
@@ -62,4 +65,29 @@ export async function POST(request: Request) {
     activeLeagueId: body.leagueId,
     activeSummary: summary,
   });
+}
+
+export async function DELETE(request: Request) {
+  const { user } = await getAuthenticatedUserId();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = (await request.json()) as { leagueId?: string };
+  if (!body.leagueId) {
+    return NextResponse.json({ error: "leagueId is required." }, { status: 400 });
+  }
+
+  const result = await deleteAiLeagueForUser(user.id, body.leagueId);
+  if (result.error) {
+    const status = result.error === "League not found." ? 404 : 400;
+    return NextResponse.json({ error: result.error }, { status });
+  }
+
+  const activeCookieId = await getActiveLeagueIdFromCookie();
+  if (activeCookieId === body.leagueId) {
+    await clearActiveLeagueCookie();
+  }
+
+  return NextResponse.json({ success: true });
 }

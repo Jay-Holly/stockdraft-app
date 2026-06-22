@@ -9,6 +9,7 @@ import {
   loadDraftStateDetailed,
   makeDraftPickForLeague,
   processAllPushbackSkips,
+  processPushbackSkipForLeague,
 } from "@/lib/draft/server";
 import type { DraftFeedEvent, DraftPick, LiveDraftView } from "@/lib/draft/types";
 import type { BotConfig, BotPersonality } from "@/lib/league/bots";
@@ -54,7 +55,7 @@ export function formatDraftEventMessage(
   }
 ): string {
   if (pick.pick_type === "skip") {
-    return `Round ${roundNumber} — ${teamName} skipped (crypto pushback)`;
+    return `Round ${roundNumber} — ${teamName}: Round skipped (crypto pushback)`;
   }
 
   if (pick.pick_type === "crypto") {
@@ -186,6 +187,40 @@ export async function isLiveDraftLeague(leagueId: string): Promise<boolean> {
   return data?.draft_format === "live";
 }
 
+async function repairLiveDraftOrderIfNeeded(leagueId: string): Promise<void> {
+  const state = await getLeagueDraftStateRow(leagueId);
+  if (!state || state.status !== "in_progress") return;
+
+  const leagueBots = await getLeagueBotMembers(leagueId);
+  if (leagueBots.length === 0) return;
+
+  const botIds = leagueBots.map((b) => b.id);
+  const hasAllBots =
+    botIds.every((id) => state.draft_order.includes(id)) &&
+    state.draft_order.length === 1 + botIds.length;
+
+  if (hasAllBots) return;
+
+  const humanId =
+    state.draft_order.find((id) => !isBotUserId(id)) ??
+    state.draft_order[0] ??
+    null;
+  if (!humanId) return;
+
+  const draftOrder = [humanId, ...botIds];
+  const totalPickSlots = draftOrder.length * 15;
+
+  const supabase = await createClient();
+  await supabase
+    .from("league_draft_state")
+    .update({
+      draft_order: draftOrder,
+      total_pick_slots: totalPickSlots,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("league_id", leagueId);
+}
+
 export async function startLiveDraft(
   leagueId: string,
   humanUserId: string,
@@ -230,24 +265,30 @@ async function recordDraftEvent(
   pick: DraftPick,
   globalPickNumber: number,
   isAutoPick: boolean
-): Promise<void> {
+): Promise<DraftFeedEvent | null> {
   const supabase = await createClient();
   const teamName = await getTeamName(supabase, leagueId, userId);
   const message = formatDraftEventMessage(teamName, pick.round_number, pick);
 
-  await supabase.from("league_draft_events").insert({
-    league_id: leagueId,
-    user_id: userId,
-    team_name: teamName,
-    round_number: pick.round_number,
-    symbol: pick.symbol,
-    pick_type: pick.pick_type,
-    budget_spent: pick.budget_spent,
-    surcharge_percent: pick.surcharge_percent,
-    global_pick_number: globalPickNumber,
-    message,
-    is_auto_pick: isAutoPick,
-  });
+  const { data: event, error: eventError } = await supabase
+    .from("league_draft_events")
+    .insert({
+      league_id: leagueId,
+      user_id: userId,
+      team_name: teamName,
+      round_number: pick.round_number,
+      symbol: pick.symbol,
+      pick_type: pick.pick_type,
+      budget_spent: pick.budget_spent,
+      surcharge_percent: pick.surcharge_percent,
+      global_pick_number: globalPickNumber,
+      message,
+      is_auto_pick: isAutoPick,
+    })
+    .select("*")
+    .single();
+
+  if (eventError || !event) return null;
 
   await supabase
     .from("draft_picks")
@@ -256,6 +297,28 @@ async function recordDraftEvent(
       is_auto_pick: isAutoPick,
     })
     .eq("id", pick.id);
+
+  try {
+    const { data: draftRow } = await supabase
+      .from("drafts")
+      .select("pushback_skips_remaining")
+      .eq("league_id", leagueId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const { postBotReactionsForDraftEvent } = await import("@/lib/draft/chat");
+    await postBotReactionsForDraftEvent(
+      leagueId,
+      event as DraftFeedEvent,
+      {
+        pushbackSkipsRemaining: draftRow?.pushback_skips_remaining,
+      }
+    );
+  } catch {
+    // Chat reactions are best-effort — never block the draft.
+  }
+
+  return event as DraftFeedEvent;
 }
 
 
@@ -263,8 +326,43 @@ async function prepareTeamOnClock(
   leagueId: string,
   userId: string,
   depth = 0
-): Promise<{ ready: boolean; complete: boolean; error?: string }> {
-  if (depth > 15) return { ready: false, complete: false, error: "Too many pushback skips" };
+): Promise<{
+  ready: boolean;
+  complete: boolean;
+  liveSkipAdvanced?: boolean;
+  error?: string;
+}> {
+  if (depth > 15) {
+    return { ready: false, complete: false, error: "Too many pushback skips" };
+  }
+
+  const live = await isLiveDraftLeague(leagueId);
+
+  if (live) {
+    const state = await loadDraftStateDetailed(userId, { leagueId });
+    if (!state.ok) return { ready: false, complete: false, error: state.error };
+
+    if (
+      state.state.draft.status === "complete" ||
+      state.state.turn.type === "complete"
+    ) {
+      return { ready: false, complete: true };
+    }
+
+    if (state.state.turn.type === "pushback_skip") {
+      const skipResult = await processPushbackSkipForLeague(userId, leagueId, {
+        advanceLiveDraft: true,
+      });
+      if (skipResult.error) {
+        return { ready: false, complete: false, error: skipResult.error };
+      }
+      if (skipResult.liveAdvanced) {
+        return { ready: false, complete: false, liveSkipAdvanced: true };
+      }
+    }
+
+    return { ready: true, complete: false };
+  }
 
   const skipResult = await processAllPushbackSkips(userId, { leagueId });
   if (skipResult.error) return { ready: false, complete: false, error: skipResult.error };
@@ -284,6 +382,69 @@ async function prepareTeamOnClock(
   }
 
   return { ready: true, complete: false };
+}
+
+export function getExpectedOnClockUserId(
+  state: LeagueDraftStateRow
+): string | null {
+  if (state.status !== "in_progress") return null;
+  if (state.current_pick_index >= state.total_pick_slots) return null;
+  if (state.draft_order.length === 0) return null;
+  return state.draft_order[state.current_pick_index % state.draft_order.length];
+}
+
+export async function repairLiveDraftClock(
+  leagueId: string
+): Promise<{ repaired?: boolean; error?: string }> {
+  const state = await getLeagueDraftStateRow(leagueId);
+  if (!state || state.status !== "in_progress") return {};
+
+  const feed = await getDraftFeed(leagueId);
+  const maxFeedGlobal =
+    feed.length > 0
+      ? Math.max(...feed.map((event) => event.global_pick_number))
+      : 0;
+
+  if (maxFeedGlobal > state.global_pick_number) {
+    const supabase = await createClient();
+    const syncedIndex = Math.min(maxFeedGlobal, state.total_pick_slots);
+    const draftComplete = syncedIndex >= state.total_pick_slots;
+
+    const { error } = await supabase
+      .from("league_draft_state")
+      .update({
+        global_pick_number: syncedIndex,
+        current_pick_index: syncedIndex,
+        on_clock_user_id: null,
+        pick_deadline_at: null,
+        status: draftComplete ? "complete" : "in_progress",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("league_id", leagueId);
+
+    if (error) return { error: error.message };
+
+    if (draftComplete) {
+      await supabase.from("leagues").update({ status: "active" }).eq("id", leagueId);
+      return { repaired: true };
+    }
+
+    const assign = await assignOnClock(leagueId);
+    return assign.error ? { error: assign.error } : { repaired: true };
+  }
+
+  const expected = getExpectedOnClockUserId(state);
+  if (!expected) {
+    const assign = await assignOnClock(leagueId);
+    return assign.error ? { error: assign.error } : { repaired: true };
+  }
+
+  if (!state.on_clock_user_id || state.on_clock_user_id !== expected) {
+    const assign = await assignOnClock(leagueId);
+    return assign.error ? { error: assign.error } : { repaired: true };
+  }
+
+  return {};
 }
 
 export async function assignOnClock(
@@ -308,6 +469,11 @@ export async function assignOnClock(
 
     const prepared = await prepareTeamOnClock(leagueId, userId);
     if (prepared.error) return { error: prepared.error };
+
+    if (prepared.liveSkipAdvanced) {
+      // advanceAfterPick recorded the skip and re-entered assignOnClock.
+      return {};
+    }
 
     if (prepared.complete) {
       pickIndex += 1;
@@ -335,10 +501,7 @@ export async function assignOnClock(
 
     if (error) return { error: error.message };
 
-    if (isBotUserId(userId)) {
-      return runBotTurn(leagueId);
-    }
-
+    // Bot picks run asynchronously via GET /api/draft → ensureLiveDraftProgress.
     return {};
   }
 
@@ -373,7 +536,7 @@ export async function advanceAfterPick(
   const nextPickIndex = state.current_pick_index + 1;
   const draftComplete = nextPickIndex >= state.total_pick_slots;
 
-  await supabase
+  const { error: stateError } = await supabase
     .from("league_draft_state")
     .update({
       current_pick_index: nextPickIndex,
@@ -384,6 +547,8 @@ export async function advanceAfterPick(
       updated_at: new Date().toISOString(),
     })
     .eq("league_id", leagueId);
+
+  if (stateError) return { error: stateError.message };
 
   if (draftComplete) {
     await supabase.from("leagues").update({ status: "active" }).eq("id", leagueId);
@@ -429,18 +594,28 @@ export async function pickMostExpensiveEligibleStock(
   const pool = await fetchDraftPool();
   let best: { symbol: string; price: number } | null = null;
 
+  // Use bundled fallback quotes for the scan so timer auto-picks finish in ms,
+  // not minutes of sequential Finnhub calls across the full S&P pool.
   for (const stock of pool) {
     const symbol = stock.symbol.toUpperCase();
     if (mySymbols.has(symbol)) continue;
     if (leagueOffBoard.includes(symbol)) continue;
     if (isCryptoSymbol(symbol)) continue;
 
-    const price = await getStockPrice(symbol);
+    const fallback = getFallbackStockQuote(symbol);
+    const price = fallback?.price ?? 0;
     if (!isStockPickEligible(symbol, price)) continue;
 
     if (!best || price > best.price || (price === best.price && symbol < best.symbol)) {
       best = { symbol, price };
     }
+  }
+
+  if (!best) return null;
+
+  const live = await fetchFinnhubQuote(best.symbol);
+  if (live?.price && isStockPickEligible(best.symbol, live.price)) {
+    return { symbol: best.symbol, price: live.price };
   }
 
   return best;
@@ -470,7 +645,9 @@ export async function resolveAutoPick(
     const mine = state.state.picks.some(
       (p) => p.pick_type !== "skip" && p.symbol.toUpperCase() === safety
     );
-    const price = await getStockPrice(safety);
+    const fallbackPrice = getFallbackStockQuote(safety)?.price ?? 0;
+    const price =
+      (await getStockPrice(safety)) || fallbackPrice;
     if (!offBoard && !mine && isStockPickEligible(safety, price)) {
       return { symbol: safety, price, reason: "safety_queue" };
     }
@@ -523,7 +700,8 @@ async function executeAutoPick(
 }
 
 export async function runBotTurn(
-  leagueId: string
+  leagueId: string,
+  options?: { skipDelay?: boolean; fastPick?: boolean }
 ): Promise<{ error?: string }> {
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.status !== "in_progress") return {};
@@ -534,7 +712,9 @@ export async function runBotTurn(
 
   const supabase = await createClient();
 
-  await sleep(BOT_PICK_DELAY_MS);
+  if (!options?.skipDelay) {
+    await sleep(BOT_PICK_DELAY_MS);
+  }
 
   const refreshed = await getLeagueDraftStateRow(leagueId);
   if (
@@ -564,10 +744,24 @@ export async function runBotTurn(
     personality,
     draftState.state,
     pool,
-    botConfig
+    botConfig,
+    { fast: options?.fastPick ?? false }
   );
 
   if (!decision) {
+    const fallback = await pickMostExpensiveEligibleStock(leagueId, bot.id);
+    if (fallback) {
+      const fallbackResult = await makeDraftPickForLeague(
+        bot.id,
+        leagueId,
+        fallback.symbol,
+        undefined,
+        fallback.price,
+        false,
+        { skipLiveGate: true, isAutoPick: true, autoPickReason: "bot" }
+      );
+      if (!fallbackResult.error) return {};
+    }
     return { error: `${bot.displayName} could not decide a pick` };
   }
 
@@ -578,21 +772,33 @@ export async function runBotTurn(
     decision.allocation,
     decision.price,
     decision.isSearchPick ?? false,
-    { skipLiveGate: true, isAutoPick: true, autoPickReason: "bot" }
+    { skipLiveGate: true, isAutoPick: false, autoPickReason: "bot" }
   );
 
-  if (result.error) return { error: result.error };
+  if (result.error) {
+    await repairLiveDraftClock(leagueId);
+    return { error: result.error };
+  }
 
   return {};
 }
 
 export async function ensureLiveDraftProgress(
-  leagueId: string
+  leagueId: string,
+  options?: { interactive?: boolean }
 ): Promise<{ error?: string }> {
+  const interactive = options?.interactive ?? true;
+  const botWorkBudgetMs = interactive ? 25_000 : 10_000;
+
+  await repairLiveDraftOrderIfNeeded(leagueId);
+
+  const repair = await repairLiveDraftClock(leagueId);
+  if (repair.error) return repair;
+
   const expire = await expirePickIfNeeded(leagueId);
   if (expire.error) return expire;
 
-  const state = await getLeagueDraftStateRow(leagueId);
+  let state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.status !== "in_progress") return {};
 
   if (state.on_clock_user_id && isBotUserId(state.on_clock_user_id)) {
@@ -600,13 +806,40 @@ export async function ensureLiveDraftProgress(
       !state.pick_deadline_at ||
       new Date(state.pick_deadline_at).getTime() <= Date.now()
     ) {
-      return runBotTurn(leagueId);
+      const botResult = await Promise.race([
+        runBotTurn(leagueId, {
+          skipDelay: !interactive,
+          fastPick: !interactive,
+        }),
+        new Promise<{ timedOut: true }>((resolve) => {
+          setTimeout(() => resolve({ timedOut: true }), botWorkBudgetMs);
+        }),
+      ]);
+
+      if (
+        botResult &&
+        "timedOut" in botResult &&
+        botResult.timedOut &&
+        !interactive
+      ) {
+        // Don't fail the draft load — bot progress can finish on the next poll.
+      } else if (botResult && "error" in botResult && botResult.error) {
+        return botResult;
+      }
     }
-    return {};
+  } else if (!state.on_clock_user_id) {
+    const assign = await assignOnClock(leagueId);
+    if (assign.error) return assign;
   }
 
-  if (!state.on_clock_user_id) {
-    return assignOnClock(leagueId);
+  state = await getLeagueDraftStateRow(leagueId);
+  if (
+    state?.status === "in_progress" &&
+    !state.on_clock_user_id &&
+    state.current_pick_index < state.total_pick_slots
+  ) {
+    const assign = await assignOnClock(leagueId);
+    if (assign.error) return assign;
   }
 
   return {};

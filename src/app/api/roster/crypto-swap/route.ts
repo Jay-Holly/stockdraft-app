@@ -2,37 +2,61 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { applyCryptoRebalance } from "@/lib/roster/moves";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
-  const { user } = await getAuthenticatedUserId();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const started = Date.now();
 
-  const body = (await request.json()) as {
-    pickId?: string;
-    newSymbol?: string;
-    sellPercent?: number;
-  };
+  try {
+    const { user } = await getAuthenticatedUserId();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  if (!body.pickId || !body.newSymbol) {
+    const body = (await request.json()) as {
+      pickId?: string;
+      newSymbol?: string;
+      sellPercent?: number;
+    };
+
+    if (!body.pickId || !body.newSymbol) {
+      return NextResponse.json(
+        { error: "pickId and newSymbol are required." },
+        { status: 400 }
+      );
+    }
+
+    const sellPercent =
+      body.sellPercent === undefined ? 100 : Number(body.sellPercent);
+
+    const result = await applyCryptoRebalance(
+      user.id,
+      body.pickId,
+      body.newSymbol,
+      sellPercent
+    );
+
+    const elapsedMs = Date.now() - started;
+
+    if (result.error) {
+      return NextResponse.json(
+        { error: result.error, step: "applyCryptoRebalance", elapsedMs },
+        { status: 400, headers: { "X-Roster-Move-Ms": String(elapsedMs) } }
+      );
+    }
+
     return NextResponse.json(
-      { error: "pickId and newSymbol are required." },
-      { status: 400 }
+      { success: true, elapsedMs },
+      { headers: { "X-Roster-Move-Ms": String(elapsedMs) } }
+    );
+  } catch (err) {
+    const elapsedMs = Date.now() - started;
+    const message =
+      err instanceof Error ? err.message : "Crypto rebalance failed unexpectedly";
+    console.error("Crypto swap route error:", err);
+    return NextResponse.json(
+      { error: message, step: "crypto-swap-route", elapsedMs },
+      { status: 500, headers: { "X-Roster-Move-Ms": String(elapsedMs) } }
     );
   }
-
-  const sellPercent =
-    body.sellPercent === undefined ? 100 : Number(body.sellPercent);
-
-  const result = await applyCryptoRebalance(
-    user.id,
-    body.pickId,
-    body.newSymbol,
-    sellPercent
-  );
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
-  }
-
-  return NextResponse.json({ success: true });
 }

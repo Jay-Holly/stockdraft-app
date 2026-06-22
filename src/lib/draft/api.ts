@@ -9,6 +9,7 @@ import {
   getDraftFeed,
   isLiveDraftLeague,
 } from "@/lib/draft/live-draft";
+import { getDraftChatMessages } from "@/lib/draft/chat";
 import { getAiLeagueBotDraftBoards } from "@/lib/league/ai-league";
 import type { BotDraftBoard } from "@/lib/league/ai-league";
 import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
@@ -38,7 +39,9 @@ export async function loadDraftApiPayload(
   const live = await isLiveDraftLeague(leagueId);
 
   if (live) {
-    const progress = await ensureLiveDraftProgress(leagueId);
+    const progress = await ensureLiveDraftProgress(leagueId, {
+      interactive: false,
+    });
     if (progress.error) {
       return { ok: false, error: progress.error, partial: result.state };
     }
@@ -59,9 +62,10 @@ export async function loadDraftApiPayload(
     }
   }
 
-  const [liveDraft, draftFeed, botDraftBoards] = await Promise.all([
+  const [liveDraft, draftFeed, draftChat, botDraftBoards] = await Promise.all([
     live ? buildLiveDraftView(leagueId, userId) : Promise.resolve(null),
     live ? getDraftFeed(leagueId) : Promise.resolve([]),
+    live ? getDraftChatMessages(leagueId) : Promise.resolve([]),
     getAiLeagueBotDraftBoards(userId, leagueId),
   ]);
 
@@ -71,6 +75,7 @@ export async function loadDraftApiPayload(
       ...result.state,
       liveDraft,
       draftFeed,
+      draftChat,
       botDraftBoards: botDraftBoards ?? undefined,
     },
   };

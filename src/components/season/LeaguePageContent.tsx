@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatPct } from "@/lib/format";
 import type { LeaguePageData } from "@/lib/roster/types";
+import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 
 export function LeaguePageContent() {
   const [data, setData] = useState<LeaguePageData | null>(null);
@@ -11,15 +12,49 @@ export function LeaguePageContent() {
 
   const load = useCallback(async () => {
     setError(null);
-    const res = await fetch("/api/league", { cache: "no-store" });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json.error ?? "Could not load league");
+    try {
+      const res = await fetch("/api/league", { cache: "no-store" });
+
+      let json: { error?: string } & Partial<LeaguePageData> = {};
+      try {
+        const text = await res.text();
+        if (text.trim()) {
+          json = JSON.parse(text) as typeof json;
+        }
+      } catch {
+        setError(
+          res.ok
+            ? "League API returned an invalid JSON response."
+            : `League API HTTP ${res.status}: empty or invalid JSON body.`
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (!res.ok) {
+        setError(json.error ?? `Could not load league (HTTP ${res.status})`);
+        setLoading(false);
+        return;
+      }
+
+      if (!json.leagueId) {
+        setError("League API returned unexpected data.");
+        setLoading(false);
+        return;
+      }
+
+      setData(json as LeaguePageData);
       setLoading(false);
-      return;
+    } catch (err) {
+      setError(
+        err instanceof TypeError && err.message === "Failed to fetch"
+          ? "Network error: could not reach /api/league. Check that the dev server is running."
+          : err instanceof Error
+            ? err.message
+            : "Could not load league data."
+      );
+      setLoading(false);
     }
-    setData(json as LeaguePageData);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -43,6 +78,9 @@ export function LeaguePageContent() {
   return (
     <div className="space-y-4">
       <section className="season-card">
+        <div className="mb-2">
+          <LeagueSupportId code={data.leagueSupportCode} size="md" />
+        </div>
         <h1 className="text-xl font-bold">{data.leagueName}</h1>
         <p className="text-muted text-sm mt-1 capitalize">
           Week {data.currentWeek} · {data.leagueStatus}

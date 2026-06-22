@@ -71,6 +71,21 @@ async function buildStockCandidates(
   return candidates;
 }
 
+function buildStockCandidatesFast(stocks: DraftPoolStock[]): StockCandidate[] {
+  const candidates: StockCandidate[] = [];
+  for (const stock of stocks) {
+    const fallback = getFallbackStockQuote(stock.symbol);
+    const price = fallback?.price ?? 0;
+    if (!isStockPickEligible(stock.symbol, price)) continue;
+    candidates.push({
+      ...stock,
+      price,
+      changePercent: fallback?.changePercent ?? 0,
+    });
+  }
+  return candidates;
+}
+
 function pickHighestCapStock(
   pool: DraftPoolStock[],
   offBoard: Set<string>,
@@ -204,11 +219,13 @@ async function pickByMomentum(
   pool: DraftPoolStock[],
   offBoard: Set<string>,
   myDrafted: Set<string>,
-  direction: "up" | "down"
+  direction: "up" | "down",
+  fast = false
 ): Promise<StockCandidate | null> {
-  const candidates = await buildStockCandidates(
-    baseEligibleStocks(pool, offBoard, myDrafted)
-  );
+  const eligible = baseEligibleStocks(pool, offBoard, myDrafted);
+  const candidates = fast
+    ? buildStockCandidatesFast(eligible)
+    : await buildStockCandidates(eligible);
 
   const filtered =
     direction === "up"
@@ -233,9 +250,16 @@ async function pickByMomentum(
 }
 
 async function stockDecisionFromPool(
-  stock: DraftPoolStock | null
+  stock: DraftPoolStock | null,
+  fast = false
 ): Promise<AiPickDecision | null> {
   if (!stock) return null;
+  if (fast) {
+    const fallback = getFallbackStockQuote(stock.symbol);
+    const price = fallback?.price ?? 0;
+    if (price <= 0 || !isStockPickEligible(stock.symbol, price)) return null;
+    return { symbol: stock.symbol, price };
+  }
   const { price } = await getStockQuote(stock.symbol);
   if (price <= 0 || !isStockPickEligible(stock.symbol, price)) return null;
   return { symbol: stock.symbol, price };
@@ -267,32 +291,34 @@ async function pickStockForPersonality(
   myDrafted: Set<string>,
   picks: DraftPick[],
   botConfig: BotConfig,
-  benchPhase: boolean
+  benchPhase: boolean,
+  fast = false
 ): Promise<AiPickDecision | null> {
   if (personality === "bench_hoarder" && benchPhase) {
-    return stockDecisionFromPool(pickGamblerStock(pool, offBoard, myDrafted));
+    return stockDecisionFromPool(pickGamblerStock(pool, offBoard, myDrafted), fast);
   }
 
   if (personality === "bench_hoarder" && !benchPhase) {
-    return stockDecisionFromPool(pickHighestCapStock(pool, offBoard, myDrafted));
+    return stockDecisionFromPool(pickHighestCapStock(pool, offBoard, myDrafted), fast);
   }
 
   if (personality === "analyst" || personality === "day_trader") {
-    return stockDecisionFromPool(pickHighestCapStock(pool, offBoard, myDrafted));
+    return stockDecisionFromPool(pickHighestCapStock(pool, offBoard, myDrafted), fast);
   }
 
   if (personality === "gambler") {
-    return stockDecisionFromPool(pickGamblerStock(pool, offBoard, myDrafted));
+    return stockDecisionFromPool(pickGamblerStock(pool, offBoard, myDrafted), fast);
   }
 
   if (personality === "sleeper") {
-    return stockDecisionFromPool(pickSleeperStock(pool, offBoard, myDrafted));
+    return stockDecisionFromPool(pickSleeperStock(pool, offBoard, myDrafted), fast);
   }
 
   if (personality === "sector_loyalist" && botConfig.sector) {
     return stockDecisionFromPool(
       pickSectorStock(pool, offBoard, myDrafted, botConfig.sector) ??
-        pickHighestCapStock(pool, offBoard, myDrafted)
+        pickHighestCapStock(pool, offBoard, myDrafted),
+      fast
     );
   }
 
@@ -303,47 +329,54 @@ async function pickStockForPersonality(
         offBoard,
         myDrafted,
         botConfig.region as HomerRegion
-      )
+      ),
+      fast
     );
   }
 
   if (personality === "diversifier") {
     return stockDecisionFromPool(
-      pickDiversifierStock(pool, offBoard, myDrafted, picks)
+      pickDiversifierStock(pool, offBoard, myDrafted, picks),
+      fast
     );
   }
 
   if (personality === "value_hunter") {
     return stockDecisionFromCandidate(
-      await pickByMomentum(pool, offBoard, myDrafted, "down")
+      await pickByMomentum(pool, offBoard, myDrafted, "down", fast)
     );
   }
 
   if (personality === "contrarian") {
     return stockDecisionFromCandidate(
-      await pickByMomentum(pool, offBoard, myDrafted, "down")
+      await pickByMomentum(pool, offBoard, myDrafted, "down", fast)
     );
   }
 
   if (personality === "momentum_chaser") {
     return stockDecisionFromCandidate(
-      await pickByMomentum(pool, offBoard, myDrafted, "up")
+      await pickByMomentum(pool, offBoard, myDrafted, "up", fast)
     );
   }
 
   if (personality === "crypto_king") {
-    return stockDecisionFromPool(pickMidCapStock(pool, offBoard, myDrafted, 120, 280));
+    return stockDecisionFromPool(
+      pickMidCapStock(pool, offBoard, myDrafted, 120, 280),
+      fast
+    );
   }
 
-  return stockDecisionFromPool(pickHighestCapStock(pool, offBoard, myDrafted));
+  return stockDecisionFromPool(pickHighestCapStock(pool, offBoard, myDrafted), fast);
 }
 
 export async function decideAiPick(
   personality: BotPersonality,
   state: DraftState,
   pool: DraftPoolStock[],
-  botConfig: BotConfig = {}
+  botConfig: BotConfig = {},
+  options?: { fast?: boolean }
 ): Promise<AiPickDecision | null> {
+  const fast = options?.fast ?? false;
   const { turn, picks, leagueOffBoard } = state;
   if (turn.type === "complete" || turn.type === "pushback_skip") return null;
 
@@ -377,7 +410,8 @@ export async function decideAiPick(
         myDrafted,
         picks,
         botConfig,
-        false
+        false,
+        fast
       );
     }
 
@@ -398,7 +432,8 @@ export async function decideAiPick(
         myDrafted,
         picks,
         botConfig,
-        turn.type === "bench"
+        turn.type === "bench",
+        fast
       );
     }
 
@@ -416,7 +451,8 @@ export async function decideAiPick(
         myDrafted,
         picks,
         botConfig,
-        turn.type === "bench"
+        turn.type === "bench",
+        fast
       );
     }
 
@@ -434,7 +470,8 @@ export async function decideAiPick(
         myDrafted,
         picks,
         botConfig,
-        turn.type === "bench"
+        turn.type === "bench",
+        fast
       );
     }
 
@@ -452,7 +489,8 @@ export async function decideAiPick(
       myDrafted,
       picks,
       botConfig,
-      turn.type === "bench"
+      turn.type === "bench",
+      fast
     );
   }
 

@@ -4,6 +4,7 @@ export type Profile = {
   team_name: string;
   avatar_color: string;
   created_at: string;
+  day_trader_joined_at?: string | null;
 };
 
 export const AVATAR_COLORS = [

@@ -2,32 +2,56 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { applyIrSwap } from "@/lib/roster/moves";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
-  const { user } = await getAuthenticatedUserId();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const started = Date.now();
 
-  const body = (await request.json()) as {
-    starterPickId?: string;
-    benchPickId?: string;
-  };
+  try {
+    const { user } = await getAuthenticatedUserId();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  if (!body.starterPickId || !body.benchPickId) {
+    const body = (await request.json()) as {
+      starterPickId?: string;
+      benchPickId?: string;
+    };
+
+    if (!body.starterPickId || !body.benchPickId) {
+      return NextResponse.json(
+        { error: "starterPickId and benchPickId are required." },
+        { status: 400 }
+      );
+    }
+
+    const result = await applyIrSwap(
+      user.id,
+      body.starterPickId,
+      body.benchPickId
+    );
+
+    const elapsedMs = Date.now() - started;
+
+    if (result.error) {
+      return NextResponse.json(
+        { error: result.error, step: "applyIrSwap", elapsedMs },
+        { status: 400, headers: { "X-Roster-Move-Ms": String(elapsedMs) } }
+      );
+    }
+
     return NextResponse.json(
-      { error: "starterPickId and benchPickId are required." },
-      { status: 400 }
+      { success: true, elapsedMs },
+      { headers: { "X-Roster-Move-Ms": String(elapsedMs) } }
+    );
+  } catch (err) {
+    const elapsedMs = Date.now() - started;
+    const message =
+      err instanceof Error ? err.message : "IR swap failed unexpectedly";
+    console.error("IR swap route error:", err);
+    return NextResponse.json(
+      { error: message, step: "ir-swap-route", elapsedMs },
+      { status: 500, headers: { "X-Roster-Move-Ms": String(elapsedMs) } }
     );
   }
-
-  const result = await applyIrSwap(
-    user.id,
-    body.starterPickId,
-    body.benchPickId
-  );
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
-  }
-
-  return NextResponse.json({ success: true });
 }

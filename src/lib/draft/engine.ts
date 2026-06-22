@@ -87,7 +87,10 @@ export function getMyStockSymbols(picks: DraftPick[]): Set<string> {
 export function getMyDraftedSymbols(picks: DraftPick[]): Set<string> {
   return new Set(
     picks
-      .filter((p) => p.pick_type !== "skip")
+      .filter(
+        (p) =>
+          p.pick_type !== "skip" && p.symbol.toUpperCase() !== "__OPEN__"
+      )
       .map((p) => p.symbol.toUpperCase())
   );
 }

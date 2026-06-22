@@ -43,6 +43,7 @@ export function AuthForm({
             username,
             team_name: teamName,
             avatar_color: avatarColor,
+            day_trader_signup: variant === "daytrader" ? "true" : "false",
           },
         },
       });
@@ -61,12 +62,22 @@ export function AuthForm({
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
       setMessage({ type: "error", text: error.message });
       setLoading(false);
       return;
+    }
+
+    if (variant === "daytrader" && signInData.user) {
+      await supabase
+        .from("profiles")
+        .update({ day_trader_joined_at: new Date().toISOString() })
+        .eq("id", signInData.user.id);
     }
 
     window.location.href = "/dashboard";
@@ -76,10 +87,15 @@ export function AuthForm({
     setLoading(true);
     setMessage(null);
 
+    const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (variant === "daytrader") {
+      callbackUrl.searchParams.set("daytrader", "1");
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl.toString(),
       },
     });
 

@@ -6,6 +6,7 @@ import {
   getLeagueOffBoardSymbols,
   resolveDraftLeague,
 } from "@/lib/league/server";
+import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
 import {
   calculatePushback,
   computeCryptoPick,
@@ -220,6 +221,7 @@ export async function loadDraftStateDetailed(
         .from("drafts")
         .update({ league_id: league.id })
         .eq("id", legacyDraft.id)
+        .is("league_id", null)
         .select("*")
         .single();
 
@@ -230,50 +232,26 @@ export async function loadDraftStateDetailed(
         };
       }
       draft = updated;
-    } else {
-      const { data: existingDraft, error: existingError } = await supabase
-        .from("drafts")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
+    }
+  }
 
-      if (existingError) {
+  if (!draft) {
+    const { data: created, error: insertError } = await supabase
+      .from("drafts")
+      .insert({ user_id: userId, league_id: league.id })
+      .select("*")
+      .single();
+
+    if (insertError || !created) {
+      draft = await fetchLeagueDraftRow(supabase, league.id, userId);
+      if (!draft) {
         return {
           ok: false,
-          error: `drafts lookup (user_id) failed: ${existingError.message}`,
+          error: `drafts insert failed: ${insertError?.message ?? "unknown error"}. Confirm 002_draft.sql ran and unique(user_id) was dropped by 003_leagues.sql.`,
         };
       }
-
-      if (existingDraft) {
-        const { data: reassigned, error: reassignError } = await supabase
-          .from("drafts")
-          .update({ league_id: league.id })
-          .eq("id", existingDraft.id)
-          .select("*")
-          .single();
-
-        if (reassignError || !reassigned) {
-          return {
-            ok: false,
-            error: `drafts league_id reassignment failed: ${reassignError?.message ?? "unknown error"}`,
-          };
-        }
-        draft = reassigned;
-      } else {
-        const { data: created, error: insertError } = await supabase
-          .from("drafts")
-          .insert({ user_id: userId, league_id: league.id })
-          .select("*")
-          .single();
-
-        if (insertError || !created) {
-          return {
-            ok: false,
-            error: `drafts insert failed: ${insertError?.message ?? "unknown error"}. Confirm 002_draft.sql ran and unique(user_id) was dropped by 003_leagues.sql.`,
-          };
-        }
-        draft = created;
-      }
+    } else {
+      draft = created;
     }
   }
 
@@ -284,12 +262,21 @@ export async function loadDraftStateDetailed(
     };
   }
 
-  const pickList = await fetchLeagueDraftPicks(
+  if (draft.league_id && draft.league_id !== league.id) {
+    return {
+      ok: false,
+      error:
+        "Draft row belongs to a different league. Select the correct league on the dashboard and try again.",
+    };
+  }
+
+  const rawPickList = await fetchLeagueDraftPicks(
     supabase,
     league.id,
     userId,
     draft.id
   );
+  const pickList = rawPickList.filter((pick) => pick.draft_id === draft.id);
   const draftRow = draft as Draft;
   const buyerCounts = await fetchBuyerCounts(supabase, league.id);
   const summary = summarizePicks(pickList);
@@ -317,7 +304,8 @@ export async function loadDraftStateDetailed(
 
 export async function processPushbackSkipForLeague(
   userId: string,
-  leagueId: string
+  leagueId: string,
+  options?: { advanceLiveDraft?: boolean }
 ) {
   const stateResult = await loadDraftStateDetailed(userId, { leagueId });
   if (!stateResult.ok) return { error: stateResult.error };
@@ -331,21 +319,31 @@ export async function processPushbackSkipForLeague(
   const pickOrder = picks.length;
   const nextRound = getNextRoundAfterPick(draft, picks, "skip");
 
-  const { error: pickError } = await supabase.from("draft_picks").insert({
-    draft_id: draft.id,
-    user_id: userId,
-    round_number: draft.current_round,
-    pick_type: "skip",
-    symbol: "SKIP",
-    price_at_pick: 0,
-    budget_spent: 0,
-    shares: 0,
-    surcharge_percent: 0,
-    effective_value: 0,
-    pick_order: pickOrder,
-  });
+  const { data: insertedPick, error: pickError } = await supabase
+    .from("draft_picks")
+    .insert({
+      draft_id: draft.id,
+      user_id: userId,
+      round_number: draft.current_round,
+      pick_type: "skip",
+      symbol: "SKIP",
+      price_at_pick: 0,
+      budget_spent: 0,
+      shares: 0,
+      surcharge_percent: 0,
+      effective_value: 0,
+      pick_order: pickOrder,
+    })
+    .select("*")
+    .single();
 
-  if (pickError) return { error: pickError.message };
+  if (pickError || !insertedPick) {
+    return {
+      error:
+        pickError?.message ??
+        "Pushback skip insert failed (0 rows). Confirm draft_picks RLS allows insert.",
+    };
+  }
 
   const { error: draftError } = await supabase
     .from("drafts")
@@ -356,6 +354,20 @@ export async function processPushbackSkipForLeague(
     .eq("id", draft.id);
 
   if (draftError) return { error: draftError.message };
+
+  if (options?.advanceLiveDraft) {
+    const { advanceAfterPick, isLiveDraftLeague } = await import("./live-draft");
+    if (await isLiveDraftLeague(leagueId)) {
+      const advance = await advanceAfterPick(
+        leagueId,
+        userId,
+        insertedPick as DraftPick,
+        false
+      );
+      if (advance.error) return { error: advance.error };
+      return { success: true, liveAdvanced: true };
+    }
+  }
 
   return { success: true };
 }
@@ -441,6 +453,7 @@ export async function makeDraftPickForLeague(
   }
 
   const { draft, picks, turn, buyerCounts, leagueOffBoard } = stateResult.state;
+  const leaguePicks = picks.filter((pick) => pick.draft_id === draft.id);
   if (draft.status === "complete" || turn.type === "complete") {
     return { error: "Draft is already complete" };
   }
@@ -450,14 +463,14 @@ export async function makeDraftPickForLeague(
   }
 
   const upperSymbol = symbol.toUpperCase();
-  const myDrafted = getMyDraftedSymbols(picks);
+  const myDrafted = getMyDraftedSymbols(leaguePicks);
   if (myDrafted.has(upperSymbol)) {
     return { error: `${upperSymbol} is already on your roster` };
   }
 
   const supabase = await createClient();
-  const summary = summarizePicks(picks);
-  const pickOrder = picks.length;
+  const summary = summarizePicks(leaguePicks);
+  const pickOrder = leaguePicks.length;
   let pickType: DraftPick["pick_type"] = "stock";
   let budgetSpent = 0;
   let shares = 0;
@@ -498,7 +511,7 @@ export async function makeDraftPickForLeague(
 
     if (draft.current_round <= OPEN_ROUNDS) {
       const afterPick = [
-        ...getOpenPhaseCryptoPicks(picks),
+        ...getOpenPhaseCryptoPicks(leaguePicks),
         { budget_spent: budgetSpent } as DraftPick,
       ];
       const newTotal = afterPick.reduce((s, p) => s + p.budget_spent, 0);
@@ -543,26 +556,36 @@ export async function makeDraftPickForLeague(
     return { error: "Invalid turn type for this pick" };
   }
 
-  const { error: pickError } = await supabase.from("draft_picks").insert({
-    draft_id: draft.id,
-    user_id: userId,
-    round_number: draft.current_round,
-    pick_type: pickType,
-    symbol: upperSymbol,
-    price_at_pick: priceAtPick,
-    budget_spent: budgetSpent,
-    shares,
-    surcharge_percent: surchargePercent,
-    effective_value: effectiveValue,
-    pick_order: pickOrder,
-    is_auto_pick: options?.isAutoPick ?? false,
-    auto_pick_reason: options?.autoPickReason ?? null,
-  });
+  const { data: insertedPick, error: pickError } = await supabase
+    .from("draft_picks")
+    .insert({
+      draft_id: draft.id,
+      user_id: userId,
+      round_number: draft.current_round,
+      pick_type: pickType,
+      symbol: upperSymbol,
+      price_at_pick: priceAtPick,
+      budget_spent: budgetSpent,
+      shares,
+      surcharge_percent: surchargePercent,
+      effective_value: effectiveValue,
+      pick_order: pickOrder,
+      is_auto_pick: options?.isAutoPick ?? false,
+      auto_pick_reason: options?.autoPickReason ?? null,
+    })
+    .select("*")
+    .single();
 
-  if (pickError) return { error: pickError.message };
+  if (pickError || !insertedPick) {
+    return {
+      error:
+        pickError?.message ??
+        "Pick insert failed (0 rows). Confirm draft_picks RLS policies allow insert.",
+    };
+  }
 
   const updatedPicks = [
-    ...picks,
+    ...leaguePicks,
     {
       pick_type: pickType,
       budget_spent: budgetSpent,
@@ -590,21 +613,16 @@ export async function makeDraftPickForLeague(
     const { isLiveDraftLeague, advanceAfterPick } = await import("./live-draft");
     const live = await isLiveDraftLeague(leagueId);
     if (live) {
-      const { data: insertedPick } = await supabase
-        .from("draft_picks")
-        .select("*")
-        .eq("draft_id", draft.id)
-        .eq("pick_order", pickOrder)
-        .single();
-
-      if (insertedPick) {
-        const advance = await advanceAfterPick(
-          leagueId,
-          userId,
-          insertedPick as DraftPick,
-          options?.isAutoPick ?? false
-        );
-        if (advance.error) return { error: advance.error };
+      const advance = await advanceAfterPick(
+        leagueId,
+        userId,
+        insertedPick as DraftPick,
+        options?.isAutoPick ?? false
+      );
+      if (advance.error) {
+        return {
+          error: `${advance.error} (Your pick was saved — refresh the draft room.)`,
+        };
       }
     }
   }
@@ -619,12 +637,12 @@ export async function makeDraftPick(
   price?: number,
   isSearchPick = false
 ) {
-  const state = await loadDraftState(userId);
-  if (!state) return { error: "Could not load draft" };
+  const leagueId = await resolveActiveAiLeagueId(userId);
+  if (!leagueId) return { error: "No active draft league found." };
 
   return makeDraftPickForLeague(
     userId,
-    state.leagueId,
+    leagueId,
     symbol,
     allocation,
     price,

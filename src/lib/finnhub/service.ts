@@ -31,6 +31,25 @@ function getFinnhubKey(): string | undefined {
   return process.env.NEXT_PUBLIC_FINNHUB_KEY;
 }
 
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit & { timeoutMs?: number }
+): Promise<Response> {
+  const timeoutMs = init?.timeoutMs ?? 8000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const { timeoutMs: _timeoutMs, ...rest } = init ?? {};
+    return await fetch(input, {
+      ...rest,
+      signal: rest.signal ?? controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function calcChangePercent(price: number, prevClose: number): number {
   if (!prevClose) return 0;
   return ((price - prevClose) / prevClose) * 100;
@@ -170,9 +189,9 @@ export async function fetchFinnhubQuotes(
     for (const symbol of batch) {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const response = await fetch(
+          const response = await fetchWithTimeout(
             `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${token}`,
-            { next: { revalidate: 60 } }
+            { next: { revalidate: 60 }, timeoutMs: 5000 }
           );
 
           if (!response.ok) {
@@ -220,9 +239,9 @@ export async function searchFinnhubSymbols(
   if (!token || query.trim().length < 1) return [];
 
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://finnhub.io/api/v1/search?q=${encodeURIComponent(query.trim())}&token=${token}`,
-      { next: { revalidate: 300 } }
+      { next: { revalidate: 300 }, timeoutMs: 5000 }
     );
 
     if (!response.ok) return [];

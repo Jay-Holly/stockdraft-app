@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import {
-  getAuthenticatedUserId,
-  loadDraftState,
-  makeDraftPick,
-  processAllPushbackSkips,
-} from "@/lib/draft/server";
-import { loadDraftApiPayload } from "@/lib/draft/api";
-import { isLiveDraftLeague } from "@/lib/draft/live-draft";
+import { getAuthenticatedUserId, makeDraftPickForLeague } from "@/lib/draft/server";
+import { assertOnClock, isLiveDraftLeague, repairLiveDraftClock } from "@/lib/draft/live-draft";
+import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
 import { ensureAiLeagueReadyForMatchups } from "@/lib/matchup/scoring";
 
 export async function POST(request: Request) {
@@ -16,62 +11,58 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { symbol, allocation, price, isSearchPick } = body as {
+  const { symbol, allocation, price, isSearchPick, leagueId: bodyLeagueId } = body as {
     symbol?: string;
     allocation?: number;
     price?: number;
     isSearchPick?: boolean;
+    leagueId?: string;
   };
 
   if (!symbol) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
   }
 
-  const beforeState = await loadDraftState(user.id);
-  const leagueId = beforeState?.leagueId;
-  const live = leagueId ? await isLiveDraftLeague(leagueId) : false;
+  const leagueId = await resolveActiveAiLeagueId(user.id, bodyLeagueId ?? null);
+  if (!leagueId) {
+    return NextResponse.json(
+      { error: "No active draft league found. Select a league on the dashboard." },
+      { status: 400 }
+    );
+  }
 
-  const result = await makeDraftPick(
+  const live = await isLiveDraftLeague(leagueId);
+  if (live) {
+    let onClock = await assertOnClock(leagueId, user.id);
+    if (!onClock.ok) {
+      await repairLiveDraftClock(leagueId);
+      onClock = await assertOnClock(leagueId, user.id);
+    }
+    if (!onClock.ok) {
+      return NextResponse.json({ error: onClock.error }, { status: 400 });
+    }
+  }
+
+  const result = await makeDraftPickForLeague(
     user.id,
+    leagueId,
     symbol,
     allocation,
     price,
     Boolean(isSearchPick)
   );
+
   if ("error" in result && result.error) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
-  if (!live) {
-    const skipResult = await processAllPushbackSkips(user.id);
-    if (skipResult.error) {
-      return NextResponse.json({ error: skipResult.error }, { status: 500 });
-    }
-  }
-
-  const payloadResult = await loadDraftApiPayload(user.id, {
-    leagueId: leagueId ?? undefined,
-  });
-  if (!payloadResult.ok) {
-    return NextResponse.json({ error: payloadResult.error }, { status: 500 });
-  }
-
-  const liveComplete =
-    live && payloadResult.payload.liveDraft?.status === "complete";
-
-  if (
-    ("complete" in result && result.complete) ||
-    liveComplete ||
-    payloadResult.payload.draft.status === "complete"
-  ) {
+  if (result.complete) {
     await ensureAiLeagueReadyForMatchups(user.id);
   }
 
   return NextResponse.json({
-    ...payloadResult.payload,
-    complete:
-      ("complete" in result && result.complete) ||
-      liveComplete ||
-      payloadResult.payload.draft.status === "complete",
+    success: true,
+    complete: Boolean(result.complete),
+    leagueId,
   });
 }

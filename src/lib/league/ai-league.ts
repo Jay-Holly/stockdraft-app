@@ -14,8 +14,10 @@ import {
   getAiLeagueById,
   listAiLeaguesForUser,
   resolveActiveAiLeagueId,
+  verifyUserOwnsLeague,
 } from "@/lib/league/active-league";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
+import { AI_LEAGUE_FIELDS } from "@/lib/league/fields";
 
 export type AiLeague = League & {
   league_type: "solo" | "ai";
@@ -114,7 +116,7 @@ export async function getLatestAiLeagueForUser(
   const supabase = await createClient();
   const { data } = await supabase
     .from("leagues")
-    .select("id, name, is_solo, created_at, league_type, status, owner_user_id")
+    .select(AI_LEAGUE_FIELDS)
     .eq("owner_user_id", userId)
     .eq("league_type", "ai")
     .order("created_at", { ascending: false })
@@ -160,7 +162,7 @@ export async function createFreeAiLeague(
       status: "drafting",
       owner_user_id: userId,
     })
-    .select("id, name, is_solo, created_at, league_type, status, owner_user_id")
+    .select(AI_LEAGUE_FIELDS)
     .single();
 
   if (leagueError || !league) {
@@ -236,6 +238,29 @@ export async function createFreeAiLeague(
   return { league: league as AiLeague };
 }
 
+export async function deleteAiLeagueForUser(
+  userId: string,
+  leagueId: string
+): Promise<{ error?: string }> {
+  if (!(await verifyUserOwnsLeague(userId, leagueId))) {
+    return { error: "League not found." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("leagues")
+    .delete()
+    .eq("id", leagueId)
+    .eq("owner_user_id", userId)
+    .eq("league_type", "ai");
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return {};
+}
+
 export async function activateAiLeagueSchedule(
   leagueId: string
 ): Promise<{ error?: string }> {
@@ -292,9 +317,7 @@ export async function getAiLeagueSummary(
         const supabase = await createClient();
         const { data } = await supabase
           .from("leagues")
-          .select(
-            "id, name, is_solo, created_at, league_type, status, owner_user_id"
-          )
+          .select(AI_LEAGUE_FIELDS)
           .eq("id", leagueId)
           .eq("owner_user_id", userId)
           .eq("league_type", "ai")
