@@ -14,7 +14,6 @@ import { BOT_BY_ID } from "@/lib/league/bots";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
 import { getLeagueMemberTeamName, getLeagueOffBoardSymbols } from "@/lib/league/server";
 import type { CryptoQuote } from "@/lib/coingecko/service";
-import type { CryptoSymbol } from "@/lib/market/symbols";
 import { createClient } from "@/lib/supabase/server";
 import {
   computeGainPercent,
@@ -84,7 +83,7 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
     fetchStockQuotes(stockSymbols),
     needsCrypto
       ? getCryptoQuotesMap()
-      : Promise.resolve({} as Record<CryptoSymbol, CryptoQuote>),
+      : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
   return picks.map((pick) => {
@@ -107,7 +106,7 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
     let changePercent = 0;
 
     if (isCryptoSymbol(symbol)) {
-      const quote = cryptoQuotes[symbol as CryptoSymbol];
+      const quote = cryptoQuotes[symbol];
       price = quote?.price ?? 0;
       changePercent = quote?.changePercent ?? 0;
     } else {
@@ -161,7 +160,7 @@ export async function loadRosterView(
   const cryptoQuotes: Record<string, { price: number; changePercent: number }> =
     {};
   for (const symbol of Object.keys(cryptoQuoteMap)) {
-    const quote = cryptoQuoteMap[symbol as CryptoSymbol];
+    const quote = cryptoQuoteMap[symbol];
     cryptoQuotes[symbol] = {
       price: quote?.price ?? 0,
       changePercent: quote?.changePercent ?? 0,

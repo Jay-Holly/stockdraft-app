@@ -28,7 +28,8 @@ import {
   getFallbackStockQuote,
   listFallbackPoolSymbols,
 } from "@/lib/market/fallback-quotes";
-import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
+import { fetchCryptoPool } from "@/lib/crypto-pool/server";
+import { isCryptoPickEligible } from "@/lib/draft/engine";
 import {
   normalizeSafetyPickQueue,
   toggleSafetyPickQueueSymbol,
@@ -240,20 +241,23 @@ async function repairLiveDraftOrderIfNeeded(leagueId: string): Promise<void> {
 export async function startLiveDraft(
   leagueId: string,
   humanUserId: string,
-  pickTimeSeconds = 120
+  pickTimeSeconds = 120,
+  options?: { draftOrder?: string[] }
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
-  const leagueBots = await getLeagueBotMembers(leagueId);
-  const draftOrder = [humanUserId, ...leagueBots.map((b) => b.id)];
-  const totalPickSlots = draftOrder.length * 15;
+  const resolvedOrder =
+    options?.draftOrder ??
+    [humanUserId, ...(await getLeagueBotMembers(leagueId)).map((b) => b.id)];
 
-  for (let i = 0; i < draftOrder.length; i++) {
+  const totalPickSlots = resolvedOrder.length * 15;
+
+  for (let i = 0; i < resolvedOrder.length; i++) {
     await supabase
       .from("league_members")
       .update({ draft_slot: i })
       .eq("league_id", leagueId)
-      .eq("user_id", draftOrder[i]);
+      .eq("user_id", resolvedOrder[i]);
   }
 
   await supabase
@@ -264,7 +268,7 @@ export async function startLiveDraft(
   const { error } = await supabase.from("league_draft_state").insert({
     league_id: leagueId,
     status: "in_progress",
-    draft_order: draftOrder,
+    draft_order: resolvedOrder,
     current_pick_index: 0,
     total_pick_slots: totalPickSlots,
     global_pick_number: 0,
@@ -652,6 +656,9 @@ export async function advanceAfterPick(
     if (league?.league_type === "ai") {
       const { activateAiLeagueSchedule } = await import("@/lib/league/ai-league");
       await activateAiLeagueSchedule(leagueId);
+    } else if (league?.league_type === "human") {
+      const { activateHumanLeagueSchedule } = await import("@/lib/league/human-league");
+      await activateHumanLeagueSchedule(leagueId);
     }
 
     return {};
@@ -783,9 +790,15 @@ async function resolveAutoCryptoPick(
     console.error("resolveAutoCryptoPick fetchCryptoQuotes failed:", err);
   }
 
-  for (const symbol of CRYPTO_SYMBOLS) {
+  const pool = await fetchCryptoPool();
+  const symbols =
+    pool.length > 0
+      ? pool.map((coin) => coin.symbol)
+      : ["BTC", "ETH", "SOL", "DOGE"];
+
+  for (const symbol of symbols) {
     const price = quotes?.[symbol]?.price ?? 0;
-    if (price <= 0) continue;
+    if (price <= 0 || !isCryptoPickEligible(symbol, price)) continue;
     return {
       symbol,
       price,

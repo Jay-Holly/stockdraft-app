@@ -6,7 +6,7 @@ import {
   loadDraftStateDetailed,
 } from "@/lib/draft/server";
 import type { DraftPick } from "@/lib/draft/types";
-import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
+import { isCryptoSymbol } from "@/lib/draft/engine";
 import {
   countLeagueRosteredSymbol,
   getLeagueOffBoardSymbols,
@@ -306,7 +306,7 @@ export async function applyCryptoRebalance(
   }
 
   const upper = targetSymbol.toUpperCase();
-  if (!(CRYPTO_SYMBOLS as readonly string[]).includes(upper)) {
+  if (!isCryptoSymbol(upper)) {
     return { error: "Invalid crypto symbol." };
   }
 

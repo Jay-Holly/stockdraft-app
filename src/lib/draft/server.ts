@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
+import { fetchCryptoPool } from "@/lib/crypto-pool/server";
+import { LEGACY_CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import { MIN_STOCK_PRICE_USD } from "@/lib/market/draft-pool";
 import { isDraftPoolStock } from "@/lib/draft-pool/server";
 import {
@@ -7,7 +8,7 @@ import {
   getLeagueOffBoardSymbols,
   resolveDraftLeague,
 } from "@/lib/league/server";
-import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
+import { resolveActiveLeagueId } from "@/lib/league/active-league";
 import {
   calculatePushback,
   computeCryptoPick,
@@ -17,6 +18,7 @@ import {
   getNextRoundAfterPick,
   getOpenPhaseCryptoPicks,
   getTurn,
+  isCryptoPickEligible,
   isCryptoSymbol,
   isDraftComplete,
   isOpenPhaseComplete,
@@ -99,8 +101,14 @@ export async function fetchBuyerCounts(
     .select("symbol, buyer_count")
     .eq("league_id", leagueId);
 
+  const pool = await fetchCryptoPool();
+  const seedSymbols =
+    pool.length > 0
+      ? pool.map((coin) => coin.symbol)
+      : [...LEGACY_CRYPTO_SYMBOLS];
+
   const counts: CryptoBuyerCounts = {};
-  for (const symbol of CRYPTO_SYMBOLS) {
+  for (const symbol of seedSymbols) {
     counts[symbol] = 0;
   }
 
@@ -544,6 +552,12 @@ export async function makeDraftPickForLeague(
       return { error: "Missing price for crypto pick" };
     }
 
+    if (!isCryptoPickEligible(upperSymbol, priceAtPick)) {
+      return {
+        error: "Symbol is not in the crypto draft pool or price is unavailable",
+      };
+    }
+
     const buyerCount = buyerCounts[upperSymbol] ?? 0;
     const computed = computeCryptoPick(cryptoAmount, priceAtPick, buyerCount);
 
@@ -703,7 +717,7 @@ export async function makeDraftPick(
   price?: number,
   isSearchPick = false
 ) {
-  const leagueId = await resolveActiveAiLeagueId(userId);
+  const leagueId = await resolveActiveLeagueId(userId);
   if (!leagueId) return { error: "No active draft league found." };
 
   return makeDraftPickForLeague(

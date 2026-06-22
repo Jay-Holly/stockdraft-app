@@ -1,5 +1,5 @@
 import { MIN_STOCK_PRICE_USD } from "@/lib/market/draft-pool";
-import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
+import { isCryptoPoolSymbol } from "@/lib/crypto-pool/symbols";
 import {
   BENCH_ROUNDS,
   BENCH_START_ROUND,
@@ -19,7 +19,12 @@ import {
 } from "./types";
 
 export function isCryptoSymbol(symbol: string): boolean {
-  return (CRYPTO_SYMBOLS as readonly string[]).includes(symbol.toUpperCase());
+  return isCryptoPoolSymbol(symbol);
+}
+
+/** Crypto is eligible when it is in the pool and has a live price. No per-unit floor. */
+export function isCryptoPickEligible(symbol: string, price: number): boolean {
+  return isCryptoPoolSymbol(symbol) && price > 0;
 }
 
 export function isStockPickEligible(symbol: string, price: number): boolean {

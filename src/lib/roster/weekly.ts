@@ -7,7 +7,6 @@ import {
 } from "@/lib/roster/quotes";
 import { isCryptoSymbol } from "@/lib/draft/engine";
 import type { CryptoQuote } from "@/lib/coingecko/service";
-import type { CryptoSymbol } from "@/lib/market/symbols";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -28,7 +27,7 @@ async function fetchPricesForPicks(
     fetchStockQuotes(stockSymbols),
     needsCrypto
       ? getCryptoQuotesMap()
-      : Promise.resolve({} as Record<CryptoSymbol, CryptoQuote>),
+      : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
   const draftPriceBySymbol = new Map<string, number>();
@@ -45,7 +44,7 @@ async function fetchPricesForPicks(
     if (prices.has(symbol)) continue;
 
     if (isCryptoSymbol(symbol)) {
-      const livePrice = cryptoQuotes[symbol as CryptoSymbol]?.price ?? 0;
+      const livePrice = cryptoQuotes[symbol]?.price ?? 0;
       prices.set(
         symbol,
         livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)

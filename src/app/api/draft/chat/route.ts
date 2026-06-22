@@ -4,7 +4,10 @@ import {
   getDraftChatMessages,
   postHumanDraftChatMessage,
 } from "@/lib/draft/chat";
-import { resolveActiveAiLeagueId, verifyUserOwnsLeague } from "@/lib/league/active-league";
+import {
+  resolveActiveLeagueId,
+  verifyUserCanAccessLeague,
+} from "@/lib/league/active-league";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +18,7 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const leagueId = await resolveActiveAiLeagueId(
+  const leagueId = await resolveActiveLeagueId(
     user.id,
     url.searchParams.get("leagueId")
   );
@@ -35,25 +38,14 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as { leagueId?: string; message?: string };
-  const leagueId = await resolveActiveAiLeagueId(user.id, body.leagueId ?? null);
+  const leagueId = await resolveActiveLeagueId(user.id, body.leagueId ?? null);
 
   if (!leagueId) {
     return NextResponse.json({ error: "No active league found." }, { status: 400 });
   }
 
-  if (!(await verifyUserOwnsLeague(user.id, leagueId))) {
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-    const { data: member } = await supabase
-      .from("league_members")
-      .select("user_id")
-      .eq("league_id", leagueId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!member) {
-      return NextResponse.json({ error: "League not found." }, { status: 404 });
-    }
+  if (!(await verifyUserCanAccessLeague(user.id, leagueId))) {
+    return NextResponse.json({ error: "League not found." }, { status: 404 });
   }
 
   const result = await postHumanDraftChatMessage(

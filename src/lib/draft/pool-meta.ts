@@ -1,4 +1,5 @@
-import { CRYPTO_SYMBOLS, STOCK_SYMBOLS } from "@/lib/market/symbols";
+import { isCryptoPoolSymbol } from "@/lib/crypto-pool/symbols";
+import { STOCK_SYMBOLS } from "@/lib/market/symbols";
 
 export type AssetSector =
   | "Tech"
@@ -34,34 +35,22 @@ export const STOCK_META: Record<
   DIS: { name: "Disney", sector: "Media" },
 };
 
-export const CRYPTO_META: Record<
-  (typeof CRYPTO_SYMBOLS)[number],
-  { name: string; sector: "Crypto" }
-> = {
+export const CRYPTO_META: Record<string, { name: string; sector: "Crypto" }> = {
   BTC: { name: "Bitcoin", sector: "Crypto" },
   ETH: { name: "Ethereum", sector: "Crypto" },
   SOL: { name: "Solana", sector: "Crypto" },
   DOGE: { name: "Dogecoin", sector: "Crypto" },
 };
 
-export const POOL_SECTORS = [
-  "All",
-  "Tech",
-  "AI",
-  "Crypto",
-  "EV",
-  "Space",
-  "Media",
-] as const;
-
-export type PoolSector = (typeof POOL_SECTORS)[number];
-
 export function getAssetMeta(symbol: string) {
   if (symbol in STOCK_META) {
     return STOCK_META[symbol as keyof typeof STOCK_META];
   }
   if (symbol in CRYPTO_META) {
-    return CRYPTO_META[symbol as keyof typeof CRYPTO_META];
+    return CRYPTO_META[symbol];
+  }
+  if (isCryptoPoolSymbol(symbol)) {
+    return { name: symbol, sector: "Crypto" as const };
   }
   return { name: symbol, sector: "Tech" as AssetSector };
 }

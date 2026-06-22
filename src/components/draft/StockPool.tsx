@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
+import type { CryptoPoolCoin } from "@/lib/crypto-pool/types";
 import type { DraftPoolFilter, DraftPoolStock } from "@/lib/market/draft-pool";
 import {
-  CRYPTO_DISPLAY_NAMES,
   DRAFT_POOL_FILTER_BUTTONS,
   enrichDraftPoolStocks,
   filterDraftPoolStocks,
@@ -107,6 +106,7 @@ function sortSearchResults(
 
 function sortCryptoSymbols(
   symbols: readonly string[],
+  nameBySymbol: Record<string, string>,
   sortMode: PoolSortMode,
   priceDirection: PriceSortDirection,
   getPrice: (symbol: string) => number
@@ -116,8 +116,8 @@ function sortCryptoSymbols(
   const sorted = [...symbols];
   if (sortMode === "name") {
     sorted.sort((a, b) => {
-      const nameA = CRYPTO_DISPLAY_NAMES[a] ?? a;
-      const nameB = CRYPTO_DISPLAY_NAMES[b] ?? b;
+      const nameA = nameBySymbol[a] ?? a;
+      const nameB = nameBySymbol[b] ?? b;
       const byName = compareStrings(nameA, nameB);
       if (byName !== 0) return byName;
       return compareStrings(a, b);
@@ -188,6 +188,8 @@ function filterButtonLabel(filter: DraftPoolFilter): string {
 export function StockPool({
   poolStocks,
   poolLoading = false,
+  cryptoPool = [],
+  cryptoPoolLoading = false,
   quotes,
   turn,
   buyerCounts,
@@ -204,6 +206,8 @@ export function StockPool({
 }: {
   poolStocks: DraftPoolStock[];
   poolLoading?: boolean;
+  cryptoPool?: CryptoPoolCoin[];
+  cryptoPoolLoading?: boolean;
   quotes: MarketQuote[];
   turn: DraftTurn;
   buyerCounts: CryptoBuyerCounts;
@@ -292,15 +296,35 @@ export function StockPool({
     [sortedSearchResults, showDraftedStocks, myDrafted, leagueOffBoard]
   );
 
+  const cryptoNameBySymbol = useMemo(
+    () =>
+      Object.fromEntries(
+        cryptoPool.map((coin) => [coin.symbol, coin.name] as const)
+      ),
+    [cryptoPool]
+  );
+
+  const cryptoSymbols = useMemo(
+    () => cryptoPool.map((coin) => coin.symbol),
+    [cryptoPool]
+  );
+
   const sortedCryptoSymbols = useMemo(
     () =>
       sortCryptoSymbols(
-        CRYPTO_SYMBOLS,
+        cryptoSymbols,
+        cryptoNameBySymbol,
         poolSort,
         priceSortDirection,
         getQuotePrice
       ),
-    [poolSort, priceSortDirection, quoteMap]
+    [
+      cryptoSymbols,
+      cryptoNameBySymbol,
+      poolSort,
+      priceSortDirection,
+      quoteMap,
+    ]
   );
 
   const displayedCryptoSymbols = sortedCryptoSymbols;
@@ -444,6 +468,9 @@ export function StockPool({
 
     if (crypto) {
       if (!turn.canPickCrypto) return { eligible: false, label: "Crypto done" };
+      if (!quote || quote.price <= 0) {
+        return { eligible: false, label: "No price" };
+      }
       return { eligible: true, label: "Draft" };
     }
 
@@ -713,7 +740,9 @@ export function StockPool({
         {poolLoading
           ? "Loading S&P 500 from database…"
           : isCryptoView
-            ? "Crypto flex — always on the board · BTC, ETH, SOL, DOGE"
+            ? cryptoPoolLoading
+              ? "Loading top crypto pool from database…"
+              : `Top ${cryptoPool.length} crypto by market cap · surcharge per coin`
             : isTop100View
               ? `Top 100 S&P 500 by market cap · showing ${poolVisible.length} of ${displayedPool.length} stocks`
               : `Showing ${poolVisible.length} of ${displayedPool.length} S&P 500 stocks`}
@@ -756,14 +785,26 @@ export function StockPool({
 
         {isCryptoView && (
           <>
-            <div className="draft-pool-divider">Crypto flex — always on the board</div>
+            <div className="draft-pool-divider">
+              Crypto flex — top {cryptoPool.length} by market cap
+            </div>
+            {cryptoPoolLoading && (
+              <p className="draft-pool-empty-msg">Loading crypto pool…</p>
+            )}
+            {!cryptoPoolLoading && displayedCryptoSymbols.length === 0 && (
+              <p className="draft-pool-empty-msg">
+                Crypto pool is empty. Run migration 030_crypto_pool.sql.
+              </p>
+            )}
             {displayedCryptoSymbols.map((symbol) =>
               renderRow(
                 symbol,
-                CRYPTO_DISPLAY_NAMES[symbol] ?? symbol,
+                cryptoNameBySymbol[symbol] ?? symbol,
                 "Crypto",
                 quoteMap.get(symbol),
-                false
+                false,
+                cryptoPool.find((coin) => coin.symbol === symbol)?.marketCapRank ??
+                  null
               )
             )}
           </>

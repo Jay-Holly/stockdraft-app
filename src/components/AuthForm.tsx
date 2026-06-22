@@ -12,9 +12,11 @@ type AuthVariant = "default" | "daytrader";
 export function AuthForm({
   initialMode,
   variant = "default",
+  redirectTo = "/dashboard",
 }: {
   initialMode: AuthMode;
   variant?: AuthVariant;
+  redirectTo?: string;
 }) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
@@ -80,7 +82,7 @@ export function AuthForm({
         .eq("id", signInData.user.id);
     }
 
-    window.location.href = "/dashboard";
+    window.location.href = redirectTo;
   }
 
   async function handleGoogleSignIn() {
@@ -88,6 +90,9 @@ export function AuthForm({
     setMessage(null);
 
     const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+    if (redirectTo !== "/dashboard") {
+      callbackUrl.searchParams.set("next", redirectTo);
+    }
     if (variant === "daytrader") {
       callbackUrl.searchParams.set("daytrader", "1");
     }

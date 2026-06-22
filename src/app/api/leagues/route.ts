@@ -3,8 +3,9 @@ import { getAuthenticatedUserId } from "@/lib/draft/server";
 import {
   clearActiveLeagueCookie,
   getActiveLeagueIdFromCookie,
-  resolveActiveAiLeagueId,
+  resolveActiveLeagueId,
   setActiveLeagueCookie,
+  verifyUserCanAccessLeague,
   verifyUserOwnsLeague,
 } from "@/lib/league/active-league";
 import {
@@ -12,6 +13,7 @@ import {
   getAiLeagueSummary,
   listAiLeagueListItems,
 } from "@/lib/league/ai-league";
+import { listHumanLeaguesForUser } from "@/lib/league/human-league";
 import {
   ensureAiLeagueReadyForMatchups,
   scoreAllActiveAiMatchups,
@@ -26,19 +28,24 @@ export async function GET() {
   await ensureAiLeagueReadyForMatchups(user.id);
   await scoreAllActiveAiMatchups(user.id);
 
-  const [leagues, activeLeagueId] = await Promise.all([
+  const [aiLeagues, humanLeagues, activeLeagueId] = await Promise.all([
     listAiLeagueListItems(user.id),
-    resolveActiveAiLeagueId(user.id),
+    listHumanLeaguesForUser(user.id),
+    resolveActiveLeagueId(user.id),
   ]);
 
-  const activeSummary = activeLeagueId
-    ? await getAiLeagueSummary(user.id, activeLeagueId)
-    : null;
+  const activeHuman = humanLeagues.find((h) => h.league.id === activeLeagueId);
+  const activeSummary =
+    activeLeagueId && !activeHuman
+      ? await getAiLeagueSummary(user.id, activeLeagueId)
+      : null;
 
   return NextResponse.json({
-    leagues,
+    leagues: aiLeagues,
+    humanLeagues,
     activeLeagueId,
     activeSummary,
+    activeHumanLeague: activeHuman ?? null,
   });
 }
 
@@ -53,17 +60,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "leagueId is required." }, { status: 400 });
   }
 
-  if (!(await verifyUserOwnsLeague(user.id, body.leagueId))) {
+  if (!(await verifyUserCanAccessLeague(user.id, body.leagueId))) {
     return NextResponse.json({ error: "League not found." }, { status: 404 });
   }
 
   await setActiveLeagueCookie(body.leagueId);
 
-  const summary = await getAiLeagueSummary(user.id, body.leagueId);
+  const humanLeagues = await listHumanLeaguesForUser(user.id);
+  const activeHuman = humanLeagues.find((h) => h.league.id === body.leagueId);
+  const summary = activeHuman
+    ? null
+    : await getAiLeagueSummary(user.id, body.leagueId);
+
   return NextResponse.json({
     success: true,
     activeLeagueId: body.leagueId,
     activeSummary: summary,
+    activeHumanLeague: activeHuman ?? null,
   });
 }
 

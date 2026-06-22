@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadDraftApiPayload } from "@/lib/draft/api";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
-import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
+import { resolveActiveLeagueId } from "@/lib/league/active-league";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const leagueId =
       url.searchParams.get("leagueId") ??
-      (await resolveActiveAiLeagueId(user.id));
+      (await resolveActiveLeagueId(user.id));
 
     const result = await loadDraftApiPayload(user.id, {
       leagueId: leagueId ?? undefined,

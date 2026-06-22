@@ -49,11 +49,13 @@ export function DraftBoardTabs({
       label: bot.name,
       avatarColor: bot.avatarColor,
       subtitle:
-        bot.personality === "analyst"
-          ? "Highest market-cap each round"
-          : bot.personality === "gambler"
-            ? "Lower-cap picks outside Top 100"
-            : "Full $200K BTC early, then mid-cap stocks",
+        bot.personality === "human"
+          ? "Live opponent"
+          : bot.personality === "analyst"
+            ? "Highest market-cap each round"
+            : bot.personality === "gambler"
+              ? "Lower-cap picks outside Top 100"
+              : "Full $200K BTC early, then mid-cap stocks",
       picks: bot.picks,
       summary: bot.summary,
       currentRound: bot.currentRound,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useCryptoPool } from "@/hooks/useCryptoPool";
 import { useCryptoQuotes } from "@/hooks/useCryptoQuotes";
 import { useRosterLivePrices } from "@/hooks/useRosterLivePrices";
 import type { MarketQuote, MarketSession } from "@/lib/market/types";
@@ -11,7 +12,12 @@ import type { MarketQuote, MarketSession } from "@/lib/market/types";
  */
 export function useLiveMarketData() {
   const roster = useRosterLivePrices();
-  const crypto = useCryptoQuotes();
+  const { coins: cryptoPool } = useCryptoPool();
+  const cryptoSymbols = useMemo(
+    () => cryptoPool.map((coin) => coin.symbol),
+    [cryptoPool]
+  );
+  const crypto = useCryptoQuotes(cryptoSymbols);
 
   const orderedQuotes = useMemo(() => {
     const merged: Record<string, MarketQuote> = { ...roster.quotes };

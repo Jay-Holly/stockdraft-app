@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatMoney, formatPct, formatSignedMoney } from "@/lib/format";
+import { useCryptoPool } from "@/hooks/useCryptoPool";
 import { computeCryptoPick, formatShares } from "@/lib/draft/engine";
-import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import type { RosterPickView, RosterView } from "@/lib/roster/types";
 import { Button } from "@/components/Button";
 import {
@@ -24,7 +24,13 @@ export function MyTeamPageContent() {
   const [irStarterId, setIrStarterId] = useState<string | null>(null);
   const [irBenchId, setIrBenchId] = useState<string | null>(null);
   const [cryptoPickId, setCryptoPickId] = useState<string | null>(null);
-  const [cryptoTarget, setCryptoTarget] = useState<string>(CRYPTO_SYMBOLS[0]);
+  const { coins: cryptoPool } = useCryptoPool();
+  const cryptoSymbols = useMemo(
+    () => cryptoPool.map((coin) => coin.symbol),
+    [cryptoPool]
+  );
+
+  const [cryptoTarget, setCryptoTarget] = useState<string>("BTC");
   const [cryptoSellPercent, setCryptoSellPercent] = useState(100);
   const [detailPick, setDetailPick] = useState<RosterPickView | null>(null);
   const [detailSlotLabel, setDetailSlotLabel] = useState<string>("");
@@ -37,15 +43,15 @@ export function MyTeamPageContent() {
   );
 
   const cryptoBuyOptions = useMemo(() => {
-    if (!selectedCryptoPick) return [...CRYPTO_SYMBOLS];
+    if (!selectedCryptoPick) return cryptoSymbols;
     const source = selectedCryptoPick.symbol.toUpperCase();
-    return CRYPTO_SYMBOLS.filter((symbol) => symbol !== source);
-  }, [selectedCryptoPick]);
+    return cryptoSymbols.filter((symbol) => symbol !== source);
+  }, [selectedCryptoPick, cryptoSymbols]);
 
   useEffect(() => {
     if (!selectedCryptoPick) return;
     if (cryptoTarget.toUpperCase() === selectedCryptoPick.symbol.toUpperCase()) {
-      setCryptoTarget(cryptoBuyOptions[0] ?? CRYPTO_SYMBOLS[0]);
+      setCryptoTarget(cryptoBuyOptions[0] ?? cryptoSymbols[0] ?? "BTC");
     }
   }, [selectedCryptoPick, cryptoTarget, cryptoBuyOptions]);
 

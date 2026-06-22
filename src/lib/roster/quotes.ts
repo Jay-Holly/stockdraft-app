@@ -5,8 +5,8 @@ import {
   getLastCryptoQuoteSource as getCoingeckoQuoteSource,
   type CryptoQuoteSource,
 } from "@/lib/coingecko/service";
+import { fetchCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoSymbol } from "@/lib/draft/engine";
-import type { CryptoSymbol } from "@/lib/market/symbols";
 
 export async function getStockQuote(symbol: string): Promise<{
   price: number;
@@ -51,6 +51,7 @@ export function getLastCryptoQuoteSource(): CryptoQuoteSource | null {
 export async function getCryptoQuotesMap(): Promise<
   Record<string, { price: number; changePercent: number }>
 > {
+  await fetchCryptoPool();
   const { quotes } = await fetchCryptoQuotesWithMeta();
   return quotes;
 }
@@ -60,7 +61,7 @@ export async function getCryptoQuote(symbol: string): Promise<{
   changePercent: number;
 }> {
   const quotes = await getCryptoQuotesMap();
-  const key = symbol.toUpperCase() as CryptoSymbol;
+  const key = symbol.toUpperCase();
   const q = quotes[key];
   return {
     price: q?.price ?? 0,

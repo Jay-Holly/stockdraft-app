@@ -21,20 +21,11 @@ export const STOCK_SYMBOLS = [
   "DIS",
 ] as const;
 
-export const CRYPTO_SYMBOLS = ["BTC", "ETH", "SOL", "DOGE"] as const;
-
-export const CRYPTO_COINGECKO_IDS: Record<
-  (typeof CRYPTO_SYMBOLS)[number],
-  string
-> = {
-  BTC: "bitcoin",
-  ETH: "ethereum",
-  SOL: "solana",
-  DOGE: "dogecoin",
-};
-
-export const DRAFT_POOL_SYMBOLS = [...STOCK_SYMBOLS, ...CRYPTO_SYMBOLS] as const;
+/** Legacy fallback — live pool comes from Supabase `crypto_pool`. */
+export const LEGACY_CRYPTO_SYMBOLS = ["BTC", "ETH", "SOL", "DOGE"] as const;
 
 export type StockSymbol = (typeof STOCK_SYMBOLS)[number];
-export type CryptoSymbol = (typeof CRYPTO_SYMBOLS)[number];
-export type DraftPoolSymbol = (typeof DRAFT_POOL_SYMBOLS)[number];
+export type CryptoSymbol = string;
+export type DraftPoolSymbol = StockSymbol | CryptoSymbol;
+
+export { getCryptoSymbols, isCryptoPoolSymbol } from "@/lib/crypto-pool/symbols";

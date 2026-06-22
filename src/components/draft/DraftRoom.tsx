@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCryptoPool } from "@/hooks/useCryptoPool";
 import { useCryptoQuotes } from "@/hooks/useCryptoQuotes";
 import { useDraftPool } from "@/hooks/useDraftPool";
 import { useLiveDraftFeed } from "@/hooks/useLiveDraftFeed";
 import { usePoolQuotes } from "@/hooks/usePoolQuotes";
-import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import { getTop100PoolSymbols } from "@/lib/market/draft-pool";
 import { getDuplicateRosterError, isCryptoSymbol } from "@/lib/draft/engine";
 import {
@@ -58,16 +58,22 @@ export function DraftRoom({
 
   const { stocks: poolStocks, loading: poolLoading, error: poolError } =
     useDraftPool();
+  const { coins: cryptoPool, loading: cryptoPoolLoading } = useCryptoPool();
+
+  const cryptoSymbols = useMemo(
+    () => cryptoPool.map((coin) => coin.symbol),
+    [cryptoPool]
+  );
 
   const poolSymbols = useMemo(() => {
     const top100 = getTop100PoolSymbols(poolStocks);
     const batch = poolStocks.slice(0, POOL_QUOTE_BATCH).map((s) => s.symbol);
-    return [...new Set([...top100, ...batch, ...CRYPTO_SYMBOLS])];
-  }, [poolStocks]);
+    return [...new Set([...top100, ...batch, ...cryptoSymbols])];
+  }, [poolStocks, cryptoSymbols]);
 
   const { orderedQuotes: poolQuotes, loading: poolQuotesLoading } =
     usePoolQuotes(poolSymbols);
-  const { orderedQuotes: cryptoQuotes } = useCryptoQuotes();
+  const { orderedQuotes: cryptoQuotes } = useCryptoQuotes(cryptoSymbols);
 
   const quotes = useMemo(() => {
     const map = new Map<string, MarketQuote>();
@@ -588,6 +594,8 @@ export function DraftRoom({
           <StockPool
             poolStocks={poolStocks}
             poolLoading={poolLoading}
+            cryptoPool={cryptoPool}
+            cryptoPoolLoading={cryptoPoolLoading}
             pushbackSkipsRemaining={state.draft.pushback_skips_remaining}
             quotes={quotes}
             turn={state.turn}

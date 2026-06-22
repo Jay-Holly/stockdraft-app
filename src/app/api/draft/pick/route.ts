@@ -7,7 +7,7 @@ import {
   isLiveDraftLeague,
   repairLiveDraftClock,
 } from "@/lib/draft/live-draft";
-import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
+import { resolveActiveLeagueId } from "@/lib/league/active-league";
 import { ensureAiLeagueReadyForMatchups } from "@/lib/matchup/scoring";
 
 export async function POST(request: Request) {
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
   }
 
-  const leagueId = await resolveActiveAiLeagueId(user.id, bodyLeagueId ?? null);
+  const leagueId = await resolveActiveLeagueId(user.id, bodyLeagueId ?? null);
   if (!leagueId) {
     return NextResponse.json(
       { error: "No active draft league found. Select a league on the dashboard." },

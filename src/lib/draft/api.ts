@@ -12,7 +12,9 @@ import {
 import { getDraftChatMessages } from "@/lib/draft/chat";
 import { getAiLeagueBotDraftBoards } from "@/lib/league/ai-league";
 import type { BotDraftBoard } from "@/lib/league/ai-league";
-import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
+import { getHumanLeagueOpponentBoards } from "@/lib/league/human-league";
+import { resolveActiveLeagueId } from "@/lib/league/active-league";
+import { createClient } from "@/lib/supabase/server";
 
 export type DraftApiPayload = DraftState & {
   botDraftBoards?: BotDraftBoard[];
@@ -27,7 +29,7 @@ export async function loadDraftApiPayload(
 > {
   try {
     const resolvedLeagueId =
-      options?.leagueId ?? (await resolveActiveAiLeagueId(userId)) ?? undefined;
+      options?.leagueId ?? (await resolveActiveLeagueId(userId)) ?? undefined;
 
     let result = await loadDraftStateDetailed(userId, {
       leagueId: resolvedLeagueId,
@@ -63,12 +65,37 @@ export async function loadDraftApiPayload(
       }
     }
 
+    const supabase = await createClient();
+    const { data: leagueMeta } = await supabase
+      .from("leagues")
+      .select("league_type")
+      .eq("id", leagueId)
+      .maybeSingle();
+
+    const opponentBoardsPromise =
+      leagueMeta?.league_type === "human"
+        ? getHumanLeagueOpponentBoards(userId, leagueId).then((boards) =>
+            (boards ?? []).map(
+              (board): BotDraftBoard => ({
+                id: board.id,
+                name: board.name,
+                personality: "human",
+                avatarColor: "cyan",
+                picks: board.picks,
+                summary: board.summary,
+                currentRound: board.currentRound,
+                draftComplete: board.draftComplete,
+              })
+            )
+          )
+        : getAiLeagueBotDraftBoards(userId, leagueId);
+
     const [liveDraft, draftFeed, draftChat, botDraftBoards] = await Promise.all([
       live ? buildLiveDraftView(leagueId, userId) : Promise.resolve(null),
       live ? getDraftFeed(leagueId) : Promise.resolve([]),
       live ? getDraftChatMessages(leagueId) : Promise.resolve([]),
-      getAiLeagueBotDraftBoards(userId, leagueId).catch((err) => {
-        console.error("getAiLeagueBotDraftBoards failed:", err);
+      opponentBoardsPromise.catch((err) => {
+        console.error("opponent draft boards failed:", err);
         return null;
       }),
     ]);

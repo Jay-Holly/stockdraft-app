@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -13,6 +14,8 @@ import type {
   AiLeagueListItem,
   AiLeagueSummary,
 } from "@/lib/league/ai-league";
+import type { HumanLeagueListItem } from "@/lib/league/human-league";
+import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import type { BotPersonality } from "@/lib/league/bots";
@@ -28,6 +31,7 @@ function formatPct(value: number | null | undefined): string {
 }
 
 function leagueStatusLabel(status: string): string {
+  if (status === "waiting") return "Waiting for players";
   if (status === "drafting") return "Draft in progress";
   if (status === "active") return "Season active";
   return "Season complete";
@@ -115,6 +119,8 @@ export function DashboardContent({
   draftComplete = false,
   draftPicks = [],
   leagues = [],
+  humanLeagues = [],
+  activeHumanLeague = null,
   activeLeagueId = null,
   activeSummary = null,
   scoringNotice = null,
@@ -124,6 +130,8 @@ export function DashboardContent({
   draftComplete?: boolean;
   draftPicks?: DraftPick[];
   leagues?: AiLeagueListItem[];
+  humanLeagues?: HumanLeagueListItem[];
+  activeHumanLeague?: HumanLeagueListItem | null;
   activeLeagueId?: string | null;
   activeSummary?: AiLeagueSummary | null;
   scoringNotice?: string | null;
@@ -294,15 +302,23 @@ export function DashboardContent({
 
       <LiveTickerTape />
 
-      <section className="bg-dark-card border border-gold/30 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold mb-1">Create New League</h2>
-        <p className="text-muted text-sm mb-4">
-          Start a fresh Free AI League anytime — pick three new bot opponents and
-          enter a live draft. Each league is fully independent (own draft pool,
-          off-board, standings, and season).
-        </p>
+      <section className="bg-dark-card border border-gold/30 rounded-2xl p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold mb-1">Create New League</h2>
+          <p className="text-muted text-sm">
+            Start a human league with a friend, or spin up a Free AI League against
+            three bot managers.
+          </p>
+        </div>
+
+        <Link href="/leagues/create" className="block">
+          <Button variant="primary" className="w-full">
+            Create Human League
+          </Button>
+        </Link>
+
         {leagueError && !showBotSelection && (
-          <p className="text-sm text-red-400 mb-3">{leagueError}</p>
+          <p className="text-sm text-red-400">{leagueError}</p>
         )}
         {showBotSelection ? (
           <BotSelectionPanel
@@ -317,17 +333,120 @@ export function DashboardContent({
           />
         ) : (
           <Button
-            variant="primary"
+            variant="secondary"
             className="w-full"
             onClick={() => {
               setLeagueError(null);
               setShowBotSelection(true);
             }}
           >
-            Create New League
+            Create Free AI League
           </Button>
         )}
       </section>
+
+      {humanLeagues.length > 0 && (
+        <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Human Leagues</h2>
+            <p className="text-muted text-sm">
+              {humanLeagues.length} league{humanLeagues.length === 1 ? "" : "s"}
+            </p>
+          </div>
+
+          {humanLeagues.map((item) => {
+            const isActive = item.league.id === activeLeagueId;
+            const waiting = item.league.status === "waiting";
+
+            return (
+              <div
+                key={item.league.id}
+                className={`rounded-xl border p-4 space-y-3 ${
+                  isActive
+                    ? "border-gold/50 bg-gold/5"
+                    : "border-dark-border bg-dark/20"
+                }`}
+              >
+                <div>
+                  <p className="font-semibold truncate">{item.humanTeamName}</p>
+                  <p className="text-xs text-muted truncate">{item.league.name}</p>
+                  <p className="text-xs text-muted capitalize mt-1">
+                    {leagueStatusLabel(item.league.status)} · {item.memberCount}/
+                    {item.league.player_count} players
+                    {isActive ? " · selected" : ""}
+                  </p>
+                </div>
+
+                {waiting && (
+                  <HumanLeagueInvitePanel
+                    leagueId={item.league.id}
+                    inviteLink={item.inviteLink}
+                    isCommissioner={item.league.owner_user_id === profile.id}
+                    compact
+                  />
+                )}
+
+                <div className="flex gap-2">
+                  {!isActive && (
+                    <Button
+                      variant="secondary"
+                      className="flex-1 text-sm"
+                      disabled={switchingLeagueId === item.league.id}
+                      onClick={() => void setActiveLeague(item.league.id)}
+                    >
+                      Select
+                    </Button>
+                  )}
+                  {waiting ? (
+                    <Button
+                      variant="primary"
+                      className="flex-1 text-sm"
+                      onClick={() => void setActiveLeague(item.league.id)}
+                    >
+                      View invite
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      className="flex-1 text-sm"
+                      disabled={switchingLeagueId === item.league.id}
+                      onClick={() =>
+                        void setActiveLeague(item.league.id, "/draft")
+                      }
+                    >
+                      {item.league.status === "drafting"
+                        ? "Enter draft"
+                        : "Open league"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {activeHumanLeague?.league.status === "waiting" &&
+        activeHumanLeague.league.owner_user_id === profile.id && (
+        <section className="bg-dark-card border border-amber-500/30 rounded-2xl p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold mb-2">Waiting for opponent</h2>
+            <p className="text-sm text-muted">
+              Your league{" "}
+              <span className="text-white font-medium">
+                {activeHumanLeague.league.name}
+              </span>{" "}
+              will start the live draft as soon as player 2 joins via your invite
+              link.
+            </p>
+          </div>
+          <HumanLeagueInvitePanel
+            leagueId={activeHumanLeague.league.id}
+            inviteLink={activeHumanLeague.inviteLink}
+            isCommissioner
+          />
+        </section>
+      )}
 
       {leagues.length > 0 && (
         <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">

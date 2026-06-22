@@ -1,39 +1,30 @@
+import "server-only";
+
+import { CRYPTO_LIVE_CACHE_TTL_MS } from "@/lib/coingecko/constants";
+import type {
+  CryptoQuote,
+  CryptoQuoteSource,
+  CryptoQuotesResult,
+} from "@/lib/coingecko/types";
+import { fetchCryptoPool, getCachedCryptoPool } from "@/lib/crypto-pool/server";
 import {
-  CRYPTO_COINGECKO_IDS,
-  CRYPTO_SYMBOLS,
-  type CryptoSymbol,
-} from "@/lib/market/symbols";
+  getCoingeckoIdMap,
+  getCryptoSymbols,
+} from "@/lib/crypto-pool/symbols";
+
+export type { CryptoQuote, CryptoQuoteSource, CryptoQuotesResult } from "@/lib/coingecko/types";
 
 type CoinGeckoPriceResponse = Record<
   string,
   { usd?: number; usd_24h_change?: number }
 >;
 
-export type CryptoQuote = {
-  price: number;
-  changePercent: number;
-};
-
-export type CryptoQuoteSource = "live" | "cache" | "fallback";
-
-export type CryptoQuotesResult = {
-  quotes: Record<CryptoSymbol, CryptoQuote>;
-  source: CryptoQuoteSource;
-  /** When these quotes were last fetched live from CoinGecko (null if never). */
-  fetchedAt: number | null;
-};
-
-/** Minimum time between live CoinGecko API calls (shared across all server callers). */
-export const CRYPTO_LIVE_CACHE_TTL_MS = 45_000;
-
-/** After a 429, do not call CoinGecko again until this cooldown elapses. */
 const RATE_LIMIT_COOLDOWN_MS = 60_000;
-
 const FETCH_TIMEOUT_MS = 8_000;
 const NETWORK_RETRY_DELAY_MS = 800;
+const COINGECKO_ID_CHUNK_SIZE = 100;
 
-/** Last-resort prices when CoinGecko is unreachable and no cache exists yet. */
-const CRYPTO_STATIC_FALLBACK: Record<CryptoSymbol, CryptoQuote> = {
+const LEGACY_STATIC_FALLBACK: Record<string, CryptoQuote> = {
   BTC: { price: 97_000, changePercent: 0 },
   ETH: { price: 2_700, changePercent: 0 },
   SOL: { price: 140, changePercent: 0 },
@@ -42,7 +33,7 @@ const CRYPTO_STATIC_FALLBACK: Record<CryptoSymbol, CryptoQuote> = {
 
 let cachedLiveQuotes: {
   at: number;
-  quotes: Record<CryptoSymbol, CryptoQuote>;
+  quotes: Record<string, CryptoQuote>;
 } | null = null;
 
 let lastResultMeta: {
@@ -57,20 +48,58 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function hasUsableQuotes(
-  quotes: Record<CryptoSymbol, CryptoQuote>
-): boolean {
-  return CRYPTO_SYMBOLS.some((symbol) => quotes[symbol].price > 0);
+async function ensurePoolLoaded(): Promise<Record<string, string>> {
+  const pool = await fetchCryptoPool();
+  if (pool.length === 0) {
+    return getCoingeckoIdMap();
+  }
+  return getCoingeckoIdMap();
+}
+
+function referenceQuotesFromPool(): Record<string, CryptoQuote> {
+  const quotes: Record<string, CryptoQuote> = {};
+  for (const coin of getCachedCryptoPool()) {
+    if (coin.referencePriceUsd != null && coin.referencePriceUsd > 0) {
+      quotes[coin.symbol] = {
+        price: coin.referencePriceUsd,
+        changePercent: 0,
+      };
+    }
+  }
+  return quotes;
+}
+
+function staticFallbackQuotes(): Record<string, CryptoQuote> {
+  const idMap = getCoingeckoIdMap();
+  const symbols = Object.keys(idMap);
+  const fromDb = referenceQuotesFromPool();
+  const quotes: Record<string, CryptoQuote> = {};
+
+  for (const symbol of symbols.length > 0
+    ? symbols
+    : Object.keys(LEGACY_STATIC_FALLBACK)) {
+    quotes[symbol] =
+      fromDb[symbol] ??
+      LEGACY_STATIC_FALLBACK[symbol] ??
+      { price: 0, changePercent: 0 };
+  }
+
+  return quotes;
+}
+
+function hasUsableQuotes(quotes: Record<string, CryptoQuote>): boolean {
+  return Object.values(quotes).some((quote) => quote.price > 0);
 }
 
 function parseCoinGeckoResponse(
-  data: CoinGeckoPriceResponse
-): Record<CryptoSymbol, CryptoQuote> {
-  const quotes = {} as Record<CryptoSymbol, CryptoQuote>;
+  data: CoinGeckoPriceResponse,
+  idToSymbol: Map<string, string>
+): Record<string, CryptoQuote> {
+  const quotes: Record<string, CryptoQuote> = {};
 
-  for (const symbol of CRYPTO_SYMBOLS) {
-    const id = CRYPTO_COINGECKO_IDS[symbol];
-    const entry = data[id];
+  for (const [id, entry] of Object.entries(data)) {
+    const symbol = idToSymbol.get(id);
+    if (!symbol) continue;
     quotes[symbol] = {
       price: entry?.usd ?? 0,
       changePercent: entry?.usd_24h_change ?? 0,
@@ -93,7 +122,7 @@ function resultFromCache(
 
 function resultFromFallback(): CryptoQuotesResult {
   return {
-    quotes: CRYPTO_STATIC_FALLBACK,
+    quotes: staticFallbackQuotes(),
     source: "fallback",
     fetchedAt: null,
   };
@@ -111,12 +140,14 @@ export function getLastCryptoQuoteSource(): CryptoQuoteSource {
   return lastResultMeta.source;
 }
 
-async function fetchCryptoQuotesOnce(): Promise<
-  | { ok: true; quotes: Record<CryptoSymbol, CryptoQuote> }
+async function fetchCryptoQuotesChunk(
+  ids: string[],
+  idToSymbol: Map<string, string>
+): Promise<
+  | { ok: true; quotes: Record<string, CryptoQuote> }
   | { ok: false; rateLimited: boolean }
 > {
-  const ids = Object.values(CRYPTO_COINGECKO_IDS).join(",");
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd&include_24hr_change=true`;
 
   try {
     const response = await fetch(url, {
@@ -136,7 +167,7 @@ async function fetchCryptoQuotesOnce(): Promise<
     }
 
     const data = (await response.json()) as CoinGeckoPriceResponse;
-    const quotes = parseCoinGeckoResponse(data);
+    const quotes = parseCoinGeckoResponse(data, idToSymbol);
     if (!hasUsableQuotes(quotes)) {
       return { ok: false, rateLimited: false };
     }
@@ -151,6 +182,46 @@ async function fetchCryptoQuotesOnce(): Promise<
   }
 }
 
+async function fetchAllCryptoQuotesOnce(
+  idMap: Record<string, string>
+): Promise<
+  | { ok: true; quotes: Record<string, CryptoQuote> }
+  | { ok: false; rateLimited: boolean }
+> {
+  const idToSymbol = new Map(
+    Object.entries(idMap).map(([symbol, id]) => [id, symbol])
+  );
+  const ids = [...new Set(Object.values(idMap))];
+  const merged: Record<string, CryptoQuote> = {};
+  let sawRateLimit = false;
+
+  for (let i = 0; i < ids.length; i += COINGECKO_ID_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + COINGECKO_ID_CHUNK_SIZE);
+    const result = await fetchCryptoQuotesChunk(chunk, idToSymbol);
+
+    if (result.ok) {
+      Object.assign(merged, result.quotes);
+      if (i + COINGECKO_ID_CHUNK_SIZE < ids.length) {
+        await sleep(300);
+      }
+      continue;
+    }
+
+    if (result.rateLimited) sawRateLimit = true;
+  }
+
+  if (hasUsableQuotes(merged)) {
+    for (const symbol of Object.keys(idMap)) {
+      if (!merged[symbol]) {
+        merged[symbol] = { price: 0, changePercent: 0 };
+      }
+    }
+    return { ok: true, quotes: merged };
+  }
+
+  return { ok: false, rateLimited: sawRateLimit };
+}
+
 async function refreshCryptoQuotesFromApi(): Promise<CryptoQuotesResult> {
   const now = Date.now();
 
@@ -160,7 +231,8 @@ async function refreshCryptoQuotesFromApi(): Promise<CryptoQuotesResult> {
     return rememberResult(resultFromFallback());
   }
 
-  const firstAttempt = await fetchCryptoQuotesOnce();
+  const idMap = await ensurePoolLoaded();
+  const firstAttempt = await fetchAllCryptoQuotesOnce(idMap);
 
   if (firstAttempt.ok) {
     const at = Date.now();
@@ -183,7 +255,7 @@ async function refreshCryptoQuotesFromApi(): Promise<CryptoQuotesResult> {
   }
 
   await sleep(NETWORK_RETRY_DELAY_MS);
-  const secondAttempt = await fetchCryptoQuotesOnce();
+  const secondAttempt = await fetchAllCryptoQuotesOnce(idMap);
 
   if (secondAttempt.ok) {
     const at = Date.now();
@@ -208,7 +280,7 @@ async function refreshCryptoQuotesFromApi(): Promise<CryptoQuotesResult> {
     return rememberResult(cached);
   }
 
-  console.warn("CoinGecko unavailable — using static crypto price fallback.");
+  console.warn("CoinGecko unavailable — using crypto pool reference prices.");
   return rememberResult(resultFromFallback());
 }
 
@@ -232,10 +304,15 @@ export async function fetchCryptoQuotesWithMeta(): Promise<CryptoQuotesResult> {
   return inFlightRefresh;
 }
 
-/** Never throws — throttled live fetch, then cache, then static fallback. */
-export async function fetchCryptoQuotes(): Promise<
-  Record<CryptoSymbol, CryptoQuote>
-> {
+/** Never throws — throttled live fetch, then cache, then DB reference / static fallback. */
+export async function fetchCryptoQuotes(): Promise<Record<string, CryptoQuote>> {
   const { quotes } = await fetchCryptoQuotesWithMeta();
   return quotes;
 }
+
+/** Warm the in-memory symbol cache from Supabase (no price fetch). */
+export async function warmCryptoPoolCache(): Promise<string[]> {
+  await fetchCryptoPool();
+  return getCryptoSymbols();
+}
+

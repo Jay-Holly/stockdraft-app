@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
-import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
+import { resolveActiveLeagueId, verifyUserCanAccessLeague } from "@/lib/league/active-league";
+import { listHumanLeaguesForUser } from "@/lib/league/human-league";
 import {
   getAiLeagueSummary,
   listAiLeagueListItems,
@@ -88,19 +89,21 @@ export default async function DashboardPage() {
       "Scoring temporarily unavailable — live prices could not be loaded. We'll retry on your next visit.";
   }
 
-  const [leagues, activeLeagueId] = await Promise.all([
+  const [aiLeagues, humanLeagues, activeLeagueId] = await Promise.all([
     listAiLeagueListItems(user.id),
-    resolveActiveAiLeagueId(user.id),
+    listHumanLeaguesForUser(user.id),
+    resolveActiveLeagueId(user.id),
   ]);
 
-  const activeSummary = activeLeagueId
+  const activeHumanLeague = humanLeagues.find((h) => h.league.id === activeLeagueId);
+  const activeSummary = activeLeagueId && !activeHumanLeague
     ? await getAiLeagueSummary(user.id, activeLeagueId)
     : null;
 
   let draftPicks: DraftPick[] = [];
   let draftComplete = false;
 
-  if (activeLeagueId && activeSummary) {
+  if (activeLeagueId && (activeSummary || activeHumanLeague)) {
     const draftState = await loadDraftStateDetailed(user.id, {
       leagueId: activeLeagueId,
     });
@@ -127,7 +130,9 @@ export default async function DashboardPage() {
           email={user.email ?? ""}
           draftComplete={draftComplete}
           draftPicks={draftPicks}
-          leagues={leagues}
+          leagues={aiLeagues}
+          humanLeagues={humanLeagues}
+          activeHumanLeague={activeHumanLeague ?? null}
           activeLeagueId={activeLeagueId}
           activeSummary={activeSummary}
           scoringNotice={scoringNotice}

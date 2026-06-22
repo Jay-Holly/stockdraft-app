@@ -7,7 +7,8 @@ import {
   DRAFT_POOL_SECTORS,
   type DraftPoolStock,
 } from "@/lib/market/draft-pool";
-import { CRYPTO_SYMBOLS, type CryptoSymbol } from "@/lib/market/symbols";
+import { fetchCryptoPool } from "@/lib/crypto-pool/server";
+import { isCryptoPickEligible } from "@/lib/draft/engine";
 import {
   getMyStockSymbols,
   getTurn,
@@ -47,7 +48,7 @@ async function getStockQuote(
 async function getCryptoPrice(symbol: string): Promise<number> {
   try {
     const quotes = await fetchCryptoQuotes();
-    const key = symbol.toUpperCase() as CryptoSymbol;
+    const key = symbol.toUpperCase();
     return quotes[key]?.price ?? 0;
   } catch (err) {
     console.error("getCryptoPrice failed:", err);
@@ -283,9 +284,14 @@ async function defaultCryptoChunk(
   symbolIndex = 0,
   chunkSize = 50_000
 ): Promise<AiPickDecision | null> {
-  const symbol = CRYPTO_SYMBOLS[symbolIndex] ?? CRYPTO_SYMBOLS[0];
+  const pool = await fetchCryptoPool();
+  const symbols =
+    pool.length > 0
+      ? pool.map((coin) => coin.symbol)
+      : ["BTC", "ETH", "SOL", "DOGE"];
+  const symbol = symbols[symbolIndex] ?? symbols[0];
   const price = await getCryptoPrice(symbol);
-  if (price <= 0) return null;
+  if (price <= 0 || !isCryptoPickEligible(symbol, price)) return null;
   const chunk = Math.min(summary.cryptoRemaining, chunkSize);
   return { symbol, allocation: chunk, price };
 }

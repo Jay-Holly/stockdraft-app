@@ -4,12 +4,16 @@ import { Logo } from "@/components/Logo";
 export default async function AuthPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; next?: string }>;
 }) {
   const params = await searchParams;
   const isDayTrader = params.mode === "daytrader";
   const mode =
     params.mode === "login" ? "login" : "signup";
+  const redirectTo =
+    typeof params.next === "string" && params.next.startsWith("/")
+      ? params.next
+      : "/dashboard";
 
   return (
     <div className="min-h-screen flex flex-col bg-dark">
@@ -18,7 +22,11 @@ export default async function AuthPage({
       </header>
 
       <main className="flex-1 flex items-center justify-center px-4 py-8">
-        <AuthForm initialMode={mode} variant={isDayTrader ? "daytrader" : "default"} />
+        <AuthForm
+          initialMode={mode}
+          variant={isDayTrader ? "daytrader" : "default"}
+          redirectTo={redirectTo}
+        />
       </main>
     </div>
   );
