@@ -84,6 +84,14 @@ export function getMyStockSymbols(picks: DraftPick[]): Set<string> {
   );
 }
 
+export function getMyCryptoSymbols(picks: DraftPick[]): Set<string> {
+  return new Set(
+    picks
+      .filter((p) => p.pick_type === "crypto")
+      .map((p) => p.symbol.toUpperCase())
+  );
+}
+
 export function getMyDraftedSymbols(picks: DraftPick[]): Set<string> {
   return new Set(
     picks
@@ -93,6 +101,25 @@ export function getMyDraftedSymbols(picks: DraftPick[]): Set<string> {
       )
       .map((p) => p.symbol.toUpperCase())
   );
+}
+
+export function getDuplicateRosterError(
+  symbol: string,
+  picks: DraftPick[],
+  pickKind: "crypto" | "stock"
+): string | null {
+  if (pickKind === "crypto") {
+    // Open-phase crypto is a budget pool: managers can split remaining
+    // allocations across multiple picks, including the same coin.
+    return null;
+  }
+
+  const upper = symbol.toUpperCase();
+  if (getMyStockSymbols(picks).has(upper)) {
+    return `${upper} is already on your roster`;
+  }
+
+  return null;
 }
 
 export function getOpenPhaseCryptoPicks(picks: DraftPick[]): DraftPick[] {

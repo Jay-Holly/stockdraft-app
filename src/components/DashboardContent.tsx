@@ -117,6 +117,7 @@ export function DashboardContent({
   leagues = [],
   activeLeagueId = null,
   activeSummary = null,
+  scoringNotice = null,
 }: {
   profile: Profile;
   email: string;
@@ -125,6 +126,7 @@ export function DashboardContent({
   leagues?: AiLeagueListItem[];
   activeLeagueId?: string | null;
   activeSummary?: AiLeagueSummary | null;
+  scoringNotice?: string | null;
 }) {
   const router = useRouter();
   const [username, setUsername] = useState(profile.username);
@@ -228,7 +230,10 @@ export function DashboardContent({
     }
   }
 
-  async function handleCreateLeague(botPersonalities: BotPersonality[]) {
+  async function handleCreateLeague(
+    botPersonalities: BotPersonality[],
+    leagueTeamName: string
+  ) {
     setStartingLeague(true);
     setLeagueError(null);
 
@@ -236,7 +241,7 @@ export function DashboardContent({
       const response = await fetch("/api/leagues/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ botPersonalities }),
+        body: JSON.stringify({ botPersonalities, teamName: leagueTeamName }),
       });
       const data = await response.json();
 
@@ -259,8 +264,18 @@ export function DashboardContent({
     year: "numeric",
   });
 
+  const activeLeagueItem = leagues.find(
+    (item) => item.league.id === activeLeagueId
+  );
+
   return (
     <div className="space-y-6">
+      {scoringNotice && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {scoringNotice}
+        </div>
+      )}
+
       <section className="bg-dark-card border border-dark-border rounded-2xl p-6">
         <div className="flex items-center gap-4">
           <div
@@ -291,7 +306,7 @@ export function DashboardContent({
         )}
         {showBotSelection ? (
           <BotSelectionPanel
-            teamName={teamName}
+            defaultTeamName={teamName}
             onCancel={() => {
               setShowBotSelection(false);
               setLeagueError(null);
@@ -345,7 +360,8 @@ export function DashboardContent({
                     <div className="mb-2">
                       <LeagueSupportId code={item.league.support_code} />
                     </div>
-                    <p className="font-semibold truncate">{item.league.name}</p>
+                    <p className="font-semibold truncate">{item.humanTeamName}</p>
+                    <p className="text-xs text-muted truncate">{item.league.name}</p>
                     <p className="text-xs text-muted capitalize">
                       {leagueStatusLabel(item.league.status)}
                       {isActive ? " · selected" : ""}
@@ -445,7 +461,9 @@ export function DashboardContent({
               <div className="mb-2">
                 <LeagueSupportId code={activeSummary.league.support_code} size="md" />
               </div>
-              <h2 className="text-lg font-semibold">Selected league</h2>
+              <h2 className="text-lg font-semibold">
+                {activeLeagueItem?.humanTeamName ?? teamName}
+              </h2>
               <p className="text-muted text-sm">{activeSummary.league.name}</p>
               <p className="text-muted text-xs capitalize mt-1">
                 {leagueStatusLabel(activeSummary.league.status)}

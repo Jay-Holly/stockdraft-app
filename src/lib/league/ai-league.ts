@@ -10,6 +10,7 @@ import {
 } from "@/lib/league/league-bots";
 import { getBotProfile } from "@/lib/league/bots";
 import type { League } from "@/lib/league/server";
+import { getLeagueMemberTeamName } from "@/lib/league/server";
 import {
   getAiLeagueById,
   listAiLeaguesForUser,
@@ -60,6 +61,7 @@ export type AiLeagueSummary = {
 
 export type AiLeagueListItem = {
   league: AiLeague;
+  humanTeamName: string;
   botNames: string[];
   humanDraftComplete: boolean;
   standings: {
@@ -95,6 +97,7 @@ export async function listAiLeagueListItems(
 
       return {
         league,
+        humanTeamName: await getLeagueMemberTeamName(league.id, userId),
         botNames: leagueBots.map((b) => b.displayName),
         humanDraftComplete:
           humanDraft.ok && humanDraft.state.draft.status === "complete",

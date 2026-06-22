@@ -73,7 +73,20 @@ export default async function DashboardPage() {
   }
 
   await ensureAiLeagueReadyForMatchups(user.id);
-  await scoreAllActiveAiMatchups(user.id);
+
+  let scoringNotice: string | null = null;
+  try {
+    const scoring = await scoreAllActiveAiMatchups(user.id);
+    if (scoring.error && !scoring.scored) {
+      scoringNotice = scoring.error;
+    } else if (scoring.notice) {
+      scoringNotice = scoring.notice;
+    }
+  } catch (error) {
+    console.error("Dashboard scoring failed:", error);
+    scoringNotice =
+      "Scoring temporarily unavailable — live prices could not be loaded. We'll retry on your next visit.";
+  }
 
   const [leagues, activeLeagueId] = await Promise.all([
     listAiLeagueListItems(user.id),
@@ -117,6 +130,7 @@ export default async function DashboardPage() {
           leagues={leagues}
           activeLeagueId={activeLeagueId}
           activeSummary={activeSummary}
+          scoringNotice={scoringNotice}
         />
       </main>
     </div>

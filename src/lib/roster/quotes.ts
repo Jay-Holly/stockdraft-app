@@ -1,6 +1,10 @@
 import { fetchFinnhubQuotes } from "@/lib/finnhub/service";
 import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
-import { fetchCryptoQuotes } from "@/lib/coingecko/service";
+import {
+  fetchCryptoQuotesWithMeta,
+  getLastCryptoQuoteSource as getCoingeckoQuoteSource,
+  type CryptoQuoteSource,
+} from "@/lib/coingecko/service";
 import { isCryptoSymbol } from "@/lib/draft/engine";
 import type { CryptoSymbol } from "@/lib/market/symbols";
 
@@ -40,20 +44,14 @@ export async function fetchStockQuotes(
   return map;
 }
 
-let cryptoQuoteCache: {
-  at: number;
-  quotes: Awaited<ReturnType<typeof fetchCryptoQuotes>>;
-} | null = null;
+export function getLastCryptoQuoteSource(): CryptoQuoteSource | null {
+  return getCoingeckoQuoteSource();
+}
 
 export async function getCryptoQuotesMap(): Promise<
   Record<string, { price: number; changePercent: number }>
 > {
-  const now = Date.now();
-  if (cryptoQuoteCache && now - cryptoQuoteCache.at < 15_000) {
-    return cryptoQuoteCache.quotes;
-  }
-  const quotes = await fetchCryptoQuotes();
-  cryptoQuoteCache = { at: now, quotes };
+  const { quotes } = await fetchCryptoQuotesWithMeta();
   return quotes;
 }
 

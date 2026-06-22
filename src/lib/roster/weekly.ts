@@ -31,13 +31,25 @@ async function fetchPricesForPicks(
       : Promise.resolve({} as Record<CryptoSymbol, CryptoQuote>),
   ]);
 
+  const draftPriceBySymbol = new Map<string, number>();
+  for (const pick of picks) {
+    const symbol = pick.symbol.toUpperCase();
+    if (pick.price_at_pick > 0 && !draftPriceBySymbol.has(symbol)) {
+      draftPriceBySymbol.set(symbol, pick.price_at_pick);
+    }
+  }
+
   const prices = new Map<string, number>();
   for (const pick of picks) {
     const symbol = pick.symbol.toUpperCase();
     if (prices.has(symbol)) continue;
 
     if (isCryptoSymbol(symbol)) {
-      prices.set(symbol, cryptoQuotes[symbol as CryptoSymbol]?.price ?? 0);
+      const livePrice = cryptoQuotes[symbol as CryptoSymbol]?.price ?? 0;
+      prices.set(
+        symbol,
+        livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
+      );
     } else {
       prices.set(symbol, stockQuotes.get(symbol)?.price ?? 0);
     }

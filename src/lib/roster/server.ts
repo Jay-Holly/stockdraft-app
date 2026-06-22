@@ -12,7 +12,7 @@ import {
 import { resolveActiveAiLeague } from "@/lib/league/active-league";
 import { BOT_BY_ID } from "@/lib/league/bots";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
-import { getLeagueOffBoardSymbols } from "@/lib/league/server";
+import { getLeagueMemberTeamName, getLeagueOffBoardSymbols } from "@/lib/league/server";
 import type { CryptoQuote } from "@/lib/coingecko/service";
 import type { CryptoSymbol } from "@/lib/market/symbols";
 import { createClient } from "@/lib/supabase/server";
@@ -310,7 +310,7 @@ export async function loadLeaguePageData(
 
   const humanStanding: LeagueTeamStanding = {
     userId,
-    teamName: profile?.team_name ?? "My Team",
+    teamName: await getLeagueMemberTeamName(league.id, userId),
     isHuman: true,
     isBot: false,
     avatarColor: profile?.avatar_color ?? "blue",

@@ -15,6 +15,11 @@ export function getFallbackStockQuote(symbol: string): FallbackQuote | null {
   return FALLBACK_QUOTES[symbol.toUpperCase()] ?? null;
 }
 
+/** Bundled S&P snapshot symbols — used when the draft_pool table is empty/unreachable. */
+export function listFallbackPoolSymbols(): string[] {
+  return Object.keys(FALLBACK_QUOTES);
+}
+
 export function mergeQuotesWithFallback<
   T extends { price: number; prevClose: number; changePercent: number },
 >(symbols: string[], live: Record<string, T>): Record<string, T> {

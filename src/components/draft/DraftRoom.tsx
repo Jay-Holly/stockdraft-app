@@ -8,7 +8,7 @@ import { useLiveDraftFeed } from "@/hooks/useLiveDraftFeed";
 import { usePoolQuotes } from "@/hooks/usePoolQuotes";
 import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import { getTop100PoolSymbols } from "@/lib/market/draft-pool";
-import { getMyDraftedSymbols, isCryptoSymbol } from "@/lib/draft/engine";
+import { getDuplicateRosterError, isCryptoSymbol } from "@/lib/draft/engine";
 import {
   fetchJsonWithTimeout,
   formatFetchError,
@@ -83,8 +83,8 @@ export function DraftRoom({
   );
 
   const myDrafted = useMemo(
-    () => new Set(state ? getMyDraftedSymbols(state.picks) : []),
-    [state]
+    () => new Set(state?.myStockSymbols ?? []),
+    [state?.myStockSymbols]
   );
 
   const skipRecoveryAttempts = useRef(0);
@@ -309,7 +309,7 @@ export function DraftRoom({
     return "Live feed offline — refresh the page if picks stop appearing.";
   }, [feedSyncStatus, liveInProgress]);
 
-  const handleSetSafetyPick = useCallback(async (symbol: string | null) => {
+  const handleToggleSafetyPick = useCallback(async (symbol: string) => {
     setError(null);
     const res = await fetch("/api/draft/safety-pick", {
       method: "POST",
@@ -318,11 +318,17 @@ export function DraftRoom({
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Could not set safety pick");
+      setError(data.error ?? "Could not update safety queue");
       return;
     }
     setState((prev) =>
-      prev ? { ...prev, safetyPickSymbol: data.safetyPickSymbol ?? null } : prev
+      prev
+        ? {
+            ...prev,
+            safetyPickQueue: data.safetyPickQueue ?? [],
+            safetyPickSymbol: data.safetyPickSymbol ?? null,
+          }
+        : prev
     );
   }, []);
 
@@ -334,6 +340,19 @@ export function DraftRoom({
       isSearchPick = false
     ) => {
       if (readOnly || busy || !canPick) return;
+
+      const upper = symbol.toUpperCase();
+      const duplicateError = state
+        ? getDuplicateRosterError(
+            upper,
+            state.picks,
+            isCryptoSymbol(upper) ? "crypto" : "stock"
+          )
+        : null;
+      if (duplicateError) {
+        setError(duplicateError);
+        return;
+      }
 
       setBusy(true);
       setDraftingSymbol(symbol);
@@ -355,10 +374,20 @@ export function DraftRoom({
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
           complete?: boolean;
+          liveClock?: {
+            onClockUserId?: string | null;
+            expectedOnClockUserId?: string | null;
+          };
         };
 
         if (!res.ok) {
-          setError(data.error ?? `Pick failed (${res.status})`);
+          const clockHint =
+            data.liveClock?.onClockUserId &&
+            data.liveClock.onClockUserId !== profile.id
+              ? " The live draft clock has moved — wait for your turn or refresh."
+              : "";
+          setError((data.error ?? `Pick failed (${res.status})`) + clockHint);
+          await loadDraft();
           return;
         }
 
@@ -382,7 +411,7 @@ export function DraftRoom({
         setDraftingSymbol(null);
       }
     },
-    [busy, canPick, loadDraft, readOnly, router, state?.leagueId]
+    [busy, canPick, loadDraft, profile.id, readOnly, router, state]
   );
 
   function handleDraft(
@@ -455,6 +484,8 @@ export function DraftRoom({
     );
   }
 
+  const leagueTeamName = state.teamName ?? profile.team_name;
+
   return (
     <div className="draft-room space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -482,7 +513,7 @@ export function DraftRoom({
       {liveDraft && (
         <OnClockBanner
           liveDraft={liveDraft}
-          myTeamName={profile.team_name}
+          myTeamName={leagueTeamName}
           onTimerExpired={() => void loadDraft()}
         />
       )}
@@ -568,13 +599,13 @@ export function DraftRoom({
             quotesLoading={poolQuotesLoading}
             busy={busy}
             canPick={canPick}
-            safetyPickSymbol={state.safetyPickSymbol ?? null}
-            onSetSafetyPick={
-              isLiveDraft && liveInProgress ? handleSetSafetyPick : undefined
+            safetyPickQueue={state.safetyPickQueue ?? []}
+            onToggleSafetyPick={
+              isLiveDraft && liveInProgress ? handleToggleSafetyPick : undefined
             }
           />
           <DraftBoardTabs
-            teamName={profile.team_name}
+            teamName={leagueTeamName}
             myPicks={state.picks}
             mySummary={state.summary}
             myCurrentRound={state.draft.current_round}

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId, makeDraftPickForLeague } from "@/lib/draft/server";
-import { assertOnClock, isLiveDraftLeague, repairLiveDraftClock } from "@/lib/draft/live-draft";
+import {
+  assertOnClock,
+  describeLiveDraftClock,
+  extendPickDeadlineForUser,
+  isLiveDraftLeague,
+  repairLiveDraftClock,
+} from "@/lib/draft/live-draft";
 import { resolveActiveAiLeagueId } from "@/lib/league/active-league";
 import { ensureAiLeagueReadyForMatchups } from "@/lib/matchup/scoring";
 
@@ -32,14 +38,24 @@ export async function POST(request: Request) {
   }
 
   const live = await isLiveDraftLeague(leagueId);
+  let wasOnClock = false;
+
   if (live) {
     let onClock = await assertOnClock(leagueId, user.id);
+    wasOnClock = onClock.ok;
     if (!onClock.ok) {
       await repairLiveDraftClock(leagueId);
       onClock = await assertOnClock(leagueId, user.id);
+      wasOnClock = onClock.ok;
     }
     if (!onClock.ok) {
-      return NextResponse.json({ error: onClock.error }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: onClock.error,
+          liveClock: await describeLiveDraftClock(leagueId),
+        },
+        { status: 400 }
+      );
     }
   }
 
@@ -53,7 +69,16 @@ export async function POST(request: Request) {
   );
 
   if ("error" in result && result.error) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
+    if (live && wasOnClock) {
+      await extendPickDeadlineForUser(leagueId, user.id);
+    }
+    return NextResponse.json(
+      {
+        error: result.error,
+        liveClock: live ? await describeLiveDraftClock(leagueId) : undefined,
+      },
+      { status: 400 }
+    );
   }
 
   if (result.complete) {

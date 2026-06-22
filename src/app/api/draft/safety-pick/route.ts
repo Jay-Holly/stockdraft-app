@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId, loadDraftState } from "@/lib/draft/server";
-import { setSafetyPickSymbol } from "@/lib/draft/live-draft";
+import { toggleSafetyPickQueue } from "@/lib/draft/live-draft";
 
 export async function POST(request: Request) {
   const { user } = await getAuthenticatedUserId();
@@ -11,24 +11,26 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { symbol } = body as { symbol?: string | null };
 
+  if (!symbol || typeof symbol !== "string") {
+    return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
+  }
+
   const state = await loadDraftState(user.id);
   if (!state) {
     return NextResponse.json({ error: "Could not load draft" }, { status: 500 });
   }
 
-  const normalized =
-    symbol === null || symbol === undefined || symbol === ""
-      ? null
-      : symbol.toUpperCase();
-
-  const result = await setSafetyPickSymbol(
+  const result = await toggleSafetyPickQueue(
     user.id,
     state.leagueId,
-    normalized
+    symbol.toUpperCase()
   );
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
-  return NextResponse.json({ safetyPickSymbol: normalized });
+  return NextResponse.json({
+    safetyPickQueue: result.queue ?? [],
+    safetyPickSymbol: result.queue?.[0] ?? null,
+  });
 }

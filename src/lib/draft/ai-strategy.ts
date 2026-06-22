@@ -9,6 +9,7 @@ import {
 } from "@/lib/market/draft-pool";
 import { CRYPTO_SYMBOLS, type CryptoSymbol } from "@/lib/market/symbols";
 import {
+  getMyStockSymbols,
   getTurn,
   isCryptoSymbol,
   isStockPickEligible,
@@ -44,9 +45,14 @@ async function getStockQuote(
 }
 
 async function getCryptoPrice(symbol: string): Promise<number> {
-  const quotes = await fetchCryptoQuotes();
-  const key = symbol.toUpperCase() as CryptoSymbol;
-  return quotes[key]?.price ?? 0;
+  try {
+    const quotes = await fetchCryptoQuotes();
+    const key = symbol.toUpperCase() as CryptoSymbol;
+    return quotes[key]?.price ?? 0;
+  } catch (err) {
+    console.error("getCryptoPrice failed:", err);
+    return 0;
+  }
 }
 
 function baseEligibleStocks(
@@ -382,9 +388,7 @@ export async function decideAiPick(
 
   const summary = summarizePicks(picks);
   const offBoard = new Set(leagueOffBoard);
-  const myDrafted = new Set(
-    picks.filter((p) => p.pick_type !== "skip").map((p) => p.symbol.toUpperCase())
-  );
+  const myDrafted = getMyStockSymbols(picks);
 
   if (personality === "crypto_king") {
     const cryptoPicks = picks.filter((p) => p.pick_type === "crypto");

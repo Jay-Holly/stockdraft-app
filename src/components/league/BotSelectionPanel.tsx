@@ -23,21 +23,25 @@ const AVATAR_HEX: Record<string, string> = {
   slate: "#64748b",
 };
 
+const inputClass =
+  "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
+
 export function BotSelectionPanel({
-  teamName,
+  defaultTeamName,
   onCancel,
   onConfirm,
   confirming = false,
   error = null,
 }: {
-  teamName: string;
+  defaultTeamName: string;
   onCancel: () => void;
-  onConfirm: (personalities: BotPersonality[]) => void;
+  onConfirm: (personalities: BotPersonality[], leagueTeamName: string) => void;
   confirming?: boolean;
   error?: string | null;
 }) {
   const [selected, setSelected] = useState<BotPersonality[]>([]);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [leagueTeamName, setLeagueTeamName] = useState(defaultTeamName);
 
   const selectedProfiles = useMemo(
     () =>
@@ -46,6 +50,8 @@ export function BotSelectionPanel({
         .filter(Boolean) as BotProfile[],
     [selected]
   );
+
+  const displayTeamName = leagueTeamName.trim() || defaultTeamName;
 
   function togglePersonality(personality: BotPersonality) {
     setSelected((prev) => {
@@ -59,6 +65,7 @@ export function BotSelectionPanel({
 
   function handleContinue() {
     if (selected.length !== 3) return;
+    setLeagueTeamName((current) => current.trim() || defaultTeamName);
     setShowConfirm(true);
   }
 
@@ -72,10 +79,32 @@ export function BotSelectionPanel({
           </p>
         </div>
 
+        <div>
+          <label
+            htmlFor="league-team-name"
+            className="block text-sm font-medium text-gray-300 mb-1.5"
+          >
+            Your team name in this league
+          </label>
+          <input
+            id="league-team-name"
+            type="text"
+            maxLength={40}
+            value={leagueTeamName}
+            onChange={(e) => setLeagueTeamName(e.target.value)}
+            placeholder={defaultTeamName}
+            className={inputClass}
+          />
+          <p className="text-xs text-muted mt-1.5">
+            Only for this league — your profile team name stays{" "}
+            <span className="text-gray-300">{defaultTeamName}</span>.
+          </p>
+        </div>
+
         <div className="bot-selection-lineup">
           <div className="bot-selection-lineup-card bot-selection-lineup-card--human">
             <span className="bot-selection-lineup-label">You</span>
-            <p className="bot-selection-lineup-name">{teamName}</p>
+            <p className="bot-selection-lineup-name">{displayTeamName}</p>
           </div>
           {selectedProfiles.map((bot) => (
             <div key={bot.personality} className="bot-selection-lineup-card">
@@ -105,8 +134,8 @@ export function BotSelectionPanel({
           <Button
             variant="primary"
             className="flex-1"
-            disabled={confirming}
-            onClick={() => onConfirm(selected)}
+            disabled={confirming || !displayTeamName}
+            onClick={() => onConfirm(selected, displayTeamName)}
           >
             {confirming ? "Starting…" : "Start Live Draft"}
           </Button>

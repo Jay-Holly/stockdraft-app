@@ -28,7 +28,9 @@ export type Draft = {
   status: DraftStatus;
   current_round: number;
   pushback_skips_remaining: number;
+  /** @deprecated Use safety_pick_queue */
   safety_pick_symbol?: string | null;
+  safety_pick_queue?: string[] | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -116,8 +118,12 @@ export type DraftState = {
   leagueId: string;
   leagueOffBoard: string[];
   myStockSymbols: string[];
+  /** Human manager name for this league (league_members.display_name). */
+  teamName: string;
   liveDraft?: LiveDraftView | null;
   draftFeed?: DraftFeedEvent[];
   draftChat?: DraftChatMessage[];
   safetyPickSymbol?: string | null;
+  /** Ordered safety picks — tried #1, then #2, … on timer expiry. */
+  safetyPickQueue: string[];
 };

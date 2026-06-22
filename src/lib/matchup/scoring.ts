@@ -1,14 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { computeScoringWeekGainPercentForUser } from "@/lib/roster/weekly";
+import { getLastCryptoQuoteSource } from "@/lib/roster/quotes";
 import { listAiLeaguesForUser } from "@/lib/league/active-league";
 import { activateAiLeagueSchedule } from "@/lib/league/ai-league";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
 
+const SCORING_UNAVAILABLE_MESSAGE =
+  "Scoring temporarily unavailable — live prices could not be loaded. We'll retry on your next visit.";
+
+const SCORING_DEGRADED_MESSAGE =
+  "Week scoring used last-known crypto prices because CoinGecko was temporarily unavailable. Scores will refresh on your next visit.";
+
 export async function scoreMatchupForLeague(
   userId: string,
   leagueId: string
-): Promise<{ error?: string; scored?: boolean }> {
+): Promise<{ error?: string; notice?: string; scored?: boolean }> {
   const supabase = await createClient();
 
   const { data: league } = await supabase
@@ -40,14 +47,23 @@ export async function scoreMatchupForLeague(
   if (!matchup) return { error: "No matchup scheduled" };
   if (matchup.status === "complete") return { scored: false };
 
-  const humanScore = await computeScoringWeekGainPercentForUser(
-    userId,
-    leagueId
-  );
-  const opponentScore = await computeScoringWeekGainPercentForUser(
-    matchup.opponent_bot_id,
-    leagueId
-  );
+  let humanScore: number;
+  let opponentScore: number;
+
+  try {
+    humanScore = await computeScoringWeekGainPercentForUser(userId, leagueId);
+    opponentScore = await computeScoringWeekGainPercentForUser(
+      matchup.opponent_bot_id,
+      leagueId
+    );
+  } catch (error) {
+    console.error(`scoreMatchupForLeague scoring failed league=${leagueId}:`, error);
+    return { error: SCORING_UNAVAILABLE_MESSAGE, scored: false };
+  }
+
+  const cryptoSource = getLastCryptoQuoteSource();
+  const notice =
+    cryptoSource && cryptoSource !== "live" ? SCORING_DEGRADED_MESSAGE : undefined;
 
   let winner: "human" | "opponent" | "tie";
   if (Math.abs(humanScore - opponentScore) < 0.0001) winner = "tie";
@@ -90,7 +106,7 @@ export async function scoreMatchupForLeague(
     await captureWeekBaselinesForLeague(leagueId, nextWeek);
   }
 
-  return { scored: true };
+  return { scored: true, notice };
 }
 
 export async function scoreCurrentAiMatchup(
@@ -101,19 +117,25 @@ export async function scoreCurrentAiMatchup(
 
 export async function scoreAllActiveAiMatchups(
   userId: string
-): Promise<{ error?: string; scored?: boolean }> {
+): Promise<{ error?: string; notice?: string; scored?: boolean }> {
   const leagues = await listAiLeaguesForUser(userId);
   let scoredAny = false;
   let lastError: string | undefined;
+  let lastNotice: string | undefined;
 
   for (const league of leagues) {
     if (league.status !== "active") continue;
     const result = await scoreMatchupForLeague(userId, league.id);
     if (result.error) lastError = result.error;
+    if (result.notice) lastNotice = result.notice;
     if (result.scored) scoredAny = true;
   }
 
-  return { error: lastError, scored: scoredAny };
+  return {
+    error: lastError,
+    notice: lastNotice,
+    scored: scoredAny,
+  };
 }
 
 export async function ensureAiLeagueReadyForMatchups(

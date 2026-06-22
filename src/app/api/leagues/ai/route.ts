@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { botPersonalities?: unknown } = {};
+  let body: { botPersonalities?: unknown; teamName?: unknown } = {};
   try {
     body = await request.json();
   } catch {
@@ -50,9 +50,21 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
 
+  const profileTeamName = profile?.team_name?.trim() || "My Team";
+  const rawTeamName =
+    typeof body.teamName === "string" ? body.teamName.trim() : "";
+  const teamName = rawTeamName || profileTeamName;
+
+  if (teamName.length > 40) {
+    return NextResponse.json(
+      { error: "Team name must be 40 characters or fewer." },
+      { status: 400 }
+    );
+  }
+
   const result = await createFreeAiLeague(
     user.id,
-    profile?.team_name ?? "My Team",
+    teamName,
     botPersonalities
   );
 

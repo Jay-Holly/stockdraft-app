@@ -13,6 +13,31 @@ export type League = {
   support_code: string;
 };
 
+export async function getLeagueMemberTeamName(
+  leagueId: string,
+  userId: string
+): Promise<string> {
+  const supabase = await createClient();
+  const { data: member } = await supabase
+    .from("league_members")
+    .select("display_name")
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (member?.display_name?.trim()) {
+    return member.display_name.trim();
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("team_name")
+    .eq("id", userId)
+    .maybeSingle();
+
+  return profile?.team_name?.trim() || "My Team";
+}
+
 export async function getOrCreateSoloLeague(
   userId: string,
   teamName: string
@@ -102,9 +127,8 @@ export async function getLeagueOffBoardSymbols(
 
   if (error) {
     console.error("get_league_drafted_stock_symbols failed:", error.message);
-    throw new Error(
-      `Could not load league off-board symbols: ${error.message}. Confirm migrations 003 and 022 are applied in Supabase.`
-    );
+    // Return empty set instead of throwing — an uncaught throw becomes a non-JSON 500 on /api/draft.
+    return new Set();
   }
 
   if (!data) return new Set();
@@ -126,9 +150,7 @@ export async function countLeagueRosteredSymbol(
 
   if (error) {
     console.error("count_league_rostered_symbol failed:", error.message);
-    throw new Error(
-      `Could not verify league roster for ${symbol}: ${error.message}. Confirm migration 022 is applied in Supabase.`
-    );
+    return 0;
   }
 
   return typeof data === "number" ? data : 0;

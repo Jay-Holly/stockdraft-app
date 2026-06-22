@@ -23,6 +23,10 @@ import {
   StockDetailChartButton,
   StockDetailModal,
 } from "@/components/market/StockDetailModal";
+import {
+  getSafetyPickQueuePriority,
+  SAFETY_PICK_QUEUE_MAX,
+} from "@/lib/draft/safety-queue";
 
 type SearchResult = {
   symbol: string;
@@ -30,6 +34,146 @@ type SearchResult = {
   price: number;
   changePercent: number;
 };
+
+type PoolSortMode = "default" | "name" | "price";
+type PriceSortDirection = "asc" | "desc";
+
+function compareStrings(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base" });
+}
+
+function sortPoolStocks(
+  stocks: DraftPoolStock[],
+  sortMode: PoolSortMode,
+  priceDirection: PriceSortDirection,
+  getPrice: (symbol: string) => number
+): DraftPoolStock[] {
+  if (sortMode === "default") return stocks;
+
+  const sorted = [...stocks];
+  if (sortMode === "name") {
+    sorted.sort((a, b) => {
+      const byName = compareStrings(a.name, b.name);
+      if (byName !== 0) return byName;
+      return compareStrings(a.symbol, b.symbol);
+    });
+    return sorted;
+  }
+
+  sorted.sort((a, b) => {
+    const priceA = getPrice(a.symbol);
+    const priceB = getPrice(b.symbol);
+    const aMissing = priceA <= 0;
+    const bMissing = priceB <= 0;
+    if (aMissing !== bMissing) return aMissing ? 1 : -1;
+    if (priceA !== priceB) {
+      return priceDirection === "asc" ? priceA - priceB : priceB - priceA;
+    }
+    return compareStrings(a.symbol, b.symbol);
+  });
+  return sorted;
+}
+
+function sortSearchResults(
+  results: SearchResult[],
+  sortMode: PoolSortMode,
+  priceDirection: PriceSortDirection
+): SearchResult[] {
+  if (sortMode === "default") return results;
+
+  const sorted = [...results];
+  if (sortMode === "name") {
+    sorted.sort((a, b) => {
+      const byName = compareStrings(a.name, b.name);
+      if (byName !== 0) return byName;
+      return compareStrings(a.symbol, b.symbol);
+    });
+    return sorted;
+  }
+
+  sorted.sort((a, b) => {
+    const priceA = a.price;
+    const priceB = b.price;
+    const aMissing = priceA <= 0;
+    const bMissing = priceB <= 0;
+    if (aMissing !== bMissing) return aMissing ? 1 : -1;
+    if (priceA !== priceB) {
+      return priceDirection === "asc" ? priceA - priceB : priceB - priceA;
+    }
+    return compareStrings(a.symbol, b.symbol);
+  });
+  return sorted;
+}
+
+function sortCryptoSymbols(
+  symbols: readonly string[],
+  sortMode: PoolSortMode,
+  priceDirection: PriceSortDirection,
+  getPrice: (symbol: string) => number
+): string[] {
+  if (sortMode === "default") return [...symbols];
+
+  const sorted = [...symbols];
+  if (sortMode === "name") {
+    sorted.sort((a, b) => {
+      const nameA = CRYPTO_DISPLAY_NAMES[a] ?? a;
+      const nameB = CRYPTO_DISPLAY_NAMES[b] ?? b;
+      const byName = compareStrings(nameA, nameB);
+      if (byName !== 0) return byName;
+      return compareStrings(a, b);
+    });
+    return sorted;
+  }
+
+  sorted.sort((a, b) => {
+    const priceA = getPrice(a);
+    const priceB = getPrice(b);
+    const aMissing = priceA <= 0;
+    const bMissing = priceB <= 0;
+    if (aMissing !== bMissing) return aMissing ? 1 : -1;
+    if (priceA !== priceB) {
+      return priceDirection === "asc" ? priceA - priceB : priceB - priceA;
+    }
+    return compareStrings(a, b);
+  });
+  return sorted;
+}
+
+function isDraftedPoolSymbol(
+  symbol: string,
+  myDrafted: Set<string>,
+  leagueOffBoard: Set<string>
+): boolean {
+  // Crypto never leaves the board — multiple managers can own the same coin (surcharge applies).
+  if (isCryptoSymbol(symbol)) return false;
+  if (myDrafted.has(symbol)) return true;
+  if (leagueOffBoard.has(symbol)) return true;
+  return false;
+}
+
+function filterUndraftedPoolStocks(
+  stocks: DraftPoolStock[],
+  showDraftedStocks: boolean,
+  myDrafted: Set<string>,
+  leagueOffBoard: Set<string>
+): DraftPoolStock[] {
+  if (showDraftedStocks) return stocks;
+  return stocks.filter(
+    (stock) => !isDraftedPoolSymbol(stock.symbol, myDrafted, leagueOffBoard)
+  );
+}
+
+function filterUndraftedSearchResults(
+  results: SearchResult[],
+  showDraftedStocks: boolean,
+  myDrafted: Set<string>,
+  leagueOffBoard: Set<string>
+): SearchResult[] {
+  if (showDraftedStocks) return results;
+  return results.filter(
+    (item) => !isDraftedPoolSymbol(item.symbol, myDrafted, leagueOffBoard)
+  );
+}
 
 const POOL_PAGE_SIZE = 80;
 const TOP_100_PAGE_SIZE = 100;
@@ -55,8 +199,8 @@ export function StockPool({
   busy = false,
   pushbackSkipsRemaining = 0,
   canPick = true,
-  safetyPickSymbol = null,
-  onSetSafetyPick,
+  safetyPickQueue = [],
+  onToggleSafetyPick,
 }: {
   poolStocks: DraftPoolStock[];
   poolLoading?: boolean;
@@ -71,10 +215,14 @@ export function StockPool({
   busy?: boolean;
   pushbackSkipsRemaining?: number;
   canPick?: boolean;
-  safetyPickSymbol?: string | null;
-  onSetSafetyPick?: (symbol: string | null) => void;
+  safetyPickQueue?: string[];
+  onToggleSafetyPick?: (symbol: string) => void;
 }) {
   const [poolFilter, setPoolFilter] = useState<DraftPoolFilter>("All");
+  const [poolSort, setPoolSort] = useState<PoolSortMode>("default");
+  const [priceSortDirection, setPriceSortDirection] =
+    useState<PriceSortDirection>("asc");
+  const [showDraftedStocks, setShowDraftedStocks] = useState(false);
   const [localFilter, setLocalFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -103,11 +251,59 @@ export function StockPool({
     return map;
   }, [quotes]);
 
+  const getQuotePrice = (symbol: string) => quoteMap.get(symbol)?.price ?? 0;
+
   const filteredPool = useMemo(
     () =>
       filterDraftPoolStocks(enrichedPool, { filter: poolFilter, query: localFilter }),
     [enrichedPool, poolFilter, localFilter]
   );
+
+  const sortedPool = useMemo(
+    () =>
+      sortPoolStocks(filteredPool, poolSort, priceSortDirection, getQuotePrice),
+    [filteredPool, poolSort, priceSortDirection, quoteMap]
+  );
+
+  const sortedSearchResults = useMemo(
+    () => sortSearchResults(searchResults, poolSort, priceSortDirection),
+    [searchResults, poolSort, priceSortDirection]
+  );
+
+  const displayedPool = useMemo(
+    () =>
+      filterUndraftedPoolStocks(
+        sortedPool,
+        showDraftedStocks,
+        myDrafted,
+        leagueOffBoard
+      ),
+    [sortedPool, showDraftedStocks, myDrafted, leagueOffBoard]
+  );
+
+  const displayedSearchResults = useMemo(
+    () =>
+      filterUndraftedSearchResults(
+        sortedSearchResults,
+        showDraftedStocks,
+        myDrafted,
+        leagueOffBoard
+      ),
+    [sortedSearchResults, showDraftedStocks, myDrafted, leagueOffBoard]
+  );
+
+  const sortedCryptoSymbols = useMemo(
+    () =>
+      sortCryptoSymbols(
+        CRYPTO_SYMBOLS,
+        poolSort,
+        priceSortDirection,
+        getQuotePrice
+      ),
+    [poolSort, priceSortDirection, quoteMap]
+  );
+
+  const displayedCryptoSymbols = sortedCryptoSymbols;
 
   const isTop100View = poolFilter === "Top 100";
   const isCryptoView = poolFilter === "Crypto";
@@ -117,11 +313,24 @@ export function StockPool({
     poolFilter === "Top 100" ? TOP_100_PAGE_SIZE : POOL_PAGE_SIZE;
 
   const poolVisible = useMemo(
-    () => filteredPool.slice(0, poolVisibleLimit),
-    [filteredPool, poolVisibleLimit]
+    () => displayedPool.slice(0, poolVisibleLimit),
+    [displayedPool, poolVisibleLimit]
   );
 
   const isReferenceMode = turn.type === "complete";
+
+  function handlePriceSortClick() {
+    if (poolSort === "price") {
+      setPriceSortDirection((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setPoolSort("price");
+    setPriceSortDirection("asc");
+  }
+
+  function handleNameSortClick() {
+    setPoolSort("name");
+  }
 
   function clearSearch() {
     setSearchQuery("");
@@ -214,12 +423,12 @@ export function StockPool({
       return { eligible: false, label: "Drafting…" };
     }
     if (!canPick) {
-      return { eligible: false, label: "Watching" };
+      return { eligible: false, label: "—" };
     }
     if (busy && !crypto) {
       return { eligible: false, label: "Wait…" };
     }
-    if (myDrafted.has(symbol)) {
+    if (!crypto && myDrafted.has(symbol)) {
       return { eligible: false, label: "Yours" };
     }
     if (!crypto && leagueOffBoard.has(symbol)) {
@@ -278,11 +487,12 @@ export function StockPool({
     const surcharge = crypto ? getSurchargePercent(buyerCounts[symbol] ?? 0) : 0;
     const offBoard = !crypto && leagueOffBoard.has(symbol);
     const mine = myDrafted.has(symbol);
+    const queuePriority = getSafetyPickQueuePriority(safetyPickQueue, symbol);
 
     return (
       <div
         key={`${isSearchPick ? "search" : "pool"}-${symbol}`}
-        className={`draft-pool-row ${offBoard || mine ? "draft-pool-row--drafted" : ""} ${mine ? "draft-pool-row--mine" : ""} ${skipped ? "draft-pool-row--skipped" : ""}`}
+        className={`draft-pool-row ${offBoard || (mine && !crypto) ? "draft-pool-row--drafted" : ""} ${mine ? "draft-pool-row--mine" : ""} ${skipped ? "draft-pool-row--skipped" : ""} ${queuePriority ? "draft-pool-row--queued" : ""}`}
       >
         <span
           className={`draft-ticker-badge ${crypto ? "draft-ticker-badge--crypto" : ""} ${offBoard ? "draft-ticker-badge--taken" : ""}`}
@@ -316,24 +526,26 @@ export function StockPool({
           <StockDetailChartButton
             onClick={() => openDetail(symbol, name, sectorLabel, quote)}
           />
-          {!crypto && onSetSafetyPick && canPick && turn.type !== "complete" && (
+          {!crypto && onToggleSafetyPick && turn.type !== "complete" && (
             <button
               type="button"
-              className={`draft-safety-btn ${safetyPickSymbol === symbol ? "draft-safety-btn--active" : ""}`}
-              title="Queue safety pick (auto-drafts if timer expires)"
-              disabled={busy || isPushbackSkip}
-              onClick={() =>
-                onSetSafetyPick(safetyPickSymbol === symbol ? null : symbol)
+              className={`draft-safety-btn ${queuePriority ? "draft-safety-btn--active" : ""}`}
+              title={
+                queuePriority
+                  ? `Safety queue #${queuePriority} — tap to remove`
+                  : `Add to safety queue (up to ${SAFETY_PICK_QUEUE_MAX})`
               }
+              disabled={busy || isPushbackSkip}
+              onClick={() => onToggleSafetyPick(symbol)}
             >
-              Q
+              {queuePriority ?? "Q"}
             </button>
           )}
           <button
             type="button"
-            disabled={!eligible || (!quote && !crypto)}
-            className={`draft-pick-btn ${crypto ? "draft-pick-btn--crypto" : ""} ${skipped ? "draft-pick-btn--skipped" : ""}`}
-            onClick={() => quote && eligible && onDraft(symbol, quote, isSearchPick)}
+            disabled={!eligible || (!quote && !crypto) || !canPick}
+            className={`draft-pick-btn ${crypto ? "draft-pick-btn--crypto" : ""} ${skipped ? "draft-pick-btn--skipped" : ""} ${!canPick && !crypto ? "draft-pick-btn--watching" : ""}`}
+            onClick={() => quote && eligible && canPick && onDraft(symbol, quote, isSearchPick)}
           >
             {label}
           </button>
@@ -382,13 +594,13 @@ export function StockPool({
         )}
       </div>
 
-      {searchResults.length > 0 && (
+      {displayedSearchResults.length > 0 && (
         <div className="draft-search-results">
           <p className="draft-search-label">
             Search results ($5+ · outside S&P 500 pool)
           </p>
           <div className="draft-pool-list draft-pool-list--compact">
-            {searchResults.map((item) =>
+            {displayedSearchResults.map((item) =>
               renderRow(
                 item.symbol,
                 item.name,
@@ -431,16 +643,58 @@ export function StockPool({
         ))}
       </div>
 
-      {onSetSafetyPick && canPick && !isReferenceMode && (
+      <div className="draft-pool-sorts">
+        <span className="draft-pool-sorts-label">Sort</span>
+        <div className="draft-pool-sorts-group">
+          <button
+            type="button"
+            className={`draft-filter-btn ${poolSort === "name" ? "draft-filter-btn--active" : ""}`}
+            onClick={handleNameSortClick}
+          >
+            Name A–Z
+          </button>
+          <button
+            type="button"
+            className={`draft-filter-btn ${poolSort === "price" ? "draft-filter-btn--active" : ""}`}
+            onClick={handlePriceSortClick}
+            title={
+              poolSort === "price" && priceSortDirection === "desc"
+                ? "Price high to low — click to switch"
+                : "Price low to high — click to switch"
+            }
+          >
+            Price{" "}
+            {poolSort === "price" && priceSortDirection === "desc"
+              ? "↓ High"
+              : "↑ Low"}
+          </button>
+        </div>
+        <span className="draft-pool-sorts-divider" aria-hidden="true" />
+        <button
+          type="button"
+          role="switch"
+          aria-checked={showDraftedStocks}
+          className={`draft-filter-btn draft-filter-btn--toggle ${showDraftedStocks ? "draft-filter-btn--active" : ""}`}
+          onClick={() => setShowDraftedStocks((value) => !value)}
+        >
+          Show drafted
+        </button>
+      </div>
+
+      {onToggleSafetyPick && !isReferenceMode && turn.type !== "complete" && (
         <p className="draft-safety-hint">
-          Tap <strong>Q</strong> on a stock to queue your safety pick — used if the
-          2:00 timer expires{ safetyPickSymbol ? ` (queued: ${safetyPickSymbol})` : ""}.
+          Tap <strong>Q</strong> to queue safety stocks while you watch or pick — tried
+          in order (#1, #2, …) if your {SAFETY_PICK_QUEUE_MAX}-slot timer expires
+          {safetyPickQueue.length > 0
+            ? `: ${safetyPickQueue.join(" → ")}`
+            : "."}
         </p>
       )}
 
-      {!canPick && !isReferenceMode && (
+      {!canPick && !isReferenceMode && onToggleSafetyPick && (
         <p className="draft-watching-hint">
-          You&apos;re watching the live draft — picks unlock when it&apos;s your turn.
+          Queue stocks with <strong>Q</strong> while other teams pick — your list
+          runs automatically when you&apos;re on the clock.
         </p>
       )}
 
@@ -461,8 +715,8 @@ export function StockPool({
           : isCryptoView
             ? "Crypto flex — always on the board · BTC, ETH, SOL, DOGE"
             : isTop100View
-              ? `Top 100 S&P 500 by market cap · showing ${poolVisible.length} of ${filteredPool.length} stocks`
-              : `Showing ${poolVisible.length} of ${filteredPool.length} S&P 500 stocks`}
+              ? `Top 100 S&P 500 by market cap · showing ${poolVisible.length} of ${displayedPool.length} stocks`
+              : `Showing ${poolVisible.length} of ${displayedPool.length} S&P 500 stocks`}
         {isReferenceMode && !poolLoading && " · Browse anytime after your draft is complete"}
       </p>
 
@@ -471,9 +725,22 @@ export function StockPool({
       >
         {poolVisible.length === 0 && !poolLoading && isTop100View && (
           <p className="draft-pool-empty-msg">
-            No ranked stocks loaded. Run migration 004_draft_pool.sql or refresh the page.
+            {displayedPool.length === 0 && filteredPool.length > 0
+              ? "All visible stocks are drafted — turn on Show drafted to review them."
+              : "No ranked stocks loaded. Run migration 004_draft_pool.sql or refresh the page."}
           </p>
         )}
+
+        {poolVisible.length === 0 &&
+          !poolLoading &&
+          !isCryptoView &&
+          !isTop100View &&
+          displayedPool.length === 0 &&
+          filteredPool.length > 0 && (
+            <p className="draft-pool-empty-msg">
+              All visible stocks are drafted — turn on Show drafted to review them.
+            </p>
+          )}
 
         {!isCryptoView &&
           poolVisible.map((stock) =>
@@ -490,7 +757,7 @@ export function StockPool({
         {isCryptoView && (
           <>
             <div className="draft-pool-divider">Crypto flex — always on the board</div>
-            {CRYPTO_SYMBOLS.map((symbol) =>
+            {displayedCryptoSymbols.map((symbol) =>
               renderRow(
                 symbol,
                 CRYPTO_DISPLAY_NAMES[symbol] ?? symbol,

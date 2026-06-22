@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchCryptoQuotes } from "@/lib/coingecko/service";
+import { CRYPTO_LIVE_CACHE_TTL_MS } from "@/lib/coingecko/service";
 import { CRYPTO_SYMBOLS } from "@/lib/market/symbols";
 import type { MarketQuote } from "@/lib/market/types";
+
+/** Match server-side CoinGecko throttle — avoid redundant /api/market/crypto polls. */
+const CLIENT_REFRESH_MS = CRYPTO_LIVE_CACHE_TTL_MS;
 
 export function useCryptoQuotes() {
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({});
@@ -15,8 +18,9 @@ export function useCryptoQuotes() {
       const response = await fetch("/api/market/crypto");
       if (!response.ok) throw new Error("Failed to fetch crypto");
 
-      const cryptoQuotes = (await response.json()) as Awaited<
-        ReturnType<typeof fetchCryptoQuotes>
+      const cryptoQuotes = (await response.json()) as Record<
+        string,
+        { price: number; changePercent: number }
       >;
 
       setQuotes((current) => {
@@ -43,7 +47,7 @@ export function useCryptoQuotes() {
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), 30_000);
+    const interval = window.setInterval(() => void refresh(), CLIENT_REFRESH_MS);
     return () => window.clearInterval(interval);
   }, [refresh]);
 
