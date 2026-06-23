@@ -222,11 +222,40 @@ function getPickerPersonality(
 export function generateBotReactionsForDraftEvent(
   event: DraftFeedEvent,
   leagueBots: LeagueBotMember[],
-  options?: { pushbackSkipsRemaining?: number }
+  options?: { pushbackSkipsRemaining?: number; stealth?: boolean }
 ): BotReactionDraft[] {
+  if (options?.stealth) {
+    if (Math.random() > 0.12 || leagueBots.length === 0) {
+      return [];
+    }
+
+    const candidates = leagueBots.filter((bot) => bot.id !== event.user_id);
+    if (candidates.length === 0) return [];
+
+    const speaker = pickOne(candidates);
+    const neutralLines = [
+      "nice pick",
+      "good luck",
+      "solid",
+      "lets go",
+    ];
+
+    return [
+      {
+        userId: speaker.id,
+        authorName: speaker.displayName,
+        body: pickOne(neutralLines),
+        reactionKey: `${event.id}:stealth:${speaker.id}`,
+        draftEventId: event.id,
+      },
+    ];
+  }
+
   const reactions: BotReactionDraft[] = [];
   const pickerPersonality = getPickerPersonality(event, leagueBots);
-  const pickerIsBot = BOT_BY_ID.has(event.user_id);
+  const pickerIsBot =
+    leagueBots.some((bot) => bot.id === event.user_id) ||
+    BOT_BY_ID.has(event.user_id);
   const templateCtx = {
     teamName: event.team_name,
     symbol: event.symbol,

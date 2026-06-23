@@ -105,9 +105,7 @@ function RosterColumn({
               <span className="matchup-team-you"> · You</span>
             )}
           </p>
-          <p className="text-[11px] text-muted">
-            {side.isBot ? "AI manager" : "Manager"}
-          </p>
+          <p className="text-[11px] text-muted">Manager</p>
         </div>
       </div>
 

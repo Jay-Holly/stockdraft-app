@@ -6,6 +6,7 @@ import {
   clampViewWeek,
   getSeasonWeekContext,
 } from "@/lib/league/season-weeks";
+import { shouldStealthBots } from "@/lib/league/stealth-bots";
 import type { LeagueMatchupRow } from "@/lib/matchup/types";
 import { findHumanMatchupForWeek } from "@/lib/matchup/types";
 import { loadRosterView, requireSeasonLeague } from "@/lib/roster/server";
@@ -79,17 +80,32 @@ async function loadTeamSide(
   const botProfile = BOT_BY_ID.get(userId);
 
   const supabase = await createClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("avatar_color")
-    .eq("id", userId)
-    .maybeSingle();
+  const [{ data: profile }, { data: leagueMeta }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("avatar_color")
+      .eq("id", userId)
+      .maybeSingle(),
+    supabase
+      .from("leagues")
+      .select("league_type, visibility, opponent_type")
+      .eq("id", leagueId)
+      .maybeSingle(),
+  ]);
+
+  const stealthBots =
+    leagueMeta &&
+    shouldStealthBots({
+      leagueType: leagueMeta.league_type,
+      visibility: leagueMeta.visibility as "private" | "public",
+      opponentType: leagueMeta.opponent_type as "all_ai" | "all_human" | "mixed",
+    });
 
   return {
     userId,
     teamName: await getLeagueMemberTeamName(leagueId, userId),
     isViewer: userId === viewerUserId,
-    isBot: Boolean(botProfile),
+    isBot: Boolean(botProfile) && leagueMeta?.league_type === "ai" && !stealthBots,
     avatarColor: profile?.avatar_color ?? botProfile?.avatarColor ?? "blue",
     stats,
     primaryScore: getPrimaryMatchupScore(stats, roster.scoringMode),

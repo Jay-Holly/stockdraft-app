@@ -1,6 +1,5 @@
 import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
-import { startLiveDraft } from "@/lib/draft/live-draft";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { summarizePicks } from "@/lib/draft/engine";
 import type { DraftPick, DraftSummary } from "@/lib/draft/types";
@@ -9,7 +8,10 @@ import { getLeagueMemberTeamName } from "@/lib/league/server";
 import { HUMAN_LEAGUE_FIELDS } from "@/lib/league/fields";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
 import type { CreateLeagueConfig } from "@/lib/league/league-config";
-import { isHumanLeaguePoCSupported } from "@/lib/league/league-config";
+import { isHumanLeagueSupported } from "@/lib/league/league-config";
+import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
+import { shouldFillEmptySlotsWithBots } from "@/lib/league/bot-fill";
+import { maybeStartHumanLeagueDraft } from "@/lib/league/draft-scheduler";
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import {
   DEFAULT_LEAGUE_SCORING_MODE,
@@ -27,6 +29,11 @@ export type HumanLeague = League & {
   invite_token: string | null;
   invite_email: string | null;
   scoring_mode: "percent_gain" | "dollar_gain";
+  scheduled_draft_at: string | null;
+  sports_league_id: string | null;
+  pick_time_seconds: number;
+  draft_order_method: string;
+  sports_standings_season: number | null;
 };
 
 export type HumanLeagueInvitePreview = {
@@ -138,14 +145,15 @@ function buildInviteLink(token: string): string {
 export async function createHumanLeague(
   userId: string,
   config: CreateLeagueConfig
-): Promise<{ league?: HumanLeague; inviteLink?: string; error?: string }> {
-  if (!isHumanLeaguePoCSupported(config)) {
+): Promise<{ league?: HumanLeague; inviteLink?: string | null; error?: string }> {
+  if (!isHumanLeagueSupported(config)) {
     return { error: "This league configuration is not supported yet." };
   }
 
   const leagueName = config.leagueName.trim();
   const teamName = config.teamName.trim();
   const inviteEmail = config.inviteEmail?.trim().toLowerCase() ?? "";
+  const scheduledDraftAt = config.scheduledDraftAt?.trim() || null;
 
   if (!leagueName) return { error: "League name is required." };
   if (leagueName.length > 60) {
@@ -155,12 +163,28 @@ export async function createHumanLeague(
   if (teamName.length > 40) {
     return { error: "Team name must be 40 characters or fewer." };
   }
-  if (!inviteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) {
+
+  if (
+    config.visibility === "private" &&
+    config.opponentType === "all_human" &&
+    (!inviteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail))
+  ) {
     return { error: "A valid invite email is required." };
   }
 
+  if (scheduledDraftAt) {
+    const scheduled = new Date(scheduledDraftAt);
+    if (Number.isNaN(scheduled.getTime())) {
+      return { error: "Scheduled draft time is invalid." };
+    }
+    if (scheduled.getTime() <= Date.now()) {
+      return { error: "Scheduled draft must be in the future." };
+    }
+  }
+
   const supabase = await createClient();
-  const inviteToken = randomUUID();
+  const inviteToken =
+    config.visibility === "public" ? null : randomUUID();
 
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
@@ -171,11 +195,18 @@ export async function createHumanLeague(
       status: "waiting",
       owner_user_id: userId,
       format_type: config.formatType,
+      sports_league_id:
+        config.formatType === "sports_league" ? config.sportsLeagueId ?? null : null,
       player_count: config.playerCount,
       visibility: config.visibility,
       opponent_type: config.opponentType,
       invite_token: inviteToken,
-      invite_email: inviteEmail,
+      invite_email: inviteEmail || null,
+      scheduled_draft_at: scheduledDraftAt,
+      draft_order_method:
+        config.formatType === "standard"
+          ? parseDraftOrderMethodSetting(config.draftOrderMethod)
+          : "random_shuffle",
       scoring_mode: parseLeagueScoringMode(
         config.scoringMode ?? DEFAULT_LEAGUE_SCORING_MODE
       ),
@@ -211,7 +242,7 @@ export async function createHumanLeague(
 
   return {
     league: league as HumanLeague,
-    inviteLink: buildInviteLink(inviteToken),
+    inviteLink: inviteToken ? buildInviteLink(inviteToken) : null,
   };
 }
 
@@ -329,7 +360,7 @@ export async function joinHumanLeagueByToken(
     league_id: preview.leagueId,
     user_id: userId,
     display_name: trimmedTeam,
-    draft_slot: 1,
+    draft_slot: preview.memberCount,
   });
 
   if (memberError) {
@@ -345,36 +376,42 @@ export async function joinHumanLeagueByToken(
     return { error: draftError.message };
   }
 
+  const { data: leagueMeta } = await supabase
+    .from("leagues")
+    .select("visibility, opponent_type, scheduled_draft_at, player_count")
+    .eq("id", preview.leagueId)
+    .maybeSingle();
+
+  const fillBots = leagueMeta
+    ? shouldFillEmptySlotsWithBots({
+        visibility: leagueMeta.visibility as "private" | "public",
+        opponentType: leagueMeta.opponent_type as
+          | "all_ai"
+          | "all_human"
+          | "mixed",
+      })
+    : false;
+
+  const hasScheduledDraft = Boolean(leagueMeta?.scheduled_draft_at);
+  const isFull =
+    preview.memberCount + 1 >= (leagueMeta?.player_count ?? preview.playerCount);
+
+  if (!fillBots && !hasScheduledDraft && isFull) {
+    const startResult = await maybeStartHumanLeagueDraft(preview.leagueId);
+    if (startResult.error) {
+      return { error: startResult.error };
+    }
+  }
+
   const { data: league, error: statusError } = await supabase
     .from("leagues")
-    .update({ status: "drafting" })
-    .eq("id", preview.leagueId)
     .select(HUMAN_LEAGUE_FIELDS)
-    .single();
+    .eq("id", preview.leagueId)
+    .maybeSingle();
 
   if (statusError || !league) {
-    return { error: statusError?.message ?? "Could not start league." };
+    return { error: statusError?.message ?? "Could not load league." };
   }
-
-  const ownerId = leagueRow?.owner_user_id;
-  if (!ownerId) {
-    return { error: "League commissioner not found." };
-  }
-
-  const startResult = await startLiveDraft(preview.leagueId, ownerId, 120, {
-    draftOrder: [ownerId, userId],
-  });
-
-  if (startResult.error) {
-    return {
-      error: `Joined league but live draft failed to start: ${startResult.error}`,
-    };
-  }
-
-  await supabase.from("league_standings").insert([
-    { league_id: preview.leagueId, user_id: ownerId, wins: 0, losses: 0, current_week: 1 },
-    { league_id: preview.leagueId, user_id: userId, wins: 0, losses: 0, current_week: 1 },
-  ]);
 
   return { league: league as HumanLeague };
 }

@@ -121,8 +121,7 @@ export function DraftChatBox({
       >
         {messages.length === 0 ? (
           <p className="live-draft-chat__empty">
-            Say something to the room — AI managers will chime in when the draft
-            heats up.
+            Say something to the room. Other managers may chime in occasionally.
           </p>
         ) : (
           messages.map((message) => {
@@ -143,9 +142,6 @@ export function DraftChatBox({
                 <div className="live-draft-chat__meta">
                   <span className="live-draft-chat__author">
                     {message.author_name}
-                    {isBot && botProfile ? (
-                      <span className="live-draft-chat__bot-tag">AI</span>
-                    ) : null}
                   </span>
                   <time
                     className="live-draft-chat__time"

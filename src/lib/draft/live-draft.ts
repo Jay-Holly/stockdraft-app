@@ -4,6 +4,7 @@ import { decideAiPick } from "@/lib/draft/ai-strategy";
 import {
   formatMoney,
   getMyStockSymbols,
+  getSurchargePercent,
   isCryptoSymbol,
   isStockPickEligible,
 } from "@/lib/draft/engine";
@@ -12,6 +13,7 @@ import {
   makeDraftPickForLeague,
   processAllPushbackSkips,
   processPushbackSkipForLeague,
+  fetchBuyerCounts,
 } from "@/lib/draft/server";
 import type {
   DraftFeedEvent,
@@ -30,6 +32,7 @@ import {
 } from "@/lib/market/fallback-quotes";
 import { fetchCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoPickEligible } from "@/lib/draft/engine";
+import { shouldStealthBots } from "@/lib/league/stealth-bots";
 import {
   normalizeSafetyPickQueue,
   toggleSafetyPickQueueSymbol,
@@ -59,6 +62,23 @@ function sleep(ms: number) {
 
 export function isBotUserId(userId: string): boolean {
   return BOT_BY_ID.has(userId);
+}
+
+async function isLeagueBotUser(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leagueId: string,
+  userId: string
+): Promise<boolean> {
+  if (BOT_BY_ID.has(userId)) return true;
+
+  const { data } = await supabase
+    .from("league_members")
+    .select("bot_personality")
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return Boolean(data?.bot_personality);
 }
 
 export function formatDraftEventMessage(
@@ -95,9 +115,6 @@ async function getTeamName(
   leagueId: string,
   userId: string
 ): Promise<string> {
-  const bot = BOT_BY_ID.get(userId);
-  if (bot) return bot.displayName;
-
   const { data } = await supabase
     .from("league_members")
     .select("display_name")
@@ -106,6 +123,9 @@ async function getTeamName(
     .maybeSingle();
 
   if (data?.display_name) return data.display_name;
+
+  const bot = BOT_BY_ID.get(userId);
+  if (bot) return bot.displayName;
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -167,11 +187,27 @@ export async function buildLiveDraftView(
   if (!state) return null;
 
   const supabase = await createClient();
+  const { data: leagueMeta } = await supabase
+    .from("leagues")
+    .select("league_type, visibility, opponent_type")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  const stealthBots =
+    leagueMeta &&
+    shouldStealthBots({
+      leagueType: leagueMeta.league_type,
+      visibility: leagueMeta.visibility as "private" | "public",
+      opponentType: leagueMeta.opponent_type as "all_ai" | "all_human" | "mixed",
+    });
+
   const draftOrder = await Promise.all(
     state.draft_order.map(async (userId) => ({
       userId,
       teamName: await getTeamName(supabase, leagueId, userId),
-      isBot: isBotUserId(userId),
+      isBot: stealthBots
+        ? false
+        : await isLeagueBotUser(supabase, leagueId, userId),
     }))
   );
 
@@ -474,7 +510,10 @@ export async function repairLiveDraftClock(
     const supabase = await createClient();
 
     // Never steal the clock from an active human mid-pick to reconcile feed drift.
-    if (state.on_clock_user_id && !isBotUserId(state.on_clock_user_id)) {
+    if (
+      state.on_clock_user_id &&
+      !(await isLeagueBotUser(supabase, leagueId, state.on_clock_user_id))
+    ) {
       const deadlineOk =
         !state.pick_deadline_at ||
         new Date(state.pick_deadline_at).getTime() > Date.now();
@@ -577,7 +616,7 @@ export async function assignOnClock(
       continue;
     }
 
-    const deadline = isBotUserId(userId)
+    const deadline = (await isLeagueBotUser(supabase, leagueId, userId))
       ? new Date(Date.now() + BOT_PICK_DELAY_MS + 500).toISOString()
       : new Date(Date.now() + pickTimeSeconds * 1000).toISOString();
 
@@ -657,8 +696,25 @@ export async function advanceAfterPick(
       const { activateAiLeagueSchedule } = await import("@/lib/league/ai-league");
       await activateAiLeagueSchedule(leagueId, userId);
     } else if (league?.league_type === "human") {
-      const { activateHumanLeagueSchedule } = await import("@/lib/league/human-league");
-      await activateHumanLeagueSchedule(leagueId);
+      const { activateHumanLeagueScheduleWithMatchups } = await import(
+        "@/lib/league/draft-scheduler"
+      );
+      const { data: ownerRow } = await supabase
+        .from("leagues")
+        .select("owner_user_id")
+        .eq("id", leagueId)
+        .maybeSingle();
+      if (ownerRow?.owner_user_id) {
+        await activateHumanLeagueScheduleWithMatchups(
+          leagueId,
+          ownerRow.owner_user_id
+        );
+      } else {
+        const { activateHumanLeagueSchedule } = await import(
+          "@/lib/league/human-league"
+        );
+        await activateHumanLeagueSchedule(leagueId);
+      }
     }
 
     return {};
@@ -778,9 +834,11 @@ export async function pickMostExpensiveEligibleStock(
 }
 
 async function resolveAutoCryptoPick(
-  state: Pick<DraftState, "summary">
+  leagueId: string,
+  userId: string,
+  state: Pick<DraftState, "summary" | "picks">
 ): Promise<{ symbol: string; price: number; allocation: number } | null> {
-  const { summary } = state;
+  const { summary, picks } = state;
   if (summary.cryptoRemaining <= 0) return null;
 
   let quotes: Awaited<ReturnType<typeof fetchCryptoQuotes>> | null = null;
@@ -793,20 +851,57 @@ async function resolveAutoCryptoPick(
   const pool = await fetchCryptoPool();
   const symbols =
     pool.length > 0
-      ? pool.map((coin) => coin.symbol)
-      : ["BTC", "ETH", "SOL", "DOGE"];
+      ? pool
+      : ["BTC", "ETH", "SOL", "DOGE"].map((symbol, index) => ({
+          symbol,
+          name: symbol,
+          coingeckoId: symbol.toLowerCase(),
+          marketCapRank: index + 1,
+          referencePriceUsd: null,
+        }));
 
-  for (const symbol of symbols) {
-    const price = quotes?.[symbol]?.price ?? 0;
+  const supabase = await createClient();
+  const buyerCounts = await fetchBuyerCounts(supabase, leagueId);
+  const myCryptoSymbols = new Set(
+    picks
+      .filter(
+        (pick) =>
+          pick.pick_type === "crypto" &&
+          (pick.budget_spent > 0.01 || pick.shares > 0)
+      )
+      .map((pick) => pick.symbol.toUpperCase())
+  );
+
+  let best: { symbol: string; price: number; marketCapRank: number } | null =
+    null;
+
+  for (const coin of symbols) {
+    const symbol = coin.symbol.toUpperCase();
+    const price = quotes?.[symbol]?.price ?? coin.referencePriceUsd ?? 0;
     if (price <= 0 || !isCryptoPickEligible(symbol, price)) continue;
-    return {
-      symbol,
-      price,
-      allocation: summary.cryptoRemaining,
-    };
+
+    const alreadyHold = myCryptoSymbols.has(symbol);
+    const leagueBuyers = buyerCounts[symbol] ?? 0;
+    const surcharge = getSurchargePercent(alreadyHold ? 0 : leagueBuyers);
+    if (surcharge >= 15) continue;
+
+    const marketCapRank = coin.marketCapRank ?? 9999;
+    if (
+      !best ||
+      marketCapRank < best.marketCapRank ||
+      (marketCapRank === best.marketCapRank && price > best.price)
+    ) {
+      best = { symbol, price, marketCapRank };
+    }
   }
 
-  return null;
+  if (!best) return null;
+
+  return {
+    symbol: best.symbol,
+    price: best.price,
+    allocation: summary.cryptoRemaining,
+  };
 }
 
 async function trySafetyStockAutoPick(
@@ -874,7 +969,7 @@ export async function resolveAutoPick(
   }
 
   if (turn.canPickCrypto && summary.cryptoRemaining > 0) {
-    const crypto = await resolveAutoCryptoPick(state.state);
+    const crypto = await resolveAutoCryptoPick(leagueId, userId, state.state);
     if (crypto) {
       return { ...crypto, reason: "timer" };
     }
@@ -888,7 +983,12 @@ export async function expirePickIfNeeded(
 ): Promise<{ expired?: boolean; error?: string }> {
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.status !== "in_progress") return {};
-  if (!state.on_clock_user_id || isBotUserId(state.on_clock_user_id)) return {};
+  if (!state.on_clock_user_id) return {};
+
+  const supabase = await createClient();
+  if (await isLeagueBotUser(supabase, leagueId, state.on_clock_user_id)) {
+    return {};
+  }
   if (!state.pick_deadline_at) return {};
 
   if (new Date(state.pick_deadline_at).getTime() > Date.now()) return {};
@@ -960,12 +1060,14 @@ export async function runBotTurn(
 ): Promise<{ error?: string }> {
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.status !== "in_progress") return {};
-  if (!state.on_clock_user_id || !isBotUserId(state.on_clock_user_id)) return {};
-
-  const bot = BOT_BY_ID.get(state.on_clock_user_id);
-  if (!bot) return { error: "Unknown bot on clock" };
+  if (!state.on_clock_user_id) return {};
 
   const supabase = await createClient();
+  const botUserId = state.on_clock_user_id;
+  if (!(await isLeagueBotUser(supabase, leagueId, botUserId))) return {};
+
+  const botProfile = BOT_BY_ID.get(botUserId);
+  const botName = await getTeamName(supabase, leagueId, botUserId);
 
   if (!options?.skipDelay) {
     await sleep(BOT_PICK_DELAY_MS);
@@ -974,24 +1076,28 @@ export async function runBotTurn(
   const refreshed = await getLeagueDraftStateRow(leagueId);
   if (
     !refreshed ||
-    refreshed.on_clock_user_id !== bot.id ||
+    refreshed.on_clock_user_id !== botUserId ||
     refreshed.status !== "in_progress"
   ) {
     return {};
   }
 
-  const draftState = await loadDraftStateDetailed(bot.id, { leagueId });
+  const draftState = await loadDraftStateDetailed(botUserId, { leagueId });
   if (!draftState.ok) return { error: draftState.error };
 
   const { data: memberRow } = await supabase
     .from("league_members")
     .select("bot_personality, bot_config")
     .eq("league_id", leagueId)
-    .eq("user_id", bot.id)
+    .eq("user_id", botUserId)
     .maybeSingle();
 
+  if (!memberRow?.bot_personality && !botProfile) {
+    return { error: "Unknown manager on clock" };
+  }
+
   const personality = (memberRow?.bot_personality ??
-    bot.personality) as BotPersonality;
+    botProfile?.personality) as BotPersonality;
   const botConfig = (memberRow?.bot_config ?? {}) as BotConfig;
 
   const pool = await fetchDraftPool();
@@ -1005,20 +1111,20 @@ export async function runBotTurn(
       { fast: options?.fastPick ?? false }
     );
   } catch (err) {
-    console.error(`${bot.displayName} decideAiPick threw:`, err);
+    console.error(`${botName} decideAiPick threw:`, err);
     decision = null;
   }
 
   if (!decision) {
-    const fallback = await resolveAutoPick(leagueId, bot.id);
+    const fallback = await resolveAutoPick(leagueId, botUserId);
     if ("kind" in fallback && fallback.kind === "pushback_skip") {
-      const skip = await processPushbackSkipForLeague(bot.id, leagueId, {
+      const skip = await processPushbackSkipForLeague(botUserId, leagueId, {
         advanceLiveDraft: true,
       });
       if (!skip.error) return {};
     } else if (isAutoPickPick(fallback)) {
       const fallbackResult = await makeDraftPickForLeague(
-        bot.id,
+        botUserId,
         leagueId,
         fallback.symbol,
         fallback.allocation,
@@ -1028,11 +1134,11 @@ export async function runBotTurn(
       );
       if (!fallbackResult.error) return {};
     }
-    return { error: `${bot.displayName} could not decide a pick` };
+    return { error: `${botName} could not decide a pick` };
   }
 
   const result = await makeDraftPickForLeague(
-    bot.id,
+    botUserId,
     leagueId,
     decision.symbol,
     decision.allocation,
@@ -1099,7 +1205,11 @@ export async function ensureLiveDraftProgress(
   let state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.status !== "in_progress") return {};
 
-  if (state.on_clock_user_id && isBotUserId(state.on_clock_user_id)) {
+  const supabase = await createClient();
+  if (
+    state.on_clock_user_id &&
+    (await isLeagueBotUser(supabase, leagueId, state.on_clock_user_id))
+  ) {
     if (
       !state.pick_deadline_at ||
       new Date(state.pick_deadline_at).getTime() <= Date.now()

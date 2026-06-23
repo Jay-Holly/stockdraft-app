@@ -3,4 +3,4 @@ export const LEAGUE_BASE_FIELDS =
 
 export const AI_LEAGUE_FIELDS = `${LEAGUE_BASE_FIELDS}, league_type, status, owner_user_id, scoring_mode`;
 
-export const HUMAN_LEAGUE_FIELDS = `${LEAGUE_BASE_FIELDS}, league_type, status, owner_user_id, format_type, player_count, visibility, opponent_type, invite_token, invite_email, scoring_mode`;
+export const HUMAN_LEAGUE_FIELDS = `${LEAGUE_BASE_FIELDS}, league_type, status, owner_user_id, format_type, player_count, visibility, opponent_type, invite_token, invite_email, scoring_mode, scheduled_draft_at, sports_league_id, pick_time_seconds, draft_order_method, sports_standings_season`;

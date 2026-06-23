@@ -4,9 +4,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import {
-  isHumanLeaguePoCSupported,
+  isHumanLeagueSupported,
+  playerCountsForFormat,
+  requiresScheduledDraft,
   SPORTS_LEAGUE_FORMATS,
-  STANDARD_PLAYER_COUNTS,
   unsupportedLeagueConfigMessage,
   type CreateLeagueConfig,
   type LeagueFormatType,
@@ -15,6 +16,10 @@ import {
   type LeagueScoringMode,
   type LeagueVisibility,
 } from "@/lib/league/league-config";
+import {
+  DRAFT_ORDER_METHOD_LABELS,
+  type DraftOrderMethodSetting,
+} from "@/lib/league/draft-order";
 
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
@@ -86,6 +91,9 @@ export function CreateLeagueForm({
   const [leagueName, setLeagueName] = useState("");
   const [teamName, setTeamName] = useState(defaultTeamName);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [scheduledDraftAt, setScheduledDraftAt] = useState("");
+  const [draftOrderMethod, setDraftOrderMethod] =
+    useState<DraftOrderMethodSetting>("random_shuffle");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -102,6 +110,11 @@ export function CreateLeagueForm({
       leagueName,
       teamName,
       inviteEmail,
+      scheduledDraftAt: scheduledDraftAt
+        ? new Date(scheduledDraftAt).toISOString()
+        : null,
+      draftOrderMethod:
+        formatType === "standard" ? draftOrderMethod : undefined,
     }),
     [
       formatType,
@@ -113,10 +126,23 @@ export function CreateLeagueForm({
       leagueName,
       teamName,
       inviteEmail,
+      scheduledDraftAt,
+      draftOrderMethod,
     ]
   );
 
-  const supported = isHumanLeaguePoCSupported(config);
+  const supported = isHumanLeagueSupported(config);
+  const needsSchedule = requiresScheduledDraft(config);
+  const needsInviteEmail =
+    config.visibility === "private" && config.opponentType === "all_human";
+  const playerCountOptions = playerCountsForFormat(formatType);
+  const draftOrderOptions = (
+    Object.keys(DRAFT_ORDER_METHOD_LABELS) as DraftOrderMethodSetting[]
+  ).map((method) => ({
+    value: method,
+    label: DRAFT_ORDER_METHOD_LABELS[method].label,
+    hint: DRAFT_ORDER_METHOD_LABELS[method].description,
+  }));
   const comingSoonMessage = supported ? null : unsupportedLeagueConfigMessage(config);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -155,7 +181,7 @@ export function CreateLeagueForm({
     void navigator.clipboard.writeText(inviteLink);
   }
 
-  if (inviteLink) {
+  if (inviteLink || createdLeagueName) {
     return (
       <div className="space-y-5">
         <div className="rounded-2xl border border-gold/40 bg-gold/5 p-5 space-y-3">
@@ -163,25 +189,47 @@ export function CreateLeagueForm({
             {createdLeagueName} is ready
           </h2>
           <p className="text-sm text-muted">
-            Share this invite link with{" "}
-            <span className="text-white font-medium">{inviteEmail}</span>. Once
-            they join, the live draft starts automatically.
+            {inviteLink ? (
+              <>
+                Share this invite link with{" "}
+                <span className="text-white font-medium">{inviteEmail}</span>.
+                {needsSchedule
+                  ? " The draft starts at your scheduled time — open slots fill with managers automatically."
+                  : " Once they join, the live draft starts automatically."}
+              </>
+            ) : (
+              <>
+                Your league is created.
+                {needsSchedule
+                  ? " Open slots will fill with managers at your scheduled draft time."
+                  : " Waiting for players to join."}
+              </>
+            )}
           </p>
-          <div className="rounded-xl border border-dark-border bg-dark p-3 break-all text-xs text-gold font-mono">
-            {inviteLink}
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button variant="secondary" className="flex-1" onClick={copyInviteLink}>
-              Copy link
-            </Button>
-            <Button
-              variant="primary"
-              className="flex-1"
-              onClick={() => router.push("/dashboard")}
-            >
+          {inviteLink && (
+            <>
+              <div className="rounded-xl border border-dark-border bg-dark p-3 break-all text-xs text-gold font-mono">
+                {inviteLink}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button variant="secondary" className="flex-1" onClick={copyInviteLink}>
+                  Copy link
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  onClick={() => router.push("/dashboard")}
+                >
+                  Back to dashboard
+                </Button>
+              </div>
+            </>
+          )}
+          {!inviteLink && (
+            <Button variant="primary" onClick={() => router.push("/dashboard")}>
               Back to dashboard
             </Button>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -193,7 +241,14 @@ export function CreateLeagueForm({
         label="Format type"
         description="Standard is the 13-week NFL Package style season."
         value={formatType}
-        onChange={setFormatType}
+        onChange={(value) => {
+          setFormatType(value);
+          if (value === "sports_league") {
+            setPlayerCount(30);
+          } else if (playerCount > 12) {
+            setPlayerCount(2);
+          }
+        }}
         options={[
           { value: "standard", label: "Standard", hint: "13-week season" },
           {
@@ -222,12 +277,43 @@ export function CreateLeagueForm({
           label="Player count"
           value={playerCount}
           onChange={setPlayerCount}
-          options={STANDARD_PLAYER_COUNTS.map((count) => ({
+          options={playerCountOptions.map((count) => ({
             value: count,
             label: String(count),
-            hint: count === 2 ? "Available now" : "Coming soon",
           }))}
         />
+      )}
+
+      {formatType === "sports_league" && (
+        <OptionGroup<LeaguePlayerCount>
+          label="League size"
+          value={playerCount}
+          onChange={setPlayerCount}
+          options={playerCountOptions.map((count) => ({
+            value: count,
+            label: `${count} teams`,
+            hint: "Open slots fill with managers at draft time",
+          }))}
+        />
+      )}
+
+      {formatType === "standard" && (
+        <OptionGroup<DraftOrderMethodSetting>
+          label="Draft order method"
+          description="Pick positions are assigned when the live draft starts. Random shuffle is the default baseline."
+          value={draftOrderMethod}
+          onChange={setDraftOrderMethod}
+          options={draftOrderOptions}
+        />
+      )}
+
+      {formatType === "sports_league" && (
+        <p className="text-xs text-muted rounded-xl border border-dark-border bg-dark/40 px-4 py-3">
+          Sports League draft order will eventually follow each format&apos;s prior-season
+          standings (NFL, NHL, NBA, MLB) — refreshed automatically the day after each
+          championship. Until then, pick order is assigned with a random shuffle at draft
+          start. Only StockDraft franchise identities appear in the app.
+        </p>
       )}
 
       <OptionGroup<LeagueVisibility>
@@ -301,7 +387,30 @@ export function CreateLeagueForm({
           />
         </div>
 
-        {supported && (
+        {needsSchedule && (
+          <div>
+            <label
+              className="block text-sm font-semibold mb-1.5"
+              htmlFor="scheduledDraftAt"
+            >
+              Scheduled draft
+            </label>
+            <input
+              id="scheduledDraftAt"
+              type="datetime-local"
+              className={inputClass}
+              value={scheduledDraftAt}
+              onChange={(e) => setScheduledDraftAt(e.target.value)}
+              required={needsSchedule}
+            />
+            <p className="text-xs text-muted mt-1.5">
+              At this time, any empty roster spot is filled automatically so the
+              draft can start on schedule.
+            </p>
+          </div>
+        )}
+
+        {needsInviteEmail && (
           <div>
             <label className="block text-sm font-semibold mb-1.5" htmlFor="inviteEmail">
               Invite player 2 (email)
@@ -345,7 +454,7 @@ export function CreateLeagueForm({
           className="flex-1"
           disabled={submitting || !supported}
         >
-          {submitting ? "Creating…" : supported ? "Create & get invite link" : "Coming soon"}
+          {submitting ? "Creating…" : supported ? "Create league" : "Coming soon"}
         </Button>
       </div>
     </form>

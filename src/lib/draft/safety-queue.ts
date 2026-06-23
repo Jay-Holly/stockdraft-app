@@ -1,7 +1,7 @@
 import { isCryptoSymbol } from "@/lib/draft/engine";
 
 /** Max queued safety stocks per manager (priority 1 … N). */
-export const SAFETY_PICK_QUEUE_MAX = 8;
+export const SAFETY_PICK_QUEUE_MAX = 25;
 
 export function normalizeSafetyPickQueue(
   queue: string[] | null | undefined,

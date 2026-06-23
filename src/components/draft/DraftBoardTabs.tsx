@@ -131,7 +131,7 @@ export function DraftBoardTabs({
 
       {botDraftBoards.length > 0 && (
         <p className="draft-board-tab-hint">
-          Switch tabs to compare your board with each AI manager&apos;s picks.
+          Switch tabs to compare your board with other managers in the league.
         </p>
       )}
     </div>

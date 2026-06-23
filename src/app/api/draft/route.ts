@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadDraftApiPayload } from "@/lib/draft/api";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { resolveActiveLeagueId } from "@/lib/league/active-league";
+import { processDueScheduledDrafts } from "@/lib/league/draft-scheduler";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,12 @@ export async function GET(request: Request) {
     const leagueId =
       url.searchParams.get("leagueId") ??
       (await resolveActiveLeagueId(user.id));
+
+    try {
+      await processDueScheduledDrafts();
+    } catch (schedulerError) {
+      console.error("Scheduled draft processing failed:", schedulerError);
+    }
 
     const result = await loadDraftApiPayload(user.id, {
       leagueId: leagueId ?? undefined,

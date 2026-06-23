@@ -4,10 +4,16 @@ import { setActiveLeagueCookie } from "@/lib/league/active-league";
 import { createHumanLeague } from "@/lib/league/human-league";
 import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import {
-  isHumanLeaguePoCSupported,
+  isHumanLeagueSupported,
+  playerCountsForFormat,
   unsupportedLeagueConfigMessage,
 } from "@/lib/league/league-config";
+import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
 import { parseLeagueScoringMode } from "@/lib/league/scoring-mode";
+
+const VALID_COUNTS: CreateLeagueConfig["playerCount"][] = [
+  2, 4, 6, 8, 10, 12, 30, 32,
+];
 
 export async function POST(request: Request) {
   const { user } = await getAuthenticatedUserId();
@@ -22,17 +28,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const validCounts = [2, 4, 6, 8, 10, 12] as const;
+  const formatType =
+    body.formatType === "sports_league" ? "sports_league" : "standard";
+  const allowedCounts = playerCountsForFormat(formatType);
   const rawCount = body.playerCount;
-  const playerCount: CreateLeagueConfig["playerCount"] = validCounts.includes(
-    rawCount as (typeof validCounts)[number]
-  )
-    ? (rawCount as CreateLeagueConfig["playerCount"])
-    : 2;
+  const playerCount: CreateLeagueConfig["playerCount"] =
+    VALID_COUNTS.includes(rawCount as CreateLeagueConfig["playerCount"]) &&
+    allowedCounts.includes(rawCount as CreateLeagueConfig["playerCount"])
+      ? (rawCount as CreateLeagueConfig["playerCount"])
+      : allowedCounts[0];
 
   const config: CreateLeagueConfig = {
-    formatType: body.formatType === "sports_league" ? "sports_league" : "standard",
-    sportsLeagueId: typeof body.sportsLeagueId === "string" ? body.sportsLeagueId : undefined,
+    formatType,
+    sportsLeagueId:
+      typeof body.sportsLeagueId === "string" ? body.sportsLeagueId : undefined,
     playerCount,
     visibility: body.visibility === "public" ? "public" : "private",
     opponentType:
@@ -42,10 +51,15 @@ export async function POST(request: Request) {
     leagueName: typeof body.leagueName === "string" ? body.leagueName : "",
     teamName: typeof body.teamName === "string" ? body.teamName : "",
     inviteEmail: typeof body.inviteEmail === "string" ? body.inviteEmail : "",
+    scheduledDraftAt:
+      typeof body.scheduledDraftAt === "string" ? body.scheduledDraftAt : null,
+    draftOrderMethod: parseDraftOrderMethodSetting(
+      typeof body.draftOrderMethod === "string" ? body.draftOrderMethod : undefined
+    ),
     scoringMode: parseLeagueScoringMode(body.scoringMode),
   };
 
-  if (!isHumanLeaguePoCSupported(config)) {
+  if (!isHumanLeagueSupported(config)) {
     return NextResponse.json(
       { error: unsupportedLeagueConfigMessage(config) },
       { status: 400 }

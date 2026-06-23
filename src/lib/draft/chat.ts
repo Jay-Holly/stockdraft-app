@@ -3,6 +3,7 @@ import type { DraftFeedEvent } from "@/lib/draft/types";
 import type { DraftChatMessage } from "@/lib/draft/chat-types";
 import { generateBotReactionsForDraftEvent } from "@/lib/draft/chat-reactions";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
+import { shouldStealthBots } from "@/lib/league/stealth-bots";
 
 export async function getDraftChatMessages(
   leagueId: string,
@@ -77,10 +78,27 @@ export async function postBotReactionsForDraftEvent(
   const leagueBots = await getLeagueBotMembers(leagueId);
   if (leagueBots.length === 0) return;
 
-  const reactions = generateBotReactionsForDraftEvent(event, leagueBots, options);
+  const supabase = await createClient();
+  const { data: league } = await supabase
+    .from("leagues")
+    .select("league_type, visibility, opponent_type")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  const stealth =
+    league &&
+    shouldStealthBots({
+      leagueType: league.league_type,
+      visibility: league.visibility as "private" | "public",
+      opponentType: league.opponent_type as "all_ai" | "all_human" | "mixed",
+    });
+
+  const reactions = generateBotReactionsForDraftEvent(event, leagueBots, {
+    ...options,
+    stealth: stealth ?? false,
+  });
   if (reactions.length === 0) return;
 
-  const supabase = await createClient();
   for (const reaction of reactions) {
     const { error } = await supabase.from("league_draft_chat_messages").insert({
       league_id: leagueId,
