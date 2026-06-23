@@ -14,8 +14,9 @@ import type {
   AiLeagueListItem,
   AiLeagueSummary,
 } from "@/lib/league/ai-league";
-import type { HumanLeagueListItem } from "@/lib/league/human-league";
+import type { HumanLeagueListItem, PendingHumanLeagueInvite } from "@/lib/league/human-league";
 import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
+import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInviteBanner";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import type { BotPersonality } from "@/lib/league/bots";
@@ -23,12 +24,11 @@ import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
 import { DraftRoster } from "@/components/draft/DraftRoster";
 import type { DraftPick } from "@/lib/draft/types";
-
-function formatPct(value: number | null | undefined): string {
-  if (value == null) return "—";
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
-}
+import {
+  formatMatchupScore,
+  parseLeagueScoringMode,
+  type LeagueScoringMode,
+} from "@/lib/league/scoring-mode";
 
 function leagueStatusLabel(status: string): string {
   if (status === "waiting") return "Waiting for players";
@@ -40,15 +40,17 @@ function leagueStatusLabel(status: string): string {
 function MatchupResultCard({
   weekNumber,
   opponentName,
-  humanScorePct,
-  opponentScorePct,
+  humanScore,
+  opponentScore,
+  scoringMode,
   winner,
   upcoming = false,
 }: {
   weekNumber: number;
   opponentName: string;
-  humanScorePct: number | null;
-  opponentScorePct: number | null;
+  humanScore: number | null;
+  opponentScore: number | null;
+  scoringMode: LeagueScoringMode;
   winner: string | null;
   upcoming?: boolean;
 }) {
@@ -63,8 +65,10 @@ function MatchupResultCard({
 
       {upcoming ? (
         <p className="text-sm text-muted">
-          Scores on your next dashboard visit using live prices for active roster
-          picks (10 stocks + crypto, bench excluded).
+          Scores on your next dashboard visit using{" "}
+          {scoringMode === "dollar_gain"
+            ? "weekly dollar gain on starters + crypto (bench excluded)."
+            : "weekly percentage gain on starters + crypto (bench excluded)."}
         </p>
       ) : (
         <>
@@ -80,7 +84,7 @@ function MatchupResultCard({
                       : "text-white"
                 }`}
               >
-                {formatPct(humanScorePct)}
+                {formatMatchupScore(humanScore, scoringMode)}
               </p>
             </div>
             <div className="rounded-lg bg-dark px-3 py-2">
@@ -94,7 +98,7 @@ function MatchupResultCard({
                       : "text-white"
                 }`}
               >
-                {formatPct(opponentScorePct)}
+                {formatMatchupScore(opponentScore, scoringMode)}
               </p>
             </div>
           </div>
@@ -124,6 +128,7 @@ export function DashboardContent({
   activeLeagueId = null,
   activeSummary = null,
   scoringNotice = null,
+  pendingInvites = [],
 }: {
   profile: Profile;
   email: string;
@@ -135,6 +140,7 @@ export function DashboardContent({
   activeLeagueId?: string | null;
   activeSummary?: AiLeagueSummary | null;
   scoringNotice?: string | null;
+  pendingInvites?: PendingHumanLeagueInvite[];
 }) {
   const router = useRouter();
   const [username, setUsername] = useState(profile.username);
@@ -282,6 +288,10 @@ export function DashboardContent({
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           {scoringNotice}
         </div>
+      )}
+
+      {pendingInvites.length > 0 && (
+        <PendingLeagueInviteBanner invites={pendingInvites} />
       )}
 
       <section className="bg-dark-card border border-dark-border rounded-2xl p-6">
@@ -612,10 +622,13 @@ export function DashboardContent({
               <MatchupResultCard
                 weekNumber={activeSummary.lastCompletedMatchup.weekNumber}
                 opponentName={activeSummary.lastCompletedMatchup.opponentName}
-                humanScorePct={activeSummary.lastCompletedMatchup.humanScorePct}
-                opponentScorePct={
+                humanScore={activeSummary.lastCompletedMatchup.humanScorePct}
+                opponentScore={
                   activeSummary.lastCompletedMatchup.opponentScorePct
                 }
+                scoringMode={parseLeagueScoringMode(
+                  activeSummary.league.scoring_mode
+                )}
                 winner={activeSummary.lastCompletedMatchup.winner}
               />
             )}
@@ -626,8 +639,11 @@ export function DashboardContent({
               <MatchupResultCard
                 weekNumber={activeSummary.currentMatchup.weekNumber}
                 opponentName={activeSummary.currentMatchup.opponentName}
-                humanScorePct={null}
-                opponentScorePct={null}
+                humanScore={null}
+                opponentScore={null}
+                scoringMode={parseLeagueScoringMode(
+                  activeSummary.league.scoring_mode
+                )}
                 winner={null}
                 upcoming
               />

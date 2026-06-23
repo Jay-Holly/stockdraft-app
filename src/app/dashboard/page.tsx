@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { resolveActiveLeagueId, verifyUserCanAccessLeague } from "@/lib/league/active-league";
-import { listHumanLeaguesForUser } from "@/lib/league/human-league";
+import { listHumanLeaguesForUser, listPendingHumanLeagueInvites } from "@/lib/league/human-league";
 import {
   getAiLeagueSummary,
   listAiLeagueListItems,
@@ -89,11 +89,13 @@ export default async function DashboardPage() {
       "Scoring temporarily unavailable — live prices could not be loaded. We'll retry on your next visit.";
   }
 
-  const [aiLeagues, humanLeagues, activeLeagueId] = await Promise.all([
-    listAiLeagueListItems(user.id),
-    listHumanLeaguesForUser(user.id),
-    resolveActiveLeagueId(user.id),
-  ]);
+  const [aiLeagues, humanLeagues, activeLeagueId, pendingInvites] =
+    await Promise.all([
+      listAiLeagueListItems(user.id),
+      listHumanLeaguesForUser(user.id),
+      resolveActiveLeagueId(user.id),
+      listPendingHumanLeagueInvites(),
+    ]);
 
   const activeHumanLeague = humanLeagues.find((h) => h.league.id === activeLeagueId);
   const activeSummary = activeLeagueId && !activeHumanLeague
@@ -136,6 +138,7 @@ export default async function DashboardPage() {
           activeLeagueId={activeLeagueId}
           activeSummary={activeSummary}
           scoringNotice={scoringNotice}
+          pendingInvites={pendingInvites}
         />
       </main>
     </div>

@@ -142,6 +142,53 @@ export async function captureWeekBaselinesForLeague(
   }
 }
 
+export async function captureWeekCloseSnapshots(
+  leagueId: string,
+  weekNumber: number
+): Promise<void> {
+  const supabase = await createClient();
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("user_id")
+    .eq("league_id", leagueId);
+
+  for (const draft of drafts ?? []) {
+    const state = await loadDraftStateDetailed(draft.user_id, { leagueId });
+    if (!state.ok) continue;
+
+    const picks = state.state.picks.filter((pick) => pick.pick_type !== "skip");
+    const prices = await fetchPricesForPicks(picks);
+
+    for (const pick of picks) {
+      const closeValue = pickMarketValue(
+        pick,
+        prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
+      );
+
+      const { data: existing } = await supabase
+        .from("roster_week_baselines")
+        .select("value_at_open")
+        .eq("league_id", leagueId)
+        .eq("user_id", draft.user_id)
+        .eq("week_number", weekNumber)
+        .eq("pick_id", pick.id)
+        .maybeSingle();
+
+      await supabase.from("roster_week_baselines").upsert(
+        {
+          league_id: leagueId,
+          user_id: draft.user_id,
+          week_number: weekNumber,
+          pick_id: pick.id,
+          value_at_open: existing?.value_at_open ?? closeValue,
+          value_at_close: closeValue,
+        },
+        { onConflict: "league_id,user_id,week_number,pick_id" }
+      );
+    }
+  }
+}
+
 export async function ensureWeekBaselines(
   supabase: SupabaseClient,
   leagueId: string,
@@ -304,6 +351,14 @@ export function computeWeekDollarGain(
   return currentValue - valueAtOpen;
 }
 
+export function computeWeekGainPercent(
+  currentValue: number,
+  valueAtOpen: number
+): number {
+  if (valueAtOpen <= 0) return 0;
+  return ((currentValue - valueAtOpen) / valueAtOpen) * 100;
+}
+
 export function computeScoringWeekGainPercent(
   scoringPicks: Array<{ currentValue: number; weekOpenValue: number }>
 ): number {
@@ -351,4 +406,39 @@ export async function computeScoringWeekGainPercentForUser(
     });
 
   return computeScoringWeekGainPercent(scoringInputs);
+}
+
+export async function computeScoringWeekDollarGainForUser(
+  userId: string,
+  leagueId: string
+): Promise<number> {
+  const state = await loadDraftStateDetailed(userId, { leagueId });
+  if (!state.ok) return 0;
+
+  const supabase = await createClient();
+  const weekNumber = await getCurrentWeek(supabase, leagueId, userId);
+  const picks = state.state.picks.filter((p) => p.pick_type !== "skip");
+  const baselineMap = await ensureWeekBaselines(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber,
+    picks
+  );
+  const prices = await fetchPricesForPicks(picks);
+
+  let total = 0;
+
+  for (const pick of picks) {
+    if (pick.pick_type !== "stock" && pick.pick_type !== "crypto") continue;
+
+    const price = prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick;
+    const currentValue = pickMarketValue(pick, price);
+    const weekOpenValue =
+      baselineMap.get(pick.id) ?? pickMarketValue(pick, price);
+
+    total += computeWeekDollarGain(currentValue, weekOpenValue);
+  }
+
+  return total;
 }

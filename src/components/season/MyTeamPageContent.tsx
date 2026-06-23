@@ -5,6 +5,7 @@ import { formatMoney, formatPct, formatSignedMoney } from "@/lib/format";
 import { useCryptoPool } from "@/hooks/useCryptoPool";
 import { computeCryptoPick, formatShares } from "@/lib/draft/engine";
 import type { RosterPickView, RosterView } from "@/lib/roster/types";
+import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
 import { Button } from "@/components/Button";
 import {
   StockDetailModal,
@@ -15,9 +16,11 @@ import {
   fetchJsonWithTimeout,
   formatFetchError,
 } from "@/lib/fetch-client";
+import { SeasonWeekNavigator } from "@/components/season/SeasonWeekNavigator";
 
 export function MyTeamPageContent() {
   const [roster, setRoster] = useState<RosterView | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -107,11 +110,13 @@ export function MyTeamPageContent() {
     };
   }, [roster, selectedCryptoPick, cryptoSellPercent, cryptoTarget]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (weekNumber?: number) => {
     try {
+      const weekQuery =
+        weekNumber != null ? `?week=${encodeURIComponent(String(weekNumber))}` : "";
       const { res, data: json } = await fetchJsonWithTimeout<{
         error?: string;
-      } & RosterView>("/api/roster", {
+      } & RosterView>(`/api/roster${weekQuery}`, {
         cache: "no-store",
         timeoutMs: 30_000,
         label: "Roster load",
@@ -123,7 +128,10 @@ export function MyTeamPageContent() {
         return;
       }
 
-      setRoster(json as RosterView);
+      const nextRoster = json as RosterView;
+      setRoster(nextRoster);
+      setSelectedWeek((current) => current ?? nextRoster.viewWeek);
+      setError(null);
       setLoading(false);
     } catch (err) {
       setError(formatFetchError(err, "Roster load"));
@@ -132,10 +140,14 @@ export function MyTeamPageContent() {
   }, []);
 
   useEffect(() => {
-    void load();
-    const id = window.setInterval(() => void load(), 15_000);
+    void load(selectedWeek ?? undefined);
+  }, [load, selectedWeek]);
+
+  useEffect(() => {
+    if (!roster || roster.isHistorical) return;
+    const id = window.setInterval(() => void load(roster.viewWeek), 15_000);
     return () => window.clearInterval(id);
-  }, [load]);
+  }, [load, roster?.isHistorical, roster?.viewWeek]);
 
   async function handleIrSwap() {
     if (!irStarterId || !irBenchId) return;
@@ -165,7 +177,7 @@ export function MyTeamPageContent() {
 
       setIrStarterId(null);
       setIrBenchId(null);
-      void load().catch((reloadErr) => {
+      void load(selectedWeek ?? roster?.viewWeek).catch((reloadErr) => {
         setError(formatFetchError(reloadErr, "IR swap saved, but roster refresh"));
       });
     } catch (err) {
@@ -205,7 +217,7 @@ export function MyTeamPageContent() {
       }
 
       setCryptoPickId(null);
-      void load().catch((reloadErr) => {
+      void load(selectedWeek ?? roster?.viewWeek).catch((reloadErr) => {
         setError(
           formatFetchError(reloadErr, "Crypto rebalance saved, but roster refresh")
         );
@@ -217,7 +229,7 @@ export function MyTeamPageContent() {
     }
   }
 
-  if (loading) {
+  if (loading && !roster) {
     return <p className="text-muted text-sm py-12 text-center">Loading roster…</p>;
   }
 
@@ -231,26 +243,51 @@ export function MyTeamPageContent() {
 
   if (!roster) return null;
 
+  const viewingHistorical = roster.isHistorical;
+
   return (
     <div className="space-y-4">
       <section className="season-card">
-        <h1 className="text-xl font-bold">My Team</h1>
-        <p className="text-muted text-xs mt-1">
-          Week {roster.currentWeek} · prices refresh every 15s
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold">My Team</h1>
+            <p className="text-muted text-xs mt-1">
+              {viewingHistorical
+                ? `Archived week ${roster.viewWeek} snapshot`
+                : `Week ${roster.currentWeek} · prices refresh every 15s`}
+            </p>
+          </div>
+          <SeasonWeekNavigator
+            selectedWeek={roster.viewWeek}
+            currentWeek={roster.currentWeek}
+            availableWeeks={roster.availableWeeks}
+            onWeekChange={(week) => {
+              setLoading(true);
+              setSelectedWeek(week);
+            }}
+          />
+        </div>
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="rounded-lg border border-dark-border bg-dark/40 px-3 py-2">
             <p className="text-xs text-muted">Matchup gain (starters + crypto)</p>
             <p
               className={`text-lg font-bold ${
-                roster.scoringWeekGainPercent >= 0
+                (roster.scoringMode === "dollar_gain"
+                  ? roster.scoringWeekDollarGain
+                  : roster.scoringWeekGainPercent) >= 0
                   ? "text-green-400"
                   : "text-red-400"
               }`}
             >
-              {formatPct(roster.scoringWeekGainPercent)}
+              {roster.scoringMode === "dollar_gain"
+                ? formatSignedMoney(roster.scoringWeekDollarGain)
+                : formatPct(roster.scoringWeekGainPercent)}
             </p>
-            <p className="text-[11px] text-muted mt-0.5">Weekly % · bench excluded</p>
+            <p className="text-[11px] text-muted mt-0.5">
+              {roster.scoringMode === "dollar_gain"
+                ? "Weekly $ · bench excluded · matchup scoring"
+                : "Weekly % · bench excluded · matchup scoring"}
+            </p>
           </div>
           <div className="rounded-lg border border-dark-border bg-dark/40 px-3 py-2">
             <p className="text-xs text-muted">Winner of the Week pace</p>
@@ -278,8 +315,9 @@ export function MyTeamPageContent() {
         title="Starting stocks"
         subtitle="10 starters · scores in matchups"
         tone="starters"
+        scoringMode={roster.scoringMode}
         picks={roster.starters}
-        selectable
+        selectable={!viewingHistorical}
         selectedId={irStarterId}
         onSelect={(id) =>
           setIrStarterId((prev) => (prev === id ? null : id))
@@ -295,8 +333,9 @@ export function MyTeamPageContent() {
         title="Bench"
         subtitle="Does not score · promote via IR swap"
         tone="bench"
+        scoringMode={roster.scoringMode}
         picks={roster.bench}
-        selectable
+        selectable={!viewingHistorical}
         selectedId={irBenchId}
         onSelect={(id) => setIrBenchId((prev) => (prev === id ? null : id))}
         selectLabel="Promote"
@@ -306,6 +345,7 @@ export function MyTeamPageContent() {
         }}
       />
 
+      {!viewingHistorical && (
       <section className="season-card">
         <h2 className="season-card-title">IR swap</h2>
         <p className="text-sm text-muted mb-3">
@@ -322,13 +362,15 @@ export function MyTeamPageContent() {
           {busy ? "Processing…" : "Confirm IR swap"}
         </Button>
       </section>
+      )}
 
       <RosterBlock
         title="Crypto flex"
         subtitle="Scores in matchups · tap Sell to rebalance · multiple coins OK"
         tone="crypto"
+        scoringMode={roster.scoringMode}
         picks={roster.crypto}
-        selectable
+        selectable={!viewingHistorical}
         selectedId={cryptoPickId}
         onSelect={(id) => setCryptoPickId((prev) => (prev === id ? null : id))}
         selectLabel="Sell"
@@ -338,6 +380,7 @@ export function MyTeamPageContent() {
         }}
       />
 
+      {!viewingHistorical && (
       <section className="season-card">
         <h2 className="season-card-title">Crypto rebalance</h2>
         <p className="text-sm text-muted mb-3">
@@ -471,6 +514,7 @@ export function MyTeamPageContent() {
               : `Rebalance ${cryptoSellPercent}% → ${cryptoTarget}`}
         </Button>
       </section>
+      )}
 
       <StockDetailModal
         open={!!detailPick}
@@ -504,10 +548,84 @@ export function MyTeamPageContent() {
   );
 }
 
+type PickGainStat = {
+  label: string;
+  value: number;
+  format: "money" | "pct";
+};
+
+function getOrderedPickGainStats(
+  pick: RosterPickView,
+  scoringMode: LeagueScoringMode
+): PickGainStat[] {
+  const stats: Record<string, PickGainStat> = {
+    weekDollar: {
+      label: "Weekly $",
+      value: pick.weekDollarGain,
+      format: "money",
+    },
+    weekPct: {
+      label: "Weekly %",
+      value: pick.weekGainPercent,
+      format: "pct",
+    },
+    seasonDollar: {
+      label: "Season $",
+      value: pick.seasonDollarGain,
+      format: "money",
+    },
+    seasonPct: {
+      label: "Season %",
+      value: pick.gainPercent,
+      format: "pct",
+    },
+  };
+
+  const order =
+    scoringMode === "dollar_gain"
+      ? (["weekDollar", "weekPct", "seasonDollar", "seasonPct"] as const)
+      : (["weekPct", "weekDollar", "seasonPct", "seasonDollar"] as const);
+
+  return order.map((key) => stats[key]);
+}
+
+function formatPickGainStat(stat: PickGainStat): string {
+  return stat.format === "money"
+    ? formatSignedMoney(stat.value)
+    : formatPct(stat.value);
+}
+
+function PickGainStats({
+  pick,
+  scoringMode,
+}: {
+  pick: RosterPickView;
+  scoringMode: LeagueScoringMode;
+}) {
+  const stats = getOrderedPickGainStats(pick, scoringMode);
+
+  return (
+    <div className="space-y-0.5">
+      {stats.map((stat, index) => (
+        <p
+          key={stat.label}
+          className={`${
+            index === 0 ? "text-sm font-semibold" : "text-[11px] font-medium"
+          } ${stat.value >= 0 ? "text-green-400" : "text-red-400"}`}
+        >
+          {formatPickGainStat(stat)}
+          <span className="text-muted font-normal"> · {stat.label}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function RosterBlock({
   title,
   subtitle,
   tone,
+  scoringMode,
   picks,
   selectable = false,
   selectedId,
@@ -518,6 +636,7 @@ function RosterBlock({
   title: string;
   subtitle: string;
   tone: "starters" | "bench" | "crypto";
+  scoringMode: LeagueScoringMode;
   picks: RosterPickView[];
   selectable?: boolean;
   selectedId?: string | null;
@@ -566,26 +685,13 @@ function RosterBlock({
                       : `${formatShares(pick.shares)} · ${formatMoney(pick.budget_spent)}`}
                 </p>
               </div>
-              <div className="text-right shrink-0 mr-2">
+              <div className="text-right shrink-0 mr-2 min-w-[8.5rem]">
                 <p className="text-sm font-semibold">
                   {formatMoney(pick.currentValue)}
                 </p>
-                <p className="text-[11px] text-muted">Value</p>
-                <p
-                  className={`text-xs font-medium ${
-                    pick.weekDollarGain >= 0 ? "text-green-400" : "text-red-400"
-                  }`}
-                >
-                  {formatSignedMoney(pick.weekDollarGain)} wk
-                </p>
-                {pick.scores && (
-                  <p
-                    className={`text-[11px] ${
-                      pick.gainPercent >= 0 ? "text-green-400" : "text-red-400"
-                    }`}
-                  >
-                    {formatPct(pick.gainPercent)} season
-                  </p>
+                <p className="text-[11px] text-muted mb-1">Value</p>
+                {pick.symbol.toUpperCase() !== "__OPEN__" && (
+                  <PickGainStats pick={pick} scoringMode={scoringMode} />
                 )}
               </div>
               {selectable && onSelect && selectLabel && (

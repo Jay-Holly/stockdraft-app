@@ -12,6 +12,7 @@ import {
   type LeagueFormatType,
   type LeagueOpponentType,
   type LeaguePlayerCount,
+  type LeagueScoringMode,
   type LeagueVisibility,
 } from "@/lib/league/league-config";
 
@@ -80,6 +81,8 @@ export function CreateLeagueForm({
   const [playerCount, setPlayerCount] = useState<LeaguePlayerCount>(2);
   const [visibility, setVisibility] = useState<LeagueVisibility>("private");
   const [opponentType, setOpponentType] = useState<LeagueOpponentType>("all_human");
+  const [scoringMode, setScoringMode] =
+    useState<LeagueScoringMode>("percent_gain");
   const [leagueName, setLeagueName] = useState("");
   const [teamName, setTeamName] = useState(defaultTeamName);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -95,6 +98,7 @@ export function CreateLeagueForm({
       playerCount,
       visibility,
       opponentType,
+      scoringMode,
       leagueName,
       teamName,
       inviteEmail,
@@ -105,6 +109,7 @@ export function CreateLeagueForm({
       playerCount,
       visibility,
       opponentType,
+      scoringMode,
       leagueName,
       teamName,
       inviteEmail,
@@ -243,6 +248,25 @@ export function CreateLeagueForm({
           { value: "all_human", label: "All Human", hint: "Friends only" },
           { value: "all_ai", label: "All AI", hint: "Bot managers" },
           { value: "mixed", label: "Mixed", hint: "Humans + bots" },
+        ]}
+      />
+
+      <OptionGroup<LeagueScoringMode>
+        label="Weekly matchup scoring"
+        description="Locked for the season. Winner of the Week always uses total dollar gain across your full roster."
+        value={scoringMode}
+        onChange={setScoringMode}
+        options={[
+          {
+            value: "percent_gain",
+            label: "% Gain Mode",
+            hint: "Win by weekly % gain (starters + crypto)",
+          },
+          {
+            value: "dollar_gain",
+            label: "$ Gain Mode",
+            hint: "Win by weekly $ gain (starters + crypto)",
+          },
         ]}
       />
 

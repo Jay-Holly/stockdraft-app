@@ -13,8 +13,27 @@ import { resolveActiveAiLeague } from "@/lib/league/active-league";
 import { BOT_BY_ID } from "@/lib/league/bots";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
 import { getLeagueMemberTeamName, getLeagueOffBoardSymbols } from "@/lib/league/server";
+import {
+  parseLeagueScoringMode,
+} from "@/lib/league/scoring-mode";
+import {
+  findHumanMatchupForWeek,
+  getOpponentUserId,
+  humanScoreFromMatchup,
+  legacyWinnerForHuman,
+  opponentScoreFromMatchup,
+  type LeagueMatchupRow,
+} from "@/lib/matchup/types";
 import type { CryptoQuote } from "@/lib/coingecko/service";
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildHistoricalRosterPicks,
+  partitionHistoricalRosterPicks,
+} from "@/lib/roster/historical";
+import {
+  clampViewWeek,
+  getSeasonWeekContext,
+} from "@/lib/league/season-weeks";
 import {
   computeGainPercent,
   fetchStockQuotes,
@@ -23,8 +42,11 @@ import {
   getSymbolQuote,
 } from "@/lib/roster/quotes";
 import {
+  computeScoringWeekDollarGainForUser,
   computeScoringWeekGainPercent,
+  computeScoringWeekGainPercentForUser,
   computeWeekDollarGain,
+  computeWeekGainPercent,
   ensureWeekBaselines,
   getCurrentWeek,
   pickMarketValue,
@@ -98,6 +120,8 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
         gainPercent: 0,
         weekOpenValue: 0,
         weekDollarGain: 0,
+        weekGainPercent: 0,
+        seasonDollarGain: 0,
         scores: false,
       };
     }
@@ -130,6 +154,8 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
       gainPercent,
       weekOpenValue: 0,
       weekDollarGain: 0,
+      weekGainPercent: 0,
+      seasonDollarGain: 0,
       scores,
     };
   });
@@ -141,19 +167,83 @@ function isActiveCryptoPick(pick: RosterPickView): boolean {
 
 export async function loadRosterView(
   userId: string,
-  leagueId: string
+  leagueId: string,
+  options?: { weekNumber?: number }
 ): Promise<{ ok: true; roster: RosterView } | { ok: false; error: string }> {
   const state = await loadDraftStateDetailed(userId, { leagueId });
   if (!state.ok) return { ok: false, error: state.error };
 
   const supabase = await createClient();
+  const weekContext = await getSeasonWeekContext(leagueId, userId);
+  const viewWeek = clampViewWeek(
+    options?.weekNumber ?? weekContext.currentWeek,
+    weekContext.maxViewableWeek
+  );
+  const isHistorical = viewWeek < weekContext.currentWeek;
+
   const { data: league } = await supabase
     .from("leagues")
-    .select("status")
+    .select("status, scoring_mode")
     .eq("id", leagueId)
     .maybeSingle();
 
+  const scoringMode = parseLeagueScoringMode(league?.scoring_mode);
   const picks = state.state.picks.filter((p) => p.pick_type !== "skip");
+
+  if (isHistorical) {
+    const historicalPicks = await buildHistoricalRosterPicks(
+      leagueId,
+      userId,
+      viewWeek,
+      state.state.picks
+    );
+    const partitioned = partitionHistoricalRosterPicks(historicalPicks);
+    const scoringWeekInputs = historicalPicks
+      .filter((pick) => pick.pick_type === "stock" || pick.pick_type === "crypto")
+      .map((pick) => ({
+        currentValue: pick.currentValue,
+        weekOpenValue: pick.weekOpenValue,
+      }));
+
+    return {
+      ok: true,
+      roster: {
+        leagueId,
+        leagueStatus: league?.status ?? "active",
+        scoringMode,
+        currentWeek: weekContext.currentWeek,
+        viewWeek,
+        isHistorical: true,
+        availableWeeks: weekContext.availableWeeks,
+        maxViewableWeek: weekContext.maxViewableWeek,
+        starters: partitioned.starters,
+        bench: partitioned.bench,
+        crypto: partitioned.crypto,
+        cryptoBuyerCounts: {},
+        cryptoQuotes: {},
+        scoringGainPercent: calculateRosterGainPercent(
+          state.state.picks,
+          new Map(
+            historicalPicks
+              .filter((pick) => pick.pick_type === "stock" || pick.pick_type === "crypto")
+              .map((pick) => [pick.symbol.toUpperCase(), pick.currentPrice] as const)
+          )
+        ),
+        scoringWeekGainPercent:
+          computeScoringWeekGainPercent(scoringWeekInputs),
+        scoringWeekDollarGain: scoringWeekInputs.reduce(
+          (sum, pick) =>
+            sum + computeWeekDollarGain(pick.currentValue, pick.weekOpenValue),
+          0
+        ),
+        totalWeekDollarGain: historicalPicks.reduce(
+          (sum, pick) => sum + pick.weekDollarGain,
+          0
+        ),
+      },
+    };
+  }
+
   const enriched = await enrichPicks(picks);
   const buyerCounts = await fetchBuyerCounts(supabase, leagueId);
   const cryptoQuoteMap = await getCryptoQuotesMap();
@@ -166,12 +256,11 @@ export async function loadRosterView(
       changePercent: quote?.changePercent ?? 0,
     };
   }
-  const currentWeek = await getCurrentWeek(supabase, leagueId, userId);
   const baselineMap = await ensureWeekBaselines(
     supabase,
     leagueId,
     userId,
-    currentWeek,
+    viewWeek,
     picks
   );
 
@@ -183,11 +272,26 @@ export async function loadRosterView(
       pick.currentValue,
       weekOpenValue
     );
+    const weekGainPercent = computeWeekGainPercent(
+      pick.currentValue,
+      weekOpenValue
+    );
+    const seasonDollarGain = computeWeekDollarGain(
+      pick.currentValue,
+      pick.budget_spent
+    );
+    const seasonGainPercent =
+      pick.budget_spent > 0
+        ? computeGainPercent(pick.budget_spent, pick.currentValue)
+        : pick.gainPercent;
 
     return {
       ...pick,
       weekOpenValue,
       weekDollarGain,
+      weekGainPercent,
+      seasonDollarGain,
+      gainPercent: seasonGainPercent,
     };
   });
 
@@ -208,12 +312,22 @@ export async function loadRosterView(
     0
   );
 
+  const scoringWeekDollarGain = scoringWeekInputs.reduce(
+    (sum, pick) => sum + computeWeekDollarGain(pick.currentValue, pick.weekOpenValue),
+    0
+  );
+
   return {
     ok: true,
     roster: {
       leagueId,
       leagueStatus: league?.status ?? "active",
-      currentWeek,
+      scoringMode,
+      currentWeek: weekContext.currentWeek,
+      viewWeek,
+      isHistorical: false,
+      availableWeeks: weekContext.availableWeeks,
+      maxViewableWeek: weekContext.maxViewableWeek,
       starters: withWeekMetrics.filter((p) => p.pick_type === "stock"),
       bench: withWeekMetrics.filter((p) => p.pick_type === "bench"),
       crypto: withWeekMetrics.filter(
@@ -227,6 +341,7 @@ export async function loadRosterView(
       ),
       scoringWeekGainPercent:
         computeScoringWeekGainPercent(scoringWeekInputs),
+      scoringWeekDollarGain,
       totalWeekDollarGain,
     },
   };
@@ -256,6 +371,7 @@ export async function loadLeaguePageData(
 
   const { league } = season;
   const supabase = await createClient();
+  const scoringMode = parseLeagueScoringMode(league.scoring_mode);
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -279,20 +395,18 @@ export async function loadLeaguePageData(
     .eq("league_id", league.id)
     .order("week_number", { ascending: true });
 
+  const { data: allStandings } = await supabase
+    .from("league_standings")
+    .select("user_id, wins, losses")
+    .eq("league_id", league.id);
+
   const humanGain = await computeTeamGain(userId, league.id);
 
   const botStandings: LeagueTeamStanding[] = await Promise.all(
     bots.map(async (bot) => {
       const botGain = await computeTeamGain(bot.id, league.id);
       const botProfile = BOT_BY_ID.get(bot.id);
-      let wins = 0;
-      let losses = 0;
-
-      for (const m of matchups ?? []) {
-        if (m.opponent_bot_id !== bot.id || m.status !== "complete") continue;
-        if (m.winner === "human") losses += 1;
-        else if (m.winner === "opponent") wins += 1;
-      }
+      const row = allStandings?.find((entry) => entry.user_id === bot.id);
 
       return {
         userId: bot.id,
@@ -300,8 +414,8 @@ export async function loadLeaguePageData(
         isHuman: false,
         isBot: true,
         avatarColor: botProfile?.avatarColor ?? "blue",
-        wins,
-        losses,
+        wins: row?.wins ?? 0,
+        losses: row?.losses ?? 0,
         seasonGainPercent: botGain,
       };
     })
@@ -324,27 +438,49 @@ export async function loadLeaguePageData(
     return b.seasonGainPercent - a.seasonGainPercent;
   });
 
-  const currentMatchupRow =
-    matchups?.find((m) => m.week_number === currentWeek) ?? null;
+  const currentMatchupRow = findHumanMatchupForWeek(
+    (matchups ?? []) as LeagueMatchupRow[],
+    userId,
+    currentWeek
+  );
 
   let currentMatchup: MatchupLiveView | null = null;
 
   if (currentMatchupRow) {
-    const opponentGain = await computeTeamGain(
-      currentMatchupRow.opponent_bot_id,
-      league.id
-    );
+    const opponentId = getOpponentUserId(currentMatchupRow, userId);
+    const opponentName = opponentId
+      ? await getLeagueMemberTeamName(league.id, opponentId)
+      : (currentMatchupRow.opponent_name ?? "Opponent");
+
+    const [humanWeeklyPercent, opponentWeeklyPercent, humanWeeklyDollar, opponentWeeklyDollar] =
+      opponentId
+        ? await Promise.all([
+            computeScoringWeekGainPercentForUser(userId, league.id),
+            computeScoringWeekGainPercentForUser(opponentId, league.id),
+            computeScoringWeekDollarGainForUser(userId, league.id),
+            computeScoringWeekDollarGainForUser(opponentId, league.id),
+          ])
+        : [0, 0, 0, 0];
 
     currentMatchup = {
       weekNumber: currentMatchupRow.week_number,
-      opponentName: currentMatchupRow.opponent_name,
-      opponentBotId: currentMatchupRow.opponent_bot_id,
+      opponentName,
+      opponentBotId: opponentId ?? currentMatchupRow.opponent_bot_id ?? "",
       status: currentMatchupRow.status,
-      humanGainPercent: humanGain,
-      opponentGainPercent: opponentGain,
-      winner: currentMatchupRow.winner,
-      humanScored: currentMatchupRow.human_score_pct,
-      opponentScored: currentMatchupRow.opponent_score_pct,
+      scoringMode,
+      humanGainPercent: humanWeeklyPercent,
+      opponentGainPercent: opponentWeeklyPercent,
+      humanWeeklyScore:
+        scoringMode === "dollar_gain"
+          ? humanWeeklyDollar
+          : humanWeeklyPercent,
+      opponentWeeklyScore:
+        scoringMode === "dollar_gain"
+          ? opponentWeeklyDollar
+          : opponentWeeklyPercent,
+      winner: legacyWinnerForHuman(currentMatchupRow, userId),
+      humanScored: humanScoreFromMatchup(currentMatchupRow, userId),
+      opponentScored: opponentScoreFromMatchup(currentMatchupRow, userId),
     };
   }
 
@@ -355,6 +491,7 @@ export async function loadLeaguePageData(
       leagueSupportCode: league.support_code,
       leagueName: league.name,
       leagueStatus: league.status,
+      scoringMode,
       currentWeek,
       humanRecord: {
         wins: standingsRow?.wins ?? 0,

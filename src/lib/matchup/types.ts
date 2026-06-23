@@ -1,0 +1,85 @@
+export type LeagueMatchupRow = {
+  id: string;
+  league_id: string;
+  week_number: number;
+  opponent_bot_id: string | null;
+  opponent_name: string | null;
+  human_score_pct: number | null;
+  opponent_score_pct: number | null;
+  winner: string | null;
+  status: string;
+  home_user_id: string | null;
+  away_user_id: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  winner_user_id: string | null;
+  is_playoff: boolean;
+  playoff_round: string | null;
+};
+
+export function getOpponentUserId(
+  matchup: Pick<LeagueMatchupRow, "home_user_id" | "away_user_id">,
+  userId: string
+): string | null {
+  if (matchup.home_user_id === userId) return matchup.away_user_id;
+  if (matchup.away_user_id === userId) return matchup.home_user_id;
+  return null;
+}
+
+export function findHumanMatchupForWeek(
+  matchups: LeagueMatchupRow[],
+  userId: string,
+  weekNumber: number
+): LeagueMatchupRow | null {
+  return (
+    matchups.find(
+      (matchup) =>
+        matchup.week_number === weekNumber &&
+        (matchup.home_user_id === userId || matchup.away_user_id === userId)
+    ) ?? null
+  );
+}
+
+export function legacyWinnerForHuman(
+  matchup: LeagueMatchupRow,
+  humanUserId: string
+): "human" | "opponent" | "tie" | null {
+  if (!matchup.winner_user_id) {
+    if (matchup.status === "complete") return "tie";
+    return null;
+  }
+  if (matchup.winner_user_id === humanUserId) return "human";
+  if (
+    matchup.home_user_id === humanUserId ||
+    matchup.away_user_id === humanUserId
+  ) {
+    return "opponent";
+  }
+  return null;
+}
+
+export function humanScoreFromMatchup(
+  matchup: LeagueMatchupRow,
+  humanUserId: string
+): number | null {
+  if (matchup.home_user_id === humanUserId) {
+    return matchup.home_score ?? matchup.human_score_pct;
+  }
+  if (matchup.away_user_id === humanUserId) {
+    return matchup.away_score ?? matchup.opponent_score_pct;
+  }
+  return matchup.human_score_pct;
+}
+
+export function opponentScoreFromMatchup(
+  matchup: LeagueMatchupRow,
+  humanUserId: string
+): number | null {
+  if (matchup.home_user_id === humanUserId) {
+    return matchup.away_score ?? matchup.opponent_score_pct;
+  }
+  if (matchup.away_user_id === humanUserId) {
+    return matchup.home_score ?? matchup.human_score_pct;
+  }
+  return matchup.opponent_score_pct;
+}

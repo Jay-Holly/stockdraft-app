@@ -1,4 +1,5 @@
 import type { DraftPick, CryptoBuyerCounts } from "@/lib/draft/types";
+import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
 
 export type RosterPickView = DraftPick & {
   acquired_via?: string;
@@ -8,13 +9,20 @@ export type RosterPickView = DraftPick & {
   gainPercent: number;
   weekOpenValue: number;
   weekDollarGain: number;
+  weekGainPercent: number;
+  seasonDollarGain: number;
   scores: boolean;
 };
 
 export type RosterView = {
   leagueId: string;
   leagueStatus: string;
+  scoringMode: LeagueScoringMode;
   currentWeek: number;
+  viewWeek: number;
+  isHistorical: boolean;
+  availableWeeks: number[];
+  maxViewableWeek: number;
   starters: RosterPickView[];
   bench: RosterPickView[];
   crypto: RosterPickView[];
@@ -22,8 +30,10 @@ export type RosterView = {
   cryptoQuotes: Record<string, { price: number; changePercent: number }>;
   /** Season-to-date % on scoring picks (legacy label). */
   scoringGainPercent: number;
-  /** Weekly % on starters + crypto — matchup scoring metric. */
+  /** Weekly % on starters + crypto — matchup scoring metric in % Gain Mode. */
   scoringWeekGainPercent: number;
+  /** Weekly $ on starters + crypto — matchup scoring metric in $ Gain Mode. */
+  scoringWeekDollarGain: number;
   /** Weekly $ gain across all roster slots (Winner of the Week). */
   totalWeekDollarGain: number;
 };
@@ -44,8 +54,11 @@ export type MatchupLiveView = {
   opponentName: string;
   opponentBotId: string;
   status: string;
+  scoringMode: LeagueScoringMode;
   humanGainPercent: number;
   opponentGainPercent: number;
+  humanWeeklyScore: number;
+  opponentWeeklyScore: number;
   winner: string | null;
   humanScored: number | null;
   opponentScored: number | null;
@@ -56,6 +69,7 @@ export type LeaguePageData = {
   leagueSupportCode: string;
   leagueName: string;
   leagueStatus: string;
+  scoringMode: LeagueScoringMode;
   currentWeek: number;
   humanRecord: { wins: number; losses: number };
   standings: LeagueTeamStanding[];

@@ -1,7 +1,10 @@
+import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
+
 export type LeagueFormatType = "standard" | "sports_league";
 export type LeagueVisibility = "private" | "public";
 export type LeagueOpponentType = "all_ai" | "all_human" | "mixed";
 export type LeaguePlayerCount = 2 | 4 | 6 | 8 | 10 | 12;
+export type { LeagueScoringMode };
 
 export const STANDARD_PLAYER_COUNTS: LeaguePlayerCount[] = [
   2, 4, 6, 8, 10, 12,
@@ -20,6 +23,8 @@ export type CreateLeagueConfig = {
   playerCount: LeaguePlayerCount;
   visibility: LeagueVisibility;
   opponentType: LeagueOpponentType;
+  /** Locked for the season — weekly matchups use this metric. */
+  scoringMode: LeagueScoringMode;
   leagueName: string;
   teamName: string;
   inviteEmail?: string;

@@ -655,7 +655,7 @@ export async function advanceAfterPick(
 
     if (league?.league_type === "ai") {
       const { activateAiLeagueSchedule } = await import("@/lib/league/ai-league");
-      await activateAiLeagueSchedule(leagueId);
+      await activateAiLeagueSchedule(leagueId, userId);
     } else if (league?.league_type === "human") {
       const { activateHumanLeagueSchedule } = await import("@/lib/league/human-league");
       await activateHumanLeagueSchedule(leagueId);

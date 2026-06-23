@@ -10,6 +10,11 @@ import { HUMAN_LEAGUE_FIELDS } from "@/lib/league/fields";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
 import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import { isHumanLeaguePoCSupported } from "@/lib/league/league-config";
+import { resolveAppBaseUrl } from "@/lib/app-url";
+import {
+  DEFAULT_LEAGUE_SCORING_MODE,
+  parseLeagueScoringMode,
+} from "@/lib/league/scoring-mode";
 
 export type HumanLeague = League & {
   league_type: "human";
@@ -21,6 +26,7 @@ export type HumanLeague = League & {
   opponent_type: "all_ai" | "all_human" | "mixed";
   invite_token: string | null;
   invite_email: string | null;
+  scoring_mode: "percent_gain" | "dollar_gain";
 };
 
 export type HumanLeagueInvitePreview = {
@@ -32,6 +38,13 @@ export type HumanLeagueInvitePreview = {
   status: string;
   opponentType: string;
   formatType: string;
+};
+
+export type PendingHumanLeagueInvite = {
+  leagueId: string;
+  leagueName: string;
+  inviteToken: string;
+  commissionerTeam: string;
 };
 
 export type HumanLeagueListItem = {
@@ -93,11 +106,33 @@ export async function getLeagueInvitePreview(
   };
 }
 
+export async function listPendingHumanLeagueInvites(): Promise<
+  PendingHumanLeagueInvite[]
+> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_pending_human_league_invites");
+
+  if (error || !data?.length) {
+    return [];
+  }
+
+  return data.map(
+    (row: {
+      league_id: string;
+      league_name: string;
+      invite_token: string;
+      commissioner_team: string;
+    }) => ({
+      leagueId: row.league_id,
+      leagueName: row.league_name,
+      inviteToken: String(row.invite_token),
+      commissionerTeam: row.commissioner_team,
+    })
+  );
+}
+
 function buildInviteLink(token: string): string {
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
-    "http://localhost:3000";
-  return `${base}/leagues/join/${token}`;
+  return `${resolveAppBaseUrl()}/leagues/join/${token}`;
 }
 
 export async function createHumanLeague(
@@ -141,6 +176,9 @@ export async function createHumanLeague(
       opponent_type: config.opponentType,
       invite_token: inviteToken,
       invite_email: inviteEmail,
+      scoring_mode: parseLeagueScoringMode(
+        config.scoringMode ?? DEFAULT_LEAGUE_SCORING_MODE
+      ),
       draft_format: "live",
       pick_time_seconds: 120,
     })

@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { formatPct } from "@/lib/format";
+import { formatPct, formatSignedMoney } from "@/lib/format";
+import {
+  formatMatchupScore,
+  scoringModeShortLabel,
+} from "@/lib/league/scoring-mode";
 import type { LeaguePageData } from "@/lib/roster/types";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 
@@ -83,7 +87,8 @@ export function LeaguePageContent() {
         </div>
         <h1 className="text-xl font-bold">{data.leagueName}</h1>
         <p className="text-muted text-sm mt-1 capitalize">
-          Week {data.currentWeek} · {data.leagueStatus}
+          Week {data.currentWeek} · {data.leagueStatus} ·{" "}
+          {scoringModeShortLabel(data.scoringMode)} matchups
         </p>
         <p className="text-2xl font-black text-gold mt-3">
           {data.humanRecord.wins}-{data.humanRecord.losses}
@@ -110,9 +115,19 @@ export function LeaguePageContent() {
                     : ""
                 }`}
               >
-                {formatPct(data.currentMatchup.humanGainPercent)}
+                {formatMatchupScore(
+                  data.currentMatchup.status === "complete" &&
+                    data.currentMatchup.humanScored != null
+                    ? data.currentMatchup.humanScored
+                    : data.currentMatchup.humanWeeklyScore,
+                  data.scoringMode
+                )}
               </p>
-              <p className="text-xs text-muted">Active roster gain</p>
+              <p className="text-xs text-muted">
+                {data.scoringMode === "dollar_gain"
+                  ? "Weekly $ gain · starters + crypto"
+                  : "Weekly % gain · starters + crypto"}
+              </p>
             </div>
             <div className="season-matchup-vs">vs</div>
             <div className="season-matchup-team">
@@ -124,9 +139,19 @@ export function LeaguePageContent() {
                     : ""
                 }`}
               >
-                {formatPct(data.currentMatchup.opponentGainPercent)}
+                {formatMatchupScore(
+                  data.currentMatchup.status === "complete" &&
+                    data.currentMatchup.opponentScored != null
+                    ? data.currentMatchup.opponentScored
+                    : data.currentMatchup.opponentWeeklyScore,
+                  data.scoringMode
+                )}
               </p>
-              <p className="text-xs text-muted">Active roster gain</p>
+              <p className="text-xs text-muted">
+                {data.scoringMode === "dollar_gain"
+                  ? "Weekly $ gain · starters + crypto"
+                  : "Weekly % gain · starters + crypto"}
+              </p>
             </div>
           </div>
           {data.currentMatchup.status === "complete" &&

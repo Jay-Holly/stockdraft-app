@@ -5,7 +5,7 @@ import { loadRosterView, requireSeasonLeague } from "@/lib/roster/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const started = Date.now();
 
   try {
@@ -19,7 +19,13 @@ export async function GET() {
       return NextResponse.json({ error: season.error }, { status: 400 });
     }
 
-    const result = await loadRosterView(user.id, season.league.id);
+    const { searchParams } = new URL(request.url);
+    const weekParam = searchParams.get("week");
+    const weekNumber = weekParam ? Number(weekParam) : undefined;
+
+    const result = await loadRosterView(user.id, season.league.id, {
+      weekNumber: Number.isFinite(weekNumber) ? weekNumber : undefined,
+    });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }

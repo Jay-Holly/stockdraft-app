@@ -19,11 +19,25 @@ import {
 } from "@/lib/league/active-league";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
 import { AI_LEAGUE_FIELDS } from "@/lib/league/fields";
+import { DEFAULT_LEAGUE_SCORING_MODE } from "@/lib/league/scoring-mode";
+import {
+  generateRegularSeasonSchedule,
+  normalizePlayerCount,
+} from "@/lib/matchup/schedule";
+import { getLeagueTeamIds } from "@/lib/matchup/league-teams";
+import {
+  findHumanMatchupForWeek,
+  getOpponentUserId,
+  humanScoreFromMatchup,
+  opponentScoreFromMatchup,
+  legacyWinnerForHuman,
+} from "@/lib/matchup/types";
 
 export type AiLeague = League & {
   league_type: "solo" | "ai";
   status: "drafting" | "active" | "complete";
   owner_user_id: string | null;
+  scoring_mode: "percent_gain" | "dollar_gain";
 };
 
 export type AiLeagueSummary = {
@@ -164,6 +178,8 @@ export async function createFreeAiLeague(
       league_type: "ai",
       status: "drafting",
       owner_user_id: userId,
+      scoring_mode: DEFAULT_LEAGUE_SCORING_MODE,
+      player_count: 4,
     })
     .select(AI_LEAGUE_FIELDS)
     .single();
@@ -238,6 +254,17 @@ export async function createFreeAiLeague(
     current_week: 1,
   });
 
+  for (const personality of selectedPersonalities) {
+    const profile = getBotProfile(personality);
+    await supabase.from("league_standings").insert({
+      league_id: leagueId,
+      user_id: profile.id,
+      wins: 0,
+      losses: 0,
+      current_week: 1,
+    });
+  }
+
   return { league: league as AiLeague };
 }
 
@@ -265,7 +292,8 @@ export async function deleteAiLeagueForUser(
 }
 
 export async function activateAiLeagueSchedule(
-  leagueId: string
+  leagueId: string,
+  humanUserId: string
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
@@ -277,23 +305,54 @@ export async function activateAiLeagueSchedule(
   if (count && count > 0) {
     await supabase
       .from("leagues")
-      .update({ status: "active" })
+      .update({ status: "active", current_week: 1 })
       .eq("id", leagueId);
     return {};
   }
 
-  const bots = await getLeagueBotMembers(leagueId);
-  const matchups = bots.map((bot, index) => ({
-    league_id: leagueId,
-    week_number: index + 1,
-    opponent_bot_id: bot.id,
-    opponent_name: bot.displayName,
-    status: "scheduled" as const,
-  }));
+  const { data: leagueRow } = await supabase
+    .from("leagues")
+    .select("player_count, owner_user_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  const ownerId = leagueRow?.owner_user_id ?? humanUserId;
+  const playerCount = normalizePlayerCount(leagueRow?.player_count ?? 4);
+  const teamIds = await getLeagueTeamIds(leagueId, ownerId);
+  const schedule = generateRegularSeasonSchedule(teamIds);
+
+  const rows = await Promise.all(
+    schedule.map(async (game) => {
+      const homeName = await getLeagueMemberTeamName(leagueId, game.homeUserId);
+      const awayName = await getLeagueMemberTeamName(leagueId, game.awayUserId);
+      const humanIsHome = game.homeUserId === ownerId;
+      const humanIsAway = game.awayUserId === ownerId;
+
+      return {
+        league_id: leagueId,
+        week_number: game.weekNumber,
+        home_user_id: game.homeUserId,
+        away_user_id: game.awayUserId,
+        is_playoff: false,
+        playoff_round: null,
+        opponent_bot_id: humanIsHome
+          ? game.awayUserId
+          : humanIsAway
+            ? game.homeUserId
+            : game.awayUserId,
+        opponent_name: humanIsHome
+          ? awayName
+          : humanIsAway
+            ? homeName
+            : `${homeName} vs ${awayName}`,
+        status: "scheduled" as const,
+      };
+    })
+  );
 
   const { error: matchupError } = await supabase
     .from("league_matchups")
-    .insert(matchups);
+    .insert(rows);
 
   if (matchupError) {
     return { error: matchupError.message };
@@ -301,7 +360,7 @@ export async function activateAiLeagueSchedule(
 
   const { error: leagueError } = await supabase
     .from("leagues")
-    .update({ status: "active" })
+    .update({ status: "active", current_week: 1, player_count: playerCount })
     .eq("id", leagueId);
 
   if (leagueError) return { error: leagueError.message };
@@ -371,13 +430,41 @@ export async function getAiLeagueSummary(
     .order("week_number", { ascending: true });
 
   const currentWeek = standingsRow?.current_week ?? 1;
-  const currentMatchupRow =
-    matchups?.find((m) => m.week_number === currentWeek) ?? null;
+  const currentMatchupRow = findHumanMatchupForWeek(
+    matchups ?? [],
+    userId,
+    currentWeek
+  );
 
   const lastCompletedMatchupRow =
     matchups
-      ?.filter((m) => m.status === "complete")
+      ?.filter(
+        (m) =>
+          m.status === "complete" &&
+          (m.home_user_id === userId || m.away_user_id === userId)
+      )
       .sort((a, b) => b.week_number - a.week_number)[0] ?? null;
+
+  const resolvedLeagueId = league.id;
+
+  async function mapHumanMatchup(
+    row: NonNullable<typeof currentMatchupRow>
+  ) {
+    const opponentId = getOpponentUserId(row, userId);
+    const opponentName = opponentId
+      ? await getLeagueMemberTeamName(resolvedLeagueId, opponentId)
+      : (row.opponent_name ?? "Opponent");
+
+    return {
+      weekNumber: row.week_number,
+      opponentName,
+      opponentBotId: opponentId ?? row.opponent_bot_id ?? "",
+      humanScorePct: humanScoreFromMatchup(row, userId),
+      opponentScorePct: opponentScoreFromMatchup(row, userId),
+      winner: legacyWinnerForHuman(row, userId),
+      status: row.status,
+    };
+  }
 
   return {
     league,
@@ -391,24 +478,10 @@ export async function getAiLeagueSummary(
         }
       : null,
     currentMatchup: currentMatchupRow
-      ? {
-          weekNumber: currentMatchupRow.week_number,
-          opponentName: currentMatchupRow.opponent_name,
-          opponentBotId: currentMatchupRow.opponent_bot_id,
-          humanScorePct: currentMatchupRow.human_score_pct,
-          opponentScorePct: currentMatchupRow.opponent_score_pct,
-          winner: currentMatchupRow.winner,
-          status: currentMatchupRow.status,
-        }
+      ? await mapHumanMatchup(currentMatchupRow)
       : null,
     lastCompletedMatchup: lastCompletedMatchupRow
-      ? {
-          weekNumber: lastCompletedMatchupRow.week_number,
-          opponentName: lastCompletedMatchupRow.opponent_name,
-          humanScorePct: lastCompletedMatchupRow.human_score_pct,
-          opponentScorePct: lastCompletedMatchupRow.opponent_score_pct,
-          winner: lastCompletedMatchupRow.winner,
-        }
+      ? await mapHumanMatchup(lastCompletedMatchupRow)
       : null,
     bots,
   };

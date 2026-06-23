@@ -7,6 +7,7 @@ import {
   isHumanLeaguePoCSupported,
   unsupportedLeagueConfigMessage,
 } from "@/lib/league/league-config";
+import { parseLeagueScoringMode } from "@/lib/league/scoring-mode";
 
 export async function POST(request: Request) {
   const { user } = await getAuthenticatedUserId();
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
     leagueName: typeof body.leagueName === "string" ? body.leagueName : "",
     teamName: typeof body.teamName === "string" ? body.teamName : "",
     inviteEmail: typeof body.inviteEmail === "string" ? body.inviteEmail : "",
+    scoringMode: parseLeagueScoringMode(body.scoringMode),
   };
 
   if (!isHumanLeaguePoCSupported(config)) {

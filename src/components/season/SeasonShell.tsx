@@ -7,6 +7,7 @@ import { Logo } from "@/components/Logo";
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/league", label: "League" },
+  { href: "/matchups", label: "Matchups" },
   { href: "/my-team", label: "My Team" },
   { href: "/free-agents", label: "Free Agents" },
 ];
