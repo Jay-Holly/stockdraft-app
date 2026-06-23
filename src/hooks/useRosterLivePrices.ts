@@ -5,6 +5,14 @@ import { getFinnhubService } from "@/lib/finnhub/service";
 import { getMarketSession } from "@/lib/market/hours";
 import type { MarketQuote, MarketSession } from "@/lib/market/types";
 
+type RosteredResponse = {
+  symbols: string[];
+  quotes?: Record<
+    string,
+    { price: number; prevClose: number; changePercent: number }
+  >;
+};
+
 function buildStockQuote(
   symbol: string,
   price: number,
@@ -31,43 +39,57 @@ export function useRosterLivePrices() {
   const [error, setError] = useState<string | null>(null);
   const prevCloseRef = useRef<Record<string, number>>({});
 
+  const applyQuotes = useCallback(
+    (
+      symbols: string[],
+      data: Record<
+        string,
+        { price: number; prevClose: number; changePercent: number }
+      >
+    ) => {
+      const nextPrevClose = { ...prevCloseRef.current };
+      const next: Record<string, MarketQuote> = {};
+
+      for (const symbol of symbols) {
+        const quote = data[symbol];
+        if (!quote) continue;
+        nextPrevClose[symbol] = quote.prevClose;
+        next[symbol] = buildStockQuote(symbol, quote.price, quote.prevClose);
+      }
+
+      prevCloseRef.current = nextPrevClose;
+      setQuotes(next);
+    },
+    []
+  );
+
   const loadRostered = useCallback(async () => {
     const response = await fetch("/api/market/rostered");
     if (!response.ok) throw new Error("Failed to load rostered symbols");
-    const data = (await response.json()) as { symbols: string[] };
-    setRosteredSymbols(data.symbols ?? []);
-    return data.symbols ?? [];
-  }, []);
-
-  const refreshQuotes = useCallback(async (symbols: string[]) => {
-    if (symbols.length === 0) {
-      setQuotes({});
-      return;
+    const data = (await response.json()) as RosteredResponse;
+    const symbols = data.symbols ?? [];
+    setRosteredSymbols(symbols);
+    if (data.quotes) {
+      applyQuotes(symbols, data.quotes);
     }
+    return symbols;
+  }, [applyQuotes]);
 
-    const response = await fetch(
-      `/api/market/stocks?symbols=${encodeURIComponent(symbols.join(","))}`
-    );
-    if (!response.ok) throw new Error("Failed to fetch roster quotes");
+  const refreshQuotes = useCallback(
+    async (symbols: string[]) => {
+      if (symbols.length === 0) {
+        setQuotes({});
+        return;
+      }
 
-    const data = (await response.json()) as Record<
-      string,
-      { price: number; prevClose: number; changePercent: number }
-    >;
+      const response = await fetch("/api/market/rostered");
+      if (!response.ok) throw new Error("Failed to fetch roster quotes");
 
-    const nextPrevClose = { ...prevCloseRef.current };
-    const next: Record<string, MarketQuote> = {};
-
-    for (const symbol of symbols) {
-      const quote = data[symbol];
-      if (!quote) continue;
-      nextPrevClose[symbol] = quote.prevClose;
-      next[symbol] = buildStockQuote(symbol, quote.price, quote.prevClose);
-    }
-
-    prevCloseRef.current = nextPrevClose;
-    setQuotes(next);
-  }, []);
+      const data = (await response.json()) as RosteredResponse;
+      applyQuotes(symbols, data.quotes ?? {});
+    },
+    [applyQuotes]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -76,8 +98,7 @@ export function useRosterLivePrices() {
       setLoading(true);
       setError(null);
       try {
-        const symbols = await loadRostered();
-        if (!cancelled) await refreshQuotes(symbols);
+        await loadRostered();
       } catch {
         if (!cancelled) setError("Unable to load roster live prices.");
       } finally {
@@ -87,14 +108,14 @@ export function useRosterLivePrices() {
 
     void init();
     const interval = window.setInterval(() => {
-      void loadRostered().then((symbols) => refreshQuotes(symbols));
+      void loadRostered();
     }, 60_000);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [loadRostered, refreshQuotes]);
+  }, [loadRostered]);
 
   useEffect(() => {
     const updateSession = () => setSession(getMarketSession());

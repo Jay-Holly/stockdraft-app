@@ -1,11 +1,9 @@
-import { fetchFinnhubQuotes } from "@/lib/finnhub/service";
-import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
 import {
-  fetchCryptoQuotesWithMeta,
-  getLastCryptoQuoteSource as getCoingeckoQuoteSource,
-  type CryptoQuoteSource,
-} from "@/lib/coingecko/service";
-import { fetchCryptoPool } from "@/lib/crypto-pool/server";
+  fetchCachedCryptoQuotes,
+  fetchCachedStockQuotes,
+} from "@/lib/market/cached-prices";
+import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
+import { fetchCryptoPool, getCachedCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoSymbol } from "@/lib/draft/engine";
 
 export async function getStockQuote(symbol: string): Promise<{
@@ -24,9 +22,9 @@ export async function fetchStockQuotes(
 
   if (unique.length === 0) return map;
 
-  const live = await fetchFinnhubQuotes(unique);
+  const cached = await fetchCachedStockQuotes(unique);
   for (const symbol of unique) {
-    const quote = live[symbol];
+    const quote = cached[symbol];
     if (quote?.price) {
       map.set(symbol, {
         price: quote.price,
@@ -44,15 +42,43 @@ export async function fetchStockQuotes(
   return map;
 }
 
-export function getLastCryptoQuoteSource(): CryptoQuoteSource | null {
-  return getCoingeckoQuoteSource();
+function referenceCryptoQuotes(): Record<
+  string,
+  { price: number; changePercent: number }
+> {
+  const quotes: Record<string, { price: number; changePercent: number }> = {};
+  for (const coin of getCachedCryptoPool()) {
+    if (coin.referencePriceUsd != null && coin.referencePriceUsd > 0) {
+      quotes[coin.symbol] = {
+        price: coin.referencePriceUsd,
+        changePercent: 0,
+      };
+    }
+  }
+  return quotes;
 }
 
 export async function getCryptoQuotesMap(): Promise<
   Record<string, { price: number; changePercent: number }>
 > {
   await fetchCryptoPool();
-  const { quotes } = await fetchCryptoQuotesWithMeta();
+  const symbols = getCachedCryptoPool().map((coin) => coin.symbol);
+  const cached = await fetchCachedCryptoQuotes(symbols);
+  const quotes: Record<string, { price: number; changePercent: number }> = {};
+
+  for (const symbol of symbols) {
+    const quote = cached[symbol];
+    if (quote?.price) {
+      quotes[symbol] = {
+        price: quote.price,
+        changePercent: quote.changePercent,
+      };
+      continue;
+    }
+    const ref = referenceCryptoQuotes()[symbol];
+    quotes[symbol] = ref ?? { price: 0, changePercent: 0 };
+  }
+
   return quotes;
 }
 

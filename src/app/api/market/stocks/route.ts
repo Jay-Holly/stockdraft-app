@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { fetchFinnhubQuotes } from "@/lib/finnhub/service";
+import {
+  fetchCachedStockQuotes,
+  toApiQuote,
+} from "@/lib/market/cached-prices";
 import { mergeQuotesWithFallback } from "@/lib/market/fallback-quotes";
 
 export async function GET(request: Request) {
@@ -23,12 +26,10 @@ export async function GET(request: Request) {
     return NextResponse.json({});
   }
 
-  const live = await fetchFinnhubQuotes(symbols);
-  const missing = symbols.filter((s) => !live[s]);
-  if (missing.length > 0) {
-    const retried = await fetchFinnhubQuotes(missing);
-    Object.assign(live, retried);
-  }
+  const cached = await fetchCachedStockQuotes(symbols);
+  const live = Object.fromEntries(
+    Object.entries(cached).map(([symbol, quote]) => [symbol, toApiQuote(quote)])
+  );
 
   const quotes = mergeQuotesWithFallback(symbols, live);
   return NextResponse.json(quotes);

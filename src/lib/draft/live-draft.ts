@@ -1,4 +1,3 @@
-import { fetchCryptoQuotes } from "@/lib/coingecko/service";
 import { fetchDraftPool } from "@/lib/draft-pool/server";
 import { decideAiPick } from "@/lib/draft/ai-strategy";
 import {
@@ -22,8 +21,8 @@ import type {
   LiveDraftView,
 } from "@/lib/draft/types";
 import type { BotConfig, BotPersonality } from "@/lib/league/bots";
-import { fetchFinnhubQuote } from "@/lib/finnhub/service";
 import { BOT_BY_ID } from "@/lib/league/bots";
+import { getCryptoQuotesMap, getStockQuote } from "@/lib/roster/quotes";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
 import { MIN_STOCK_PRICE_USD } from "@/lib/market/draft-pool";
 import {
@@ -58,6 +57,12 @@ const BOT_PICK_DELAY_MS = 1500;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** PostgREST occasionally deserializes uuid[] as null — always normalize before use. */
+export function normalizeDraftOrder(order: string[] | null | undefined): string[] {
+  if (!Array.isArray(order)) return [];
+  return order.filter((userId): userId is string => Boolean(userId));
 }
 
 export function isBotUserId(userId: string): boolean {
@@ -186,6 +191,9 @@ export async function buildLiveDraftView(
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state) return null;
 
+  const draftOrderIds = normalizeDraftOrder(state.draft_order);
+  if (draftOrderIds.length === 0) return null;
+
   const supabase = await createClient();
   const { data: leagueMeta } = await supabase
     .from("leagues")
@@ -202,7 +210,7 @@ export async function buildLiveDraftView(
     });
 
   const draftOrder = await Promise.all(
-    state.draft_order.map(async (userId) => ({
+    draftOrderIds.map(async (userId) => ({
       userId,
       teamName: await getTeamName(supabase, leagueId, userId),
       isBot: stealthBots
@@ -244,20 +252,19 @@ async function repairLiveDraftOrderIfNeeded(leagueId: string): Promise<void> {
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.status !== "in_progress") return;
 
+  const order = normalizeDraftOrder(state.draft_order);
   const leagueBots = await getLeagueBotMembers(leagueId);
   if (leagueBots.length === 0) return;
 
   const botIds = leagueBots.map((b) => b.id);
   const hasAllBots =
-    botIds.every((id) => state.draft_order.includes(id)) &&
-    state.draft_order.length === 1 + botIds.length;
+    botIds.every((id) => order.includes(id)) &&
+    order.length === 1 + botIds.length;
 
   if (hasAllBots) return;
 
   const humanId =
-    state.draft_order.find((id) => !isBotUserId(id)) ??
-    state.draft_order[0] ??
-    null;
+    order.find((id) => !isBotUserId(id)) ?? order[0] ?? null;
   if (!humanId) return;
 
   const draftOrder = [humanId, ...botIds];
@@ -282,9 +289,27 @@ export async function startLiveDraft(
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
-  const resolvedOrder =
+  const resolvedOrder = normalizeDraftOrder(
     options?.draftOrder ??
-    [humanUserId, ...(await getLeagueBotMembers(leagueId)).map((b) => b.id)];
+      [humanUserId, ...(await getLeagueBotMembers(leagueId)).map((b) => b.id)]
+  );
+
+  if (resolvedOrder.length < 2) {
+    return { error: "Not enough teams to start the live draft." };
+  }
+
+  const existing = await getLeagueDraftStateRow(leagueId);
+  const existingOrder = normalizeDraftOrder(existing?.draft_order);
+  if (
+    existing &&
+    existingOrder.length >= 2 &&
+    existing.status !== "complete"
+  ) {
+    if (!existing.on_clock_user_id && existing.status === "in_progress") {
+      return assignOnClock(leagueId);
+    }
+    return {};
+  }
 
   const totalPickSlots = resolvedOrder.length * 15;
 
@@ -310,7 +335,21 @@ export async function startLiveDraft(
     global_pick_number: 0,
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    const isDuplicate =
+      error.code === "23505" ||
+      error.message.toLowerCase().includes("duplicate key");
+    if (isDuplicate) {
+      const repaired = await getLeagueDraftStateRow(leagueId);
+      if (normalizeDraftOrder(repaired?.draft_order).length >= 2) {
+        if (!repaired?.on_clock_user_id && repaired?.status === "in_progress") {
+          return assignOnClock(leagueId);
+        }
+        return {};
+      }
+    }
+    return { error: error.message };
+  }
 
   return assignOnClock(leagueId);
 }
@@ -443,10 +482,11 @@ async function prepareTeamOnClock(
 export function getExpectedOnClockUserId(
   state: LeagueDraftStateRow
 ): string | null {
+  const draftOrder = normalizeDraftOrder(state.draft_order);
   if (state.status !== "in_progress") return null;
   if (state.current_pick_index >= state.total_pick_slots) return null;
-  if (state.draft_order.length === 0) return null;
-  return state.draft_order[state.current_pick_index % state.draft_order.length];
+  if (draftOrder.length === 0) return null;
+  return draftOrder[state.current_pick_index % draftOrder.length];
 }
 
 type OnClockPeek = "complete" | "ready" | "pushback_skip" | "unavailable";
@@ -477,13 +517,14 @@ async function peekNextOnClockUserId(
   leagueId: string,
   state: LeagueDraftStateRow
 ): Promise<string | null> {
+  const draftOrder = normalizeDraftOrder(state.draft_order);
   if (state.status !== "in_progress") return null;
   if (state.current_pick_index >= state.total_pick_slots) return null;
-  if (state.draft_order.length === 0) return null;
+  if (draftOrder.length === 0) return null;
 
   let pickIndex = state.current_pick_index;
   while (pickIndex < state.total_pick_slots) {
-    const userId = state.draft_order[pickIndex % state.draft_order.length];
+    const userId = draftOrder[pickIndex % draftOrder.length];
     const status = await peekTeamOnClockStatus(leagueId, userId);
     if (status === "complete" || status === "unavailable") {
       pickIndex += 1;
@@ -585,6 +626,11 @@ export async function assignOnClock(
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.status === "complete") return {};
 
+  const draftOrder = normalizeDraftOrder(state.draft_order);
+  if (draftOrder.length === 0) {
+    return { error: "Live draft order is not ready yet." };
+  }
+
   const { data: league } = await supabase
     .from("leagues")
     .select("pick_time_seconds")
@@ -595,8 +641,8 @@ export async function assignOnClock(
   let pickIndex = state.current_pick_index;
 
   while (pickIndex < state.total_pick_slots) {
-    const teamIndex = pickIndex % state.draft_order.length;
-    const userId = state.draft_order[teamIndex];
+    const teamIndex = pickIndex % draftOrder.length;
+    const userId = draftOrder[teamIndex];
 
     const prepared = await prepareTeamOnClock(leagueId, userId);
     if (prepared.error) return { error: prepared.error };
@@ -724,8 +770,8 @@ export async function advanceAfterPick(
 }
 
 async function getStockPrice(symbol: string): Promise<number> {
-  const live = await fetchFinnhubQuote(symbol);
-  if (live?.price) return live.price;
+  const { price } = await getStockQuote(symbol);
+  if (price > 0) return price;
   return getFallbackStockQuote(symbol)?.price ?? 0;
 }
 
@@ -812,12 +858,12 @@ async function scanAutoPickStock(
     return best;
   }
 
-  const live = await fetchFinnhubQuote(best.symbol);
-  if (live?.price) {
+  const { price: cachedPrice } = await getStockQuote(best.symbol);
+  if (cachedPrice > 0) {
     const livePrice =
       tier === "relaxed"
-        ? Math.max(live.price, MIN_STOCK_PRICE_USD)
-        : live.price;
+        ? Math.max(cachedPrice, MIN_STOCK_PRICE_USD)
+        : cachedPrice;
     if (tier === "relaxed" || isStockPickEligible(best.symbol, livePrice)) {
       return { symbol: best.symbol, price: livePrice };
     }
@@ -841,11 +887,11 @@ async function resolveAutoCryptoPick(
   const { summary, picks } = state;
   if (summary.cryptoRemaining <= 0) return null;
 
-  let quotes: Awaited<ReturnType<typeof fetchCryptoQuotes>> | null = null;
+  let quotes: Awaited<ReturnType<typeof getCryptoQuotesMap>> | null = null;
   try {
-    quotes = await fetchCryptoQuotes();
+    quotes = await getCryptoQuotesMap();
   } catch (err) {
-    console.error("resolveAutoCryptoPick fetchCryptoQuotes failed:", err);
+    console.error("resolveAutoCryptoPick getCryptoQuotesMap failed:", err);
   }
 
   const pool = await fetchCryptoPool();

@@ -1,4 +1,3 @@
-import { fetchFinnhubQuote } from "@/lib/finnhub/service";
 import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
 import {
   enrichDraftPoolStocks,
@@ -20,7 +19,10 @@ import type { DraftPick, DraftState } from "@/lib/draft/types";
 import { CRYPTO_POOL } from "@/lib/draft/types";
 import type { BotConfig, BotPersonality } from "@/lib/league/bots";
 import { getStockHomerRegion, type HomerRegion } from "@/lib/league/homer-regions";
-import { fetchCryptoQuotes } from "@/lib/coingecko/service";
+import {
+  getCryptoQuote,
+  getStockQuote,
+} from "@/lib/roster/quotes";
 
 export type AiPickDecision = {
   symbol: string;
@@ -31,25 +33,10 @@ export type AiPickDecision = {
 
 type StockCandidate = DraftPoolStock & { changePercent: number; price: number };
 
-async function getStockQuote(
-  symbol: string
-): Promise<{ price: number; changePercent: number }> {
-  const live = await fetchFinnhubQuote(symbol);
-  if (live?.price) {
-    return { price: live.price, changePercent: live.changePercent };
-  }
-  const fallback = getFallbackStockQuote(symbol);
-  return {
-    price: fallback?.price ?? 0,
-    changePercent: fallback?.changePercent ?? 0,
-  };
-}
-
 async function getCryptoPrice(symbol: string): Promise<number> {
   try {
-    const quotes = await fetchCryptoQuotes();
-    const key = symbol.toUpperCase();
-    return quotes[key]?.price ?? 0;
+    const { price } = await getCryptoQuote(symbol);
+    return price;
   } catch (err) {
     console.error("getCryptoPrice failed:", err);
     return 0;
