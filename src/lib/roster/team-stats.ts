@@ -1,6 +1,6 @@
 import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
 import type { RosterPickView } from "@/lib/roster/types";
-import { computeScoringWeekGainPercent } from "@/lib/roster/weekly";
+import { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
 
 export type TeamGainStats = {
   weekDollarGain: number;

@@ -6,6 +6,9 @@ import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
 import { fetchCryptoPool, getCachedCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoSymbol } from "@/lib/draft/engine";
 
+export { getLastCryptoQuoteSource } from "@/lib/coingecko/service";
+export type { CryptoQuoteSource } from "@/lib/coingecko/types";
+
 export async function getStockQuote(symbol: string): Promise<{
   price: number;
   changePercent: number;
