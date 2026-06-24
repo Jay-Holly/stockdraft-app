@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { refreshCryptoPricesFromCoingecko } from "@/lib/market/refresh-crypto-prices";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
