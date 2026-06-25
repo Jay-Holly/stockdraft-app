@@ -175,12 +175,19 @@ function filterUndraftedSearchResults(
   );
 }
 
-/** Temporary — surfaces why search shows zero rows (remove after FAC investigation). */
-function describeEmptySearchDebug(input: {
+function formatSymbolList(symbols: string[]): string {
+  if (symbols.length === 0) return "";
+  if (symbols.length === 1) return symbols[0];
+  if (symbols.length === 2) return `${symbols[0]} and ${symbols[1]}`;
+  return `${symbols.slice(0, -1).join(", ")}, and ${symbols[symbols.length - 1]}`;
+}
+
+type SearchFeedback = { message: string; tone: "info" | "warning" };
+
+function describeSearchEmptyReason(input: {
+  query: string;
   httpOk: boolean;
-  httpStatus: number;
   apiError?: string;
-  finnhubStatus?: number | null;
   allResults: SearchResult[];
   outsidePool: SearchResult[];
   poolSymbolSet: Set<string>;
@@ -189,49 +196,69 @@ function describeEmptySearchDebug(input: {
   leagueOffBoard: Set<string>;
   aborted?: boolean;
   fetchFailed?: boolean;
-}): string {
+}): SearchFeedback | null {
+  const query = input.query.trim();
+
   if (input.aborted) {
-    return "request aborted: search timed out (10s client limit)";
+    return {
+      tone: "warning",
+      message: "Search took too long — try an exact ticker.",
+    };
   }
-  if (input.fetchFailed) {
-    return "fetch failed: network or unexpected error";
+
+  if (input.fetchFailed || !input.httpOk || (input.apiError && input.allResults.length === 0)) {
+    return {
+      tone: "warning",
+      message: "Search is temporarily unavailable. Try again in a moment.",
+    };
   }
-  if (!input.httpOk) {
-    return `HTTP ${input.httpStatus}: ${input.apiError ?? "search failed"}`;
-  }
-  if (input.apiError && input.allResults.length === 0) {
-    const status =
-      input.finnhubStatus != null ? ` (Finnhub HTTP ${input.finnhubStatus})` : "";
-    return `Finnhub error: ${input.apiError}${status}`;
-  }
+
   if (input.allResults.length === 0) {
-    return "0 Finnhub results (no symbols passed server search/quote filters)";
+    return {
+      tone: "info",
+      message: `No matches found for “${query}”.`,
+    };
   }
 
   const inPool = input.allResults.filter((item) =>
     input.poolSymbolSet.has(item.symbol)
   );
   if (inPool.length > 0 && input.outsidePool.length === 0) {
-    return `filtered: already in S&P pool (${inPool.map((item) => item.symbol).join(", ")})`;
+    const queryUpper = query.toUpperCase();
+    const symbol =
+      inPool.find((item) => item.symbol === queryUpper)?.symbol ?? inPool[0].symbol;
+    return {
+      tone: "info",
+      message: `${symbol} is already in the S&P 500 list below — search isn't needed for it.`,
+    };
   }
 
   if (input.outsidePool.length > 0 && !input.showDraftedStocks) {
     const hidden = input.outsidePool.filter((item) =>
       isDraftedPoolSymbol(item.symbol, input.myDrafted, input.leagueOffBoard)
     );
-    if (hidden.length > 0 && hidden.length === input.outsidePool.length) {
-      return `filtered: already drafted/off-board (${hidden.map((item) => item.symbol).join(", ")})`;
-    }
     if (hidden.length > 0) {
-      return `filtered: already drafted/off-board (${hidden.map((item) => item.symbol).join(", ")}) · visible: ${input.outsidePool.length - hidden.length}`;
+      const symbols = hidden.map((item) => item.symbol);
+      const subject = formatSymbolList(symbols);
+      const verb = symbols.length === 1 ? "has" : "have";
+      return {
+        tone: "info",
+        message: `${subject} ${verb} already been drafted in this league.`,
+      };
     }
   }
 
-  if (input.apiError) {
-    return `Finnhub warning: ${input.apiError}`;
+  if (input.outsidePool.length === 0) {
+    return {
+      tone: "info",
+      message: `No matches found for “${query}”.`,
+    };
   }
 
-  return `0 visible results (API returned ${input.allResults.length}, outside pool ${input.outsidePool.length})`;
+  return {
+    tone: "info",
+    message: `No matches found for “${query}”.`,
+  };
 }
 
 const POOL_PAGE_SIZE = 80;
@@ -290,8 +317,9 @@ export function StockPool({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchDebug, setSearchDebug] = useState<string | null>(null);
+  const [searchFeedback, setSearchFeedback] = useState<SearchFeedback | null>(
+    null
+  );
   const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
   const [detailMeta, setDetailMeta] = useState<{
     name: string;
@@ -419,8 +447,7 @@ export function StockPool({
   function clearSearch() {
     setSearchQuery("");
     setSearchResults([]);
-    setSearchError(null);
-    setSearchDebug(null);
+    setSearchFeedback(null);
     setSearchLoading(false);
   }
 
@@ -428,8 +455,7 @@ export function StockPool({
     const q = searchQuery.trim();
     if (q.length < 2) {
       setSearchResults([]);
-      setSearchError(null);
-      setSearchDebug(null);
+      setSearchFeedback(null);
       setSearchLoading(false);
       return;
     }
@@ -440,8 +466,7 @@ export function StockPool({
     const timer = window.setTimeout(() => {
       const currentRequest = ++requestId;
       setSearchLoading(true);
-      setSearchError(null);
-      setSearchDebug(null);
+      setSearchFeedback(null);
 
       const timeoutId = window.setTimeout(() => controller.abort(), 10000);
 
@@ -454,7 +479,6 @@ export function StockPool({
           const data = (await res.json()) as {
             results?: SearchResult[];
             error?: string;
-            finnhubStatus?: number | null;
           };
 
           if (currentRequest !== requestId || controller.signal.aborted) {
@@ -466,32 +490,38 @@ export function StockPool({
             (item) => !poolSymbolSet.has(item.symbol)
           );
 
-          const debug = describeEmptySearchDebug({
-            httpOk: res.ok,
-            httpStatus: res.status,
-            apiError: data.error,
-            finnhubStatus: data.finnhubStatus,
-            allResults,
-            outsidePool,
-            poolSymbolSet,
-            showDraftedStocks,
-            myDrafted,
-            leagueOffBoard,
-          });
-
           if (!res.ok) {
             setSearchResults([]);
-            setSearchError(
-              data.error ?? `Search failed (${res.status}). Try again.`
+            setSearchFeedback(
+              describeSearchEmptyReason({
+                query: q,
+                httpOk: false,
+                allResults: [],
+                outsidePool: [],
+                poolSymbolSet,
+                showDraftedStocks,
+                myDrafted,
+                leagueOffBoard,
+              })
             );
-            setSearchDebug(debug);
             return;
           }
 
           if (data.error && allResults.length === 0) {
             setSearchResults([]);
-            setSearchError(data.error);
-            setSearchDebug(debug);
+            setSearchFeedback(
+              describeSearchEmptyReason({
+                query: q,
+                httpOk: true,
+                apiError: data.error,
+                allResults,
+                outsidePool,
+                poolSymbolSet,
+                showDraftedStocks,
+                myDrafted,
+                leagueOffBoard,
+              })
+            );
             return;
           }
 
@@ -505,21 +535,21 @@ export function StockPool({
           ).length;
 
           if (visibleCount === 0) {
-            setSearchDebug(debug);
-            if (data.error) {
-              setSearchError(data.error);
-            } else if (allResults.length > 0 && outsidePool.length === 0) {
-              setSearchError(
-                `“${q}” is in the S&P 500 pool — use the Filter field below, not search.`
-              );
-            } else if (allResults.length === 0) {
-              setSearchError(`No eligible NYSE/NASDAQ matches for “${q}”.`);
-            } else {
-              setSearchError(null);
-            }
+            setSearchFeedback(
+              describeSearchEmptyReason({
+                query: q,
+                httpOk: true,
+                apiError: data.error,
+                allResults,
+                outsidePool,
+                poolSymbolSet,
+                showDraftedStocks,
+                myDrafted,
+                leagueOffBoard,
+              })
+            );
           } else {
-            setSearchError(null);
-            setSearchDebug(null);
+            setSearchFeedback(null);
           }
         } catch (err) {
           if (controller.signal.aborted || currentRequest !== requestId) {
@@ -528,15 +558,10 @@ export function StockPool({
           setSearchResults([]);
           const aborted =
             err instanceof Error && err.name === "AbortError";
-          setSearchError(
-            aborted
-              ? "Search timed out — try an exact ticker."
-              : "Search failed — try again."
-          );
-          setSearchDebug(
-            describeEmptySearchDebug({
+          setSearchFeedback(
+            describeSearchEmptyReason({
+              query: q,
               httpOk: false,
-              httpStatus: 0,
               allResults: [],
               outsidePool: [],
               poolSymbolSet,
@@ -573,16 +598,16 @@ export function StockPool({
     if (q.length < 2 || searchLoading) return;
 
     if (displayedSearchResults.length > 0) {
-      setSearchDebug(null);
+      setSearchFeedback(null);
       return;
     }
 
     if (searchResults.length === 0) return;
 
-    setSearchDebug(
-      describeEmptySearchDebug({
+    setSearchFeedback(
+      describeSearchEmptyReason({
+        query: q,
         httpOk: true,
-        httpStatus: 200,
         allResults: searchResults,
         outsidePool: searchResults,
         poolSymbolSet,
@@ -789,17 +814,13 @@ export function StockPool({
         {searchLoading && (
           <p className="text-xs text-muted mt-1">Searching Finnhub…</p>
         )}
-        {searchError && !searchLoading && (
-          <p className="text-xs text-amber-400/90 mt-1">{searchError}</p>
+        {searchFeedback && !searchLoading && (
+          <p
+            className={`draft-search-status draft-search-status--${searchFeedback.tone} mt-1`}
+          >
+            {searchFeedback.message}
+          </p>
         )}
-        {searchDebug &&
-          !searchLoading &&
-          searchQuery.trim().length >= 2 &&
-          displayedSearchResults.length === 0 && (
-            <p className="text-xs font-mono text-violet-300 mt-2 rounded border border-violet-500/40 bg-violet-950/40 px-2 py-1.5">
-              Search debug: {searchDebug}
-            </p>
-          )}
       </div>
 
       {displayedSearchResults.length > 0 && (

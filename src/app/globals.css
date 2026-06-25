@@ -662,6 +662,19 @@ body:has(.landing-screen) {
   gap: 0.5rem;
 }
 
+.draft-search-status {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.draft-search-status--info {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.draft-search-status--warning {
+  color: rgba(251, 191, 36, 0.9);
+}
+
 .draft-pool-search-row .draft-input {
   flex: 1;
 }
