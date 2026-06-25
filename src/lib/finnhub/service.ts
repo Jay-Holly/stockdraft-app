@@ -173,11 +173,13 @@ export async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuote | 
 }
 
 export async function fetchFinnhubQuotes(
-  symbols: readonly string[]
+  symbols: readonly string[],
+  options?: { cache?: RequestCache }
 ): Promise<Record<string, FinnhubQuote>> {
   const token = getFinnhubKey();
   if (!token || symbols.length === 0) return {};
 
+  const fetchCache = options?.cache ?? "default";
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
   const quotes: Record<string, FinnhubQuote> = {};
 
@@ -191,10 +193,19 @@ export async function fetchFinnhubQuotes(
         try {
           const response = await fetchWithTimeout(
             `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${token}`,
-            { next: { revalidate: 60 }, timeoutMs: 5000 }
+            { cache: fetchCache, timeoutMs: 5000 }
           );
 
+          if (response.status === 429) {
+            console.error(`Finnhub quote rate limited for ${symbol}`);
+            await sleep(500);
+            continue;
+          }
+
           if (!response.ok) {
+            console.error(
+              `Finnhub quote failed for ${symbol}: HTTP ${response.status}`
+            );
             await sleep(200);
             continue;
           }
@@ -214,7 +225,8 @@ export async function fetchFinnhubQuotes(
             changePercent: calcChangePercent(price, prevClose),
           };
           break;
-        } catch {
+        } catch (err) {
+          console.error(`Finnhub quote error for ${symbol}:`, err);
           await sleep(200);
         }
       }
@@ -232,24 +244,65 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export type FinnhubSymbolSearchResult =
+  | { ok: true; results: FinnhubSearchResult[] }
+  | { ok: false; error: string; status?: number };
+
 export async function searchFinnhubSymbols(
   query: string
-): Promise<FinnhubSearchResult[]> {
+): Promise<FinnhubSymbolSearchResult> {
   const token = getFinnhubKey();
-  if (!token || query.trim().length < 1) return [];
+  if (!token) {
+    return {
+      ok: false,
+      error:
+        "Finnhub API key is missing — set NEXT_PUBLIC_FINNHUB_KEY on the server.",
+    };
+  }
+
+  const trimmed = query.trim();
+  if (trimmed.length < 1) {
+    return { ok: true, results: [] };
+  }
 
   try {
     const response = await fetchWithTimeout(
-      `https://finnhub.io/api/v1/search?q=${encodeURIComponent(query.trim())}&token=${token}`,
-      { next: { revalidate: 300 }, timeoutMs: 5000 }
+      `https://finnhub.io/api/v1/search?q=${encodeURIComponent(trimmed)}&token=${token}`,
+      { cache: "no-store", timeoutMs: 5000 }
     );
 
-    if (!response.ok) return [];
+    if (response.status === 429) {
+      return {
+        ok: false,
+        error: "Finnhub rate limit hit — wait a few seconds and try again.",
+        status: 429,
+      };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        ok: false,
+        error: "Finnhub rejected the API key — check NEXT_PUBLIC_FINNHUB_KEY.",
+        status: response.status,
+      };
+    }
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      console.error(
+        `Finnhub symbol search failed: HTTP ${response.status} ${body.slice(0, 200)}`
+      );
+      return {
+        ok: false,
+        error: "Finnhub symbol search failed — try again in a moment.",
+        status: response.status,
+      };
+    }
 
     const data = (await response.json()) as { result?: FinnhubSearchResult[] };
     const results = data.result ?? [];
 
-    return results
+    const filtered = results
       .filter((item) => {
         const type = item.type?.toLowerCase() ?? "";
         if (!type.includes("stock") && type !== "common stock") return false;
@@ -262,7 +315,16 @@ export async function searchFinnhubSymbols(
         ...item,
         symbol: item.symbol.toUpperCase(),
       }));
-  } catch {
-    return [];
+
+    return { ok: true, results: filtered };
+  } catch (err) {
+    console.error("Finnhub symbol search error:", err);
+    return {
+      ok: false,
+      error:
+        err instanceof Error && err.name === "AbortError"
+          ? "Finnhub search timed out — try a shorter or exact ticker."
+          : "Finnhub search failed — try again.",
+    };
   }
 }

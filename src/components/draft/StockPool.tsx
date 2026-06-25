@@ -175,6 +175,65 @@ function filterUndraftedSearchResults(
   );
 }
 
+/** Temporary — surfaces why search shows zero rows (remove after FAC investigation). */
+function describeEmptySearchDebug(input: {
+  httpOk: boolean;
+  httpStatus: number;
+  apiError?: string;
+  finnhubStatus?: number | null;
+  allResults: SearchResult[];
+  outsidePool: SearchResult[];
+  poolSymbolSet: Set<string>;
+  showDraftedStocks: boolean;
+  myDrafted: Set<string>;
+  leagueOffBoard: Set<string>;
+  aborted?: boolean;
+  fetchFailed?: boolean;
+}): string {
+  if (input.aborted) {
+    return "request aborted: search timed out (10s client limit)";
+  }
+  if (input.fetchFailed) {
+    return "fetch failed: network or unexpected error";
+  }
+  if (!input.httpOk) {
+    return `HTTP ${input.httpStatus}: ${input.apiError ?? "search failed"}`;
+  }
+  if (input.apiError && input.allResults.length === 0) {
+    const status =
+      input.finnhubStatus != null ? ` (Finnhub HTTP ${input.finnhubStatus})` : "";
+    return `Finnhub error: ${input.apiError}${status}`;
+  }
+  if (input.allResults.length === 0) {
+    return "0 Finnhub results (no symbols passed server search/quote filters)";
+  }
+
+  const inPool = input.allResults.filter((item) =>
+    input.poolSymbolSet.has(item.symbol)
+  );
+  if (inPool.length > 0 && input.outsidePool.length === 0) {
+    return `filtered: already in S&P pool (${inPool.map((item) => item.symbol).join(", ")})`;
+  }
+
+  if (input.outsidePool.length > 0 && !input.showDraftedStocks) {
+    const hidden = input.outsidePool.filter((item) =>
+      isDraftedPoolSymbol(item.symbol, input.myDrafted, input.leagueOffBoard)
+    );
+    if (hidden.length > 0 && hidden.length === input.outsidePool.length) {
+      return `filtered: already drafted/off-board (${hidden.map((item) => item.symbol).join(", ")})`;
+    }
+    if (hidden.length > 0) {
+      return `filtered: already drafted/off-board (${hidden.map((item) => item.symbol).join(", ")}) · visible: ${input.outsidePool.length - hidden.length}`;
+    }
+  }
+
+  if (input.apiError) {
+    return `Finnhub warning: ${input.apiError}`;
+  }
+
+  return `0 visible results (API returned ${input.allResults.length}, outside pool ${input.outsidePool.length})`;
+}
+
 const POOL_PAGE_SIZE = 80;
 const TOP_100_PAGE_SIZE = 100;
 
@@ -232,6 +291,7 @@ export function StockPool({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchDebug, setSearchDebug] = useState<string | null>(null);
   const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
   const [detailMeta, setDetailMeta] = useState<{
     name: string;
@@ -360,6 +420,7 @@ export function StockPool({
     setSearchQuery("");
     setSearchResults([]);
     setSearchError(null);
+    setSearchDebug(null);
     setSearchLoading(false);
   }
 
@@ -368,6 +429,7 @@ export function StockPool({
     if (q.length < 2) {
       setSearchResults([]);
       setSearchError(null);
+      setSearchDebug(null);
       setSearchLoading(false);
       return;
     }
@@ -379,6 +441,7 @@ export function StockPool({
       const currentRequest = ++requestId;
       setSearchLoading(true);
       setSearchError(null);
+      setSearchDebug(null);
 
       const timeoutId = window.setTimeout(() => controller.abort(), 10000);
 
@@ -391,36 +454,98 @@ export function StockPool({
           const data = (await res.json()) as {
             results?: SearchResult[];
             error?: string;
+            finnhubStatus?: number | null;
           };
 
           if (currentRequest !== requestId || controller.signal.aborted) {
             return;
           }
 
+          const allResults = data.results ?? [];
+          const outsidePool = allResults.filter(
+            (item) => !poolSymbolSet.has(item.symbol)
+          );
+
+          const debug = describeEmptySearchDebug({
+            httpOk: res.ok,
+            httpStatus: res.status,
+            apiError: data.error,
+            finnhubStatus: data.finnhubStatus,
+            allResults,
+            outsidePool,
+            poolSymbolSet,
+            showDraftedStocks,
+            myDrafted,
+            leagueOffBoard,
+          });
+
           if (!res.ok) {
             setSearchResults([]);
             setSearchError(
               data.error ?? `Search failed (${res.status}). Try again.`
             );
+            setSearchDebug(debug);
             return;
           }
 
-          const outsidePool = (data.results ?? []).filter(
-            (item) => !poolSymbolSet.has(item.symbol)
-          );
+          if (data.error && allResults.length === 0) {
+            setSearchResults([]);
+            setSearchError(data.error);
+            setSearchDebug(debug);
+            return;
+          }
+
           setSearchResults(outsidePool);
-          if (outsidePool.length === 0) {
-            setSearchError(`No eligible NYSE/NASDAQ matches for “${q}”.`);
+
+          const visibleCount = filterUndraftedSearchResults(
+            outsidePool,
+            showDraftedStocks,
+            myDrafted,
+            leagueOffBoard
+          ).length;
+
+          if (visibleCount === 0) {
+            setSearchDebug(debug);
+            if (data.error) {
+              setSearchError(data.error);
+            } else if (allResults.length > 0 && outsidePool.length === 0) {
+              setSearchError(
+                `“${q}” is in the S&P 500 pool — use the Filter field below, not search.`
+              );
+            } else if (allResults.length === 0) {
+              setSearchError(`No eligible NYSE/NASDAQ matches for “${q}”.`);
+            } else {
+              setSearchError(null);
+            }
+          } else {
+            setSearchError(null);
+            setSearchDebug(null);
           }
         } catch (err) {
           if (controller.signal.aborted || currentRequest !== requestId) {
             return;
           }
           setSearchResults([]);
+          const aborted =
+            err instanceof Error && err.name === "AbortError";
           setSearchError(
-            err instanceof Error && err.name === "AbortError"
+            aborted
               ? "Search timed out — try an exact ticker."
               : "Search failed — try again."
+          );
+          setSearchDebug(
+            describeEmptySearchDebug({
+              httpOk: false,
+              httpStatus: 0,
+              allResults: [],
+              outsidePool: [],
+              poolSymbolSet,
+              showDraftedStocks,
+              myDrafted,
+              leagueOffBoard,
+              aborted,
+              fetchFailed: !aborted,
+            })
           );
         } finally {
           window.clearTimeout(timeoutId);
@@ -435,7 +560,47 @@ export function StockPool({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [searchQuery, poolSymbolSet]);
+  }, [
+    searchQuery,
+    poolSymbolSet,
+    showDraftedStocks,
+    myDrafted,
+    leagueOffBoard,
+  ]);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2 || searchLoading) return;
+
+    if (displayedSearchResults.length > 0) {
+      setSearchDebug(null);
+      return;
+    }
+
+    if (searchResults.length === 0) return;
+
+    setSearchDebug(
+      describeEmptySearchDebug({
+        httpOk: true,
+        httpStatus: 200,
+        allResults: searchResults,
+        outsidePool: searchResults,
+        poolSymbolSet,
+        showDraftedStocks,
+        myDrafted,
+        leagueOffBoard,
+      })
+    );
+  }, [
+    displayedSearchResults.length,
+    searchResults,
+    searchQuery,
+    searchLoading,
+    poolSymbolSet,
+    showDraftedStocks,
+    myDrafted,
+    leagueOffBoard,
+  ]);
 
   function getEligibility(
     symbol: string,
@@ -593,14 +758,22 @@ export function StockPool({
         </div>
       </div>
 
-      <div className="draft-pool-search">
+      <div className="draft-pool-finnhub">
+        <label className="draft-pool-field-label" htmlFor="draft-finnhub-search">
+          Find any NYSE/NASDAQ ticker
+        </label>
+        <p className="draft-pool-field-hint">
+          Live Finnhub search for stocks outside the S&P 500 pool ($5+ per share).
+        </p>
         <div className="draft-pool-search-row">
           <input
+            id="draft-finnhub-search"
             type="search"
-            placeholder="Search any NYSE/NASDAQ ticker (Finnhub)…"
+            placeholder="Ticker or company name…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="draft-input"
+            autoComplete="off"
           />
           {searchQuery.length > 0 && (
             <button
@@ -619,6 +792,14 @@ export function StockPool({
         {searchError && !searchLoading && (
           <p className="text-xs text-amber-400/90 mt-1">{searchError}</p>
         )}
+        {searchDebug &&
+          !searchLoading &&
+          searchQuery.trim().length >= 2 &&
+          displayedSearchResults.length === 0 && (
+            <p className="text-xs font-mono text-violet-300 mt-2 rounded border border-violet-500/40 bg-violet-950/40 px-2 py-1.5">
+              Search debug: {searchDebug}
+            </p>
+          )}
       </div>
 
       {displayedSearchResults.length > 0 && (
@@ -646,16 +827,6 @@ export function StockPool({
           </div>
         </div>
       )}
-
-      <div className="draft-pool-search">
-        <input
-          type="search"
-          placeholder="Filter S&P 500 list…"
-          value={localFilter}
-          onChange={(e) => setLocalFilter(e.target.value)}
-          className="draft-input"
-        />
-      </div>
 
       <div className="draft-pool-filters">
         {DRAFT_POOL_FILTER_BUTTONS.map((filter) => (
@@ -707,6 +878,23 @@ export function StockPool({
           Show drafted
         </button>
       </div>
+
+      {!isCryptoView && (
+        <div className="draft-pool-filter-row">
+          <label className="draft-pool-field-label" htmlFor="draft-pool-list-filter">
+            Filter S&P 500 list
+          </label>
+          <input
+            id="draft-pool-list-filter"
+            type="text"
+            placeholder="Narrow visible stocks by ticker or name…"
+            value={localFilter}
+            onChange={(e) => setLocalFilter(e.target.value)}
+            className="draft-input draft-input--filter"
+            autoComplete="off"
+          />
+        </div>
+      )}
 
       {onToggleSafetyPick && !isReferenceMode && turn.type !== "complete" && (
         <p className="draft-safety-hint">
