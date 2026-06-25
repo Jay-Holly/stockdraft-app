@@ -367,6 +367,7 @@ export function DashboardContent({
           {humanLeagues.map((item) => {
             const isActive = item.league.id === activeLeagueId;
             const waiting = item.league.status === "waiting";
+            const enterDraft = !item.humanDraftComplete;
 
             return (
               <div
@@ -390,6 +391,7 @@ export function DashboardContent({
                 {waiting && (
                   <HumanLeagueInvitePanel
                     leagueId={item.league.id}
+                    leagueName={item.league.name}
                     inviteLink={item.inviteLink}
                     isCommissioner={item.league.owner_user_id === profile.id}
                     compact
@@ -415,7 +417,7 @@ export function DashboardContent({
                     >
                       View invite
                     </Button>
-                  ) : (
+                  ) : enterDraft ? (
                     <Button
                       variant="primary"
                       className="flex-1 text-sm"
@@ -424,10 +426,31 @@ export function DashboardContent({
                         void setActiveLeague(item.league.id, "/draft")
                       }
                     >
-                      {item.league.status === "drafting"
-                        ? "Enter draft"
-                        : "Open league"}
+                      Enter draft
                     </Button>
+                  ) : (
+                    <div className="flex flex-1 gap-2">
+                      <Button
+                        variant="primary"
+                        className="flex-1 text-sm"
+                        disabled={switchingLeagueId === item.league.id}
+                        onClick={() =>
+                          void setActiveLeague(item.league.id, "/league")
+                        }
+                      >
+                        Open league
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="flex-1 text-sm"
+                        disabled={switchingLeagueId === item.league.id}
+                        onClick={() =>
+                          void setActiveLeague(item.league.id, "/matchups")
+                        }
+                      >
+                        Matchups
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -452,9 +475,30 @@ export function DashboardContent({
           </div>
           <HumanLeagueInvitePanel
             leagueId={activeHumanLeague.league.id}
+            leagueName={activeHumanLeague.league.name}
             inviteLink={activeHumanLeague.inviteLink}
             isCommissioner
           />
+        </section>
+      )}
+
+      {activeHumanLeague?.humanDraftComplete && (
+        <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">{activeHumanLeague.humanTeamName}</h2>
+            <p className="text-muted text-sm">{activeHumanLeague.league.name}</p>
+            <p className="text-muted text-xs capitalize mt-1">
+              {leagueStatusLabel(activeHumanLeague.league.status)} · Draft complete
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button href="/league" variant="primary" className="flex-1">
+              League hub
+            </Button>
+            <Button href="/matchups" variant="secondary" className="flex-1">
+              Matchups
+            </Button>
+          </div>
         </section>
       )}
 
@@ -715,7 +759,7 @@ export function DashboardContent({
         </form>
       </section>
 
-      {draftComplete && draftPicks.length > 0 && activeSummary?.league.status !== "drafting" && (
+      {draftComplete && draftPicks.length > 0 && (activeSummary?.league.status !== "drafting" || activeHumanLeague?.humanDraftComplete) && (
         <DraftRoster picks={draftPicks} />
       )}
 

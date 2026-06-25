@@ -21,6 +21,7 @@ export default async function JoinLeaguePage({ params }: PageProps) {
   } = await supabase.auth.getUser();
 
   let defaultTeamName = "My Team";
+  let initialIsMember = false;
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -28,6 +29,14 @@ export default async function JoinLeaguePage({ params }: PageProps) {
       .eq("id", user.id)
       .single();
     defaultTeamName = profile?.team_name?.trim() || defaultTeamName;
+
+    const { data: membership } = await supabase
+      .from("league_members")
+      .select("user_id")
+      .eq("league_id", preview.leagueId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    initialIsMember = Boolean(membership);
   }
 
   return (
@@ -50,6 +59,7 @@ export default async function JoinLeaguePage({ params }: PageProps) {
           preview={preview}
           defaultTeamName={defaultTeamName}
           isAuthenticated={Boolean(user)}
+          initialIsMember={initialIsMember}
         />
       </main>
     </div>

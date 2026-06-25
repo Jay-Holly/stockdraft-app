@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import type { HumanLeagueInvitePreview } from "@/lib/league/human-league";
@@ -8,28 +8,64 @@ import type { HumanLeagueInvitePreview } from "@/lib/league/human-league";
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
 
+type JoinInviteState = {
+  preview: HumanLeagueInvitePreview;
+  isMember: boolean;
+};
+
 export function JoinLeaguePanel({
   token,
-  preview,
+  preview: initialPreview,
   defaultTeamName,
   isAuthenticated,
+  initialIsMember = false,
 }: {
   token: string;
   preview: HumanLeagueInvitePreview;
   defaultTeamName: string;
   isAuthenticated: boolean;
+  initialIsMember?: boolean;
 }) {
   const router = useRouter();
   const [teamName, setTeamName] = useState(defaultTeamName);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteState, setInviteState] = useState<JoinInviteState>({
+    preview: initialPreview,
+    isMember: initialIsMember ?? false,
+  });
 
+  const refreshInviteState = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/leagues/join/${token}`);
+      const data = await res.json();
+      if (!res.ok || !data.preview) return;
+      setInviteState({
+        preview: data.preview as HumanLeagueInvitePreview,
+        isMember: Boolean(data.isMember),
+      });
+    } catch {
+      // Keep the last known invite snapshot if refresh fails.
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void refreshInviteState();
+  }, [refreshInviteState]);
+
+  const { preview, isMember } = inviteState;
   const spotsLeft = preview.playerCount - preview.memberCount;
   const isFull = spotsLeft <= 0;
-  const isOpen = preview.status === "waiting" && !isFull;
+  const leagueStarted =
+    preview.status === "drafting" || preview.status === "active";
+  const canJoin =
+    preview.status === "waiting" && !isFull && !isMember && isAuthenticated;
+  const canEnterDraft = isMember && leagueStarted;
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
+    if (!canJoin) return;
+
     setError(null);
     setSubmitting(true);
 
@@ -42,11 +78,13 @@ export function JoinLeaguePanel({
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Could not join league.");
+        await refreshInviteState();
         return;
       }
       router.push("/draft");
     } catch {
       setError("Network error — try again.");
+      await refreshInviteState();
     } finally {
       setSubmitting(false);
     }
@@ -70,43 +108,72 @@ export function JoinLeaguePanel({
         </p>
       </div>
 
-      {!isOpen ? (
-        <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-sm text-muted">
-          {isFull
-            ? "This league is full."
-            : preview.status === "drafting"
-              ? "This league has already started drafting."
-              : "This league is no longer accepting players."}
-        </div>
-      ) : !isAuthenticated ? (
+      {canEnterDraft ? (
         <div className="space-y-3">
-          <p className="text-sm text-muted">
-            Sign in or create an account to join as player 2.
-          </p>
+          <div className="rounded-xl border border-gold/30 bg-gold/5 p-4 text-sm text-muted">
+            You&apos;re in this league and the draft has started.
+          </div>
           <Button
             variant="primary"
             className="w-full"
-            onClick={() =>
-              router.push(
-                `/auth?mode=login&next=${encodeURIComponent(`/leagues/join/${token}`)}`
-              )
-            }
+            onClick={() => router.push("/draft")}
           >
-            Sign in to join
+            Enter draft room
           </Button>
+        </div>
+      ) : isMember && preview.status === "waiting" ? (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-sm text-muted">
+            You&apos;re already on the roster. Waiting for the league to fill and
+            start the draft.
+          </div>
           <Button
             variant="secondary"
             className="w-full"
-            onClick={() =>
-              router.push(
-                `/auth?mode=signup&next=${encodeURIComponent(`/leagues/join/${token}`)}`
-              )
-            }
+            onClick={() => router.push("/dashboard")}
           >
-            Create account
+            Back to dashboard
           </Button>
         </div>
-      ) : (
+      ) : !canJoin && !isAuthenticated ? (
+        preview.status === "waiting" && !isFull ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              Sign in or create an account to join as player 2.
+            </p>
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={() =>
+                router.push(
+                  `/auth?mode=login&next=${encodeURIComponent(`/leagues/join/${token}`)}`
+                )
+              }
+            >
+              Sign in to join
+            </Button>
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() =>
+                router.push(
+                  `/auth?mode=signup&next=${encodeURIComponent(`/leagues/join/${token}`)}`
+                )
+              }
+            >
+              Create account
+            </Button>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-sm text-muted">
+            {isFull
+              ? "This league is full."
+              : leagueStarted
+                ? "This league has already started drafting."
+                : "This league is no longer accepting players."}
+          </div>
+        )
+      ) : canJoin ? (
         <form onSubmit={handleJoin} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold mb-1.5" htmlFor="teamName">
@@ -131,6 +198,14 @@ export function JoinLeaguePanel({
             {submitting ? "Joining…" : "Join league & enter draft"}
           </Button>
         </form>
+      ) : (
+        <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-sm text-muted">
+          {isFull
+            ? "This league is full."
+            : leagueStarted
+              ? "This league has already started drafting."
+              : "This league is no longer accepting players."}
+        </div>
       )}
     </div>
   );

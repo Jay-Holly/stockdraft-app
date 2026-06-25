@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { startLiveDraft } from "@/lib/draft/live-draft";
+import { getLeagueDraftStateRow, normalizeDraftOrder, startLiveDraft } from "@/lib/draft/live-draft";
 import {
   ensureStandingsForLeagueMembers,
   fillEmptySlotsWithBots,
@@ -13,6 +13,43 @@ import {
   normalizePlayerCount,
 } from "@/lib/matchup/schedule";
 import { getLeagueTeamIds } from "@/lib/matchup/league-teams";
+
+export async function ensureDraftRowsForAllMembers(
+  leagueId: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: members, error: membersError } = await supabase
+    .from("league_members")
+    .select("user_id")
+    .eq("league_id", leagueId);
+
+  if (membersError) return { error: membersError.message };
+
+  for (const member of members ?? []) {
+    const { data: existing } = await supabase
+      .from("drafts")
+      .select("id")
+      .eq("league_id", leagueId)
+      .eq("user_id", member.user_id)
+      .maybeSingle();
+
+    if (existing) continue;
+
+    const { error } = await supabase.from("drafts").insert({
+      league_id: leagueId,
+      user_id: member.user_id,
+    });
+
+    if (error) {
+      const duplicate =
+        error.code === "23505" ||
+        error.message.toLowerCase().includes("duplicate key");
+      if (!duplicate) return { error: error.message };
+    }
+  }
+
+  return {};
+}
 
 export async function maybeStartHumanLeagueDraft(
   leagueId: string,
@@ -31,6 +68,13 @@ export async function maybeStartHumanLeagueDraft(
 
   if (leagueError || !league) {
     return { error: leagueError?.message ?? "League not found." };
+  }
+
+  if (league.status === "drafting" || league.status === "active") {
+    const existingState = await getLeagueDraftStateRow(leagueId);
+    if (normalizeDraftOrder(existingState?.draft_order).length >= 2) {
+      return { started: true };
+    }
   }
 
   if (league.status !== "waiting") {
@@ -84,6 +128,9 @@ export async function maybeStartHumanLeagueDraft(
   const standingsResult = await ensureStandingsForLeagueMembers(leagueId);
   if (standingsResult.error) return standingsResult;
 
+  const draftsResult = await ensureDraftRowsForAllMembers(leagueId);
+  if (draftsResult.error) return draftsResult;
+
   const orderResult = await resolveDraftOrderForLeague(leagueId);
   if (orderResult.error) return { error: orderResult.error };
 
@@ -95,13 +142,6 @@ export async function maybeStartHumanLeagueDraft(
   const ownerId = league.owner_user_id;
   if (!ownerId) return { error: "League commissioner not found." };
 
-  const { error: statusError } = await supabase
-    .from("leagues")
-    .update({ status: "drafting" })
-    .eq("id", leagueId);
-
-  if (statusError) return { error: statusError.message };
-
   const pickTimeSeconds = league.pick_time_seconds ?? 120;
   const startResult = await startLiveDraft(leagueId, ownerId, pickTimeSeconds, {
     draftOrder,
@@ -110,6 +150,13 @@ export async function maybeStartHumanLeagueDraft(
   if (startResult.error) {
     return { error: startResult.error };
   }
+
+  const { error: statusError } = await supabase
+    .from("leagues")
+    .update({ status: "drafting" })
+    .eq("id", leagueId);
+
+  if (statusError) return { error: statusError.message };
 
   return { started: true };
 }

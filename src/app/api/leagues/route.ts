@@ -1,19 +1,22 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
+import { createClient } from "@/lib/supabase/server";
 import {
   clearActiveLeagueCookie,
   getActiveLeagueIdFromCookie,
   resolveActiveLeagueId,
   setActiveLeagueCookie,
   verifyUserCanAccessLeague,
-  verifyUserOwnsLeague,
 } from "@/lib/league/active-league";
 import {
   deleteAiLeagueForUser,
   getAiLeagueSummary,
   listAiLeagueListItems,
 } from "@/lib/league/ai-league";
-import { listHumanLeaguesForUser } from "@/lib/league/human-league";
+import {
+  deleteHumanLeagueForUser,
+  listHumanLeaguesForUser,
+} from "@/lib/league/human-league";
 import {
   ensureAiLeagueReadyForMatchups,
   scoreAllActiveAiMatchups,
@@ -91,7 +94,22 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "leagueId is required." }, { status: 400 });
   }
 
-  const result = await deleteAiLeagueForUser(user.id, body.leagueId);
+  const supabase = await createClient();
+  const { data: league } = await supabase
+    .from("leagues")
+    .select("league_type, owner_user_id")
+    .eq("id", body.leagueId)
+    .maybeSingle();
+
+  if (!league || league.owner_user_id !== user.id) {
+    return NextResponse.json({ error: "League not found." }, { status: 404 });
+  }
+
+  const result =
+    league.league_type === "human"
+      ? await deleteHumanLeagueForUser(user.id, body.leagueId)
+      : await deleteAiLeagueForUser(user.id, body.leagueId);
+
   if (result.error) {
     const status = result.error === "League not found." ? 404 : 400;
     return NextResponse.json({ error: result.error }, { status });

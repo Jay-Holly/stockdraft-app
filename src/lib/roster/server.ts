@@ -9,8 +9,18 @@ import type { DraftPick } from "@/lib/draft/types";
 import {
   type AiLeague,
 } from "@/lib/league/ai-league";
-import { resolveActiveAiLeague } from "@/lib/league/active-league";
+import {
+  getAiLeagueById,
+  getHumanLeagueById,
+  resolveActiveAiLeague,
+  resolveActiveLeagueId,
+} from "@/lib/league/active-league";
 import { BOT_BY_ID } from "@/lib/league/bots";
+import {
+  getHumanLeagueMembers,
+  isHumanLeagueDraftFinished,
+  type HumanLeague,
+} from "@/lib/league/human-league";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
 import { getLeagueMemberTeamName, getLeagueOffBoardSymbols } from "@/lib/league/server";
 import {
@@ -61,6 +71,31 @@ import type {
   RosterView,
 } from "@/lib/roster/types";
 
+export type SeasonLeague = AiLeague | HumanLeague;
+
+export async function resolveSeasonLeague(
+  userId: string,
+  preferredLeagueId?: string | null
+): Promise<SeasonLeague | null> {
+  const leagueId = await resolveActiveLeagueId(userId, preferredLeagueId);
+  if (!leagueId) return null;
+
+  const humanLeague = await getHumanLeagueById(leagueId);
+  if (humanLeague) {
+    if (humanLeague.status === "waiting") return null;
+    const finished = await isHumanLeagueDraftFinished(humanLeague, userId);
+    return finished ? humanLeague : null;
+  }
+
+  const aiLeague = await getAiLeagueById(leagueId);
+  if (!aiLeague || aiLeague.status === "drafting") return null;
+
+  const draft = await loadDraftStateDetailed(userId, { leagueId: aiLeague.id });
+  if (!draft.ok || draft.state.draft.status !== "complete") return null;
+
+  return aiLeague;
+}
+
 export async function getSeasonLeague(
   userId: string,
   leagueId?: string | null
@@ -74,19 +109,13 @@ export async function getSeasonLeague(
 export async function requireSeasonLeague(
   userId: string,
   leagueId?: string | null
-): Promise<{ league: AiLeague } | { error: string }> {
-  const league = await resolveActiveAiLeague(userId, leagueId);
+): Promise<{ league: SeasonLeague } | { error: string }> {
+  const league = await resolveSeasonLeague(userId, leagueId);
   if (!league) {
-    return { error: "No active season found. Complete your AI league draft first." };
-  }
-
-  if (league.status === "drafting") {
-    return { error: "Your draft must be complete before managing your roster." };
-  }
-
-  const draft = await loadDraftStateDetailed(userId, { leagueId: league.id });
-  if (!draft.ok || draft.state.draft.status !== "complete") {
-    return { error: "Your draft must be complete before managing your roster." };
+    return {
+      error:
+        "No active season found. Finish your league draft to unlock the season hub.",
+    };
   }
 
   return { league };
@@ -387,7 +416,18 @@ export async function loadLeaguePageData(
     .maybeSingle();
 
   const currentWeek = standingsRow?.current_week ?? 1;
+
+  const { data: leagueMeta } = await supabase
+    .from("leagues")
+    .select("league_type")
+    .eq("id", league.id)
+    .maybeSingle();
+
+  const isHumanLeague = leagueMeta?.league_type === "human";
   const bots = await getLeagueBotMembers(league.id);
+  const humanMembers = isHumanLeague
+    ? await getHumanLeagueMembers(league.id)
+    : [];
 
   const { data: matchups } = await supabase
     .from("league_matchups")
@@ -421,6 +461,31 @@ export async function loadLeaguePageData(
     })
   );
 
+  const humanMemberStandings: LeagueTeamStanding[] = await Promise.all(
+    humanMembers
+      .filter((member) => member.userId !== userId)
+      .map(async (member) => {
+        const memberGain = await computeTeamGain(member.userId, league.id);
+        const row = allStandings?.find((entry) => entry.user_id === member.userId);
+        const { data: memberProfile } = await supabase
+          .from("profiles")
+          .select("avatar_color")
+          .eq("id", member.userId)
+          .maybeSingle();
+
+        return {
+          userId: member.userId,
+          teamName: member.displayName,
+          isHuman: true,
+          isBot: false,
+          avatarColor: memberProfile?.avatar_color ?? "blue",
+          wins: row?.wins ?? 0,
+          losses: row?.losses ?? 0,
+          seasonGainPercent: memberGain,
+        };
+      })
+  );
+
   const humanStanding: LeagueTeamStanding = {
     userId,
     teamName: await getLeagueMemberTeamName(league.id, userId),
@@ -432,7 +497,7 @@ export async function loadLeaguePageData(
     seasonGainPercent: humanGain,
   };
 
-  const standings = [humanStanding, ...botStandings].sort((a, b) => {
+  const standings = [humanStanding, ...humanMemberStandings, ...botStandings].sort((a, b) => {
     if (b.wins !== a.wins) return b.wins - a.wins;
     if (a.losses !== b.losses) return a.losses - b.losses;
     return b.seasonGainPercent - a.seasonGainPercent;

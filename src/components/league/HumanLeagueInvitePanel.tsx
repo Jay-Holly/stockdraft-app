@@ -6,17 +6,21 @@ import { Button } from "@/components/Button";
 
 export function HumanLeagueInvitePanel({
   leagueId,
+  leagueName,
   inviteLink,
   isCommissioner,
   compact = false,
 }: {
   leagueId: string;
+  leagueName?: string;
   inviteLink: string | null;
   isCommissioner: boolean;
   compact?: boolean;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<"cancel" | "regenerate" | null>(null);
+  const [busy, setBusy] = useState<"cancel" | "regenerate" | "delete" | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
 
   async function runInviteAction(action: "cancel" | "regenerate") {
@@ -36,6 +40,46 @@ export function HumanLeagueInvitePanel({
         return;
       }
 
+      router.refresh();
+    } catch {
+      setError("Network error — try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleCancelInviteLink() {
+    const confirmed = window.confirm(
+      "Cancel this invite link? The league stays on your dashboard — only the current link stops working. You can generate a new link afterward."
+    );
+    if (!confirmed) return;
+    await runInviteAction("cancel");
+  }
+
+  async function handleDeleteLeague() {
+    const label = leagueName ? `"${leagueName}"` : "this league";
+    const confirmed = window.confirm(
+      `Permanently delete ${label}? This removes the league, draft setup, and invite for all players. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setBusy("delete");
+    setError(null);
+
+    try {
+      const res = await fetch("/api/leagues", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leagueId }),
+      });
+      const data = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        setError(data.error ?? "Could not delete league.");
+        return;
+      }
+
+      router.push("/dashboard");
       router.refresh();
     } catch {
       setError("Network error — try again.");
@@ -78,11 +122,11 @@ export function HumanLeagueInvitePanel({
             {isCommissioner && (
               <Button
                 variant="secondary"
-                className="flex-1 text-sm text-red-300 border-red-500/30 hover:border-red-400/50"
+                className="flex-1 text-sm"
                 disabled={busy !== null}
-                onClick={() => void runInviteAction("cancel")}
+                onClick={() => void handleCancelInviteLink()}
               >
-                {busy === "cancel" ? "Cancelling…" : "Cancel invite"}
+                {busy === "cancel" ? "Cancelling…" : "Cancel invite link"}
               </Button>
             )}
           </div>
@@ -90,7 +134,8 @@ export function HumanLeagueInvitePanel({
       ) : isCommissioner ? (
         <>
           <p className="text-xs text-muted">
-            The previous invite link was cancelled and no longer works.
+            The previous invite link was cancelled. The league is still waiting
+            for players — generate a new link when you&apos;re ready.
           </p>
           <Button
             variant="primary"
@@ -102,6 +147,23 @@ export function HumanLeagueInvitePanel({
           </Button>
         </>
       ) : null}
+
+      {isCommissioner && (
+        <div className="pt-2 border-t border-dark-border">
+          <Button
+            variant="ghost"
+            className="w-full text-sm text-red-400 border border-red-500/30 hover:border-red-400/50"
+            disabled={busy !== null}
+            onClick={() => void handleDeleteLeague()}
+          >
+            {busy === "delete" ? "Deleting…" : "Delete league"}
+          </Button>
+          <p className="text-[0.6875rem] text-muted mt-2">
+            Deletes the entire league permanently. Use &ldquo;Cancel invite
+            link&rdquo; above if you only want to invalidate the current URL.
+          </p>
+        </div>
+      )}
 
       {error && <p className="text-xs text-red-400">{error}</p>}
     </div>

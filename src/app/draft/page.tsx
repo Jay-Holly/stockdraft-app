@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveLeagueId, getHumanLeagueById } from "@/lib/league/active-league";
+import { isHumanLeagueDraftFinished } from "@/lib/league/human-league";
 import { DraftRoom } from "@/components/draft/DraftRoom";
 import { Logo } from "@/components/Logo";
 import type { Draft } from "@/lib/draft/types";
@@ -32,8 +33,24 @@ export default async function DraftPage() {
 
   if (activeLeagueId) {
     const humanLeague = await getHumanLeagueById(activeLeagueId);
+    const draftFinished =
+      humanLeague != null
+        ? await isHumanLeagueDraftFinished(humanLeague, user.id)
+        : null;
+
+    console.log("[draft/page] post-draft redirect check", {
+      activeLeagueId,
+      humanLeagueStatus: humanLeague?.status ?? null,
+      humanLeagueId: humanLeague?.id ?? null,
+      isHumanLeagueDraftFinished: draftFinished,
+      userId: user.id,
+    });
+
     if (humanLeague?.status === "waiting") {
       redirect("/dashboard");
+    }
+    if (humanLeague && draftFinished) {
+      redirect("/league");
     }
   }
 

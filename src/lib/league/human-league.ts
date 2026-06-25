@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
+import { getLeagueDraftStateRow } from "@/lib/draft/live-draft";
 import { summarizePicks } from "@/lib/draft/engine";
 import type { DraftPick, DraftSummary } from "@/lib/draft/types";
 import type { League } from "@/lib/league/server";
@@ -10,7 +11,6 @@ import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
 import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import { isHumanLeagueSupported } from "@/lib/league/league-config";
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
-import { shouldFillEmptySlotsWithBots } from "@/lib/league/bot-fill";
 import { maybeStartHumanLeagueDraft } from "@/lib/league/draft-scheduler";
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import {
@@ -70,6 +70,35 @@ export type OpponentDraftBoard = {
   currentRound: number;
   draftComplete: boolean;
 };
+
+/** True when the league-wide draft is done (not just the viewer's personal board). */
+export async function isHumanLeagueDraftFinished(
+  league: Pick<HumanLeague, "id" | "status">,
+  userId: string
+): Promise<boolean> {
+  if (league.status === "active" || league.status === "complete") {
+    return true;
+  }
+
+  const liveDraftState = await getLeagueDraftStateRow(league.id);
+  const liveFinished =
+    liveDraftState?.status === "complete" ||
+    (liveDraftState != null &&
+      liveDraftState.total_pick_slots > 0 &&
+      liveDraftState.current_pick_index >= liveDraftState.total_pick_slots);
+
+  if (liveFinished) {
+    return true;
+  }
+
+  // Async-style leagues without a live session row.
+  if (!liveDraftState) {
+    const humanDraft = await loadDraftStateDetailed(userId, { leagueId: league.id });
+    return humanDraft.ok && humanDraft.state.draft.status === "complete";
+  }
+
+  return false;
+}
 
 export async function getHumanLeagueMembers(
   leagueId: string
@@ -140,6 +169,31 @@ export async function listPendingHumanLeagueInvites(): Promise<
 
 function buildInviteLink(token: string): string {
   return `${resolveAppBaseUrl()}/leagues/join/${token}`;
+}
+
+function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "23505" ||
+    (error.message?.toLowerCase().includes("duplicate key") ?? false)
+  );
+}
+
+async function loadHumanLeagueById(
+  leagueId: string
+): Promise<{ league?: HumanLeague; error?: string }> {
+  const supabase = await createClient();
+  const { data: league, error } = await supabase
+    .from("leagues")
+    .select(HUMAN_LEAGUE_FIELDS)
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (error || !league) {
+    return { error: error?.message ?? "Could not load league." };
+  }
+
+  return { league: league as HumanLeague };
 }
 
 export async function createHumanLeague(
@@ -290,6 +344,27 @@ export async function cancelHumanLeagueInvite(
   return {};
 }
 
+/** Permanently removes a waiting human league and all cascaded league data. */
+export async function deleteHumanLeagueForUser(
+  userId: string,
+  leagueId: string
+): Promise<{ error?: string }> {
+  const guard = await assertWaitingHumanLeagueCommissioner(userId, leagueId);
+  if (guard.error) return guard;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("leagues")
+    .delete()
+    .eq("id", leagueId)
+    .eq("league_type", "human")
+    .eq("owner_user_id", userId)
+    .eq("status", "waiting");
+
+  if (error) return { error: error.message };
+  return {};
+}
+
 export async function regenerateHumanLeagueInvite(
   userId: string,
   leagueId: string
@@ -326,24 +401,8 @@ export async function joinHumanLeagueByToken(
 
   const preview = await getLeagueInvitePreview(token);
   if (!preview) return { error: "Invite link is invalid or expired." };
-  if (preview.status !== "waiting") {
-    return { error: "This league is no longer accepting players." };
-  }
-  if (preview.memberCount >= preview.playerCount) {
-    return { error: "This league is already full." };
-  }
 
   const supabase = await createClient();
-
-  const { data: leagueRow } = await supabase
-    .from("leagues")
-    .select("owner_user_id")
-    .eq("id", preview.leagueId)
-    .maybeSingle();
-
-  if (leagueRow?.owner_user_id === userId) {
-    return { error: "You are already the commissioner of this league." };
-  }
 
   const { data: existingMember } = await supabase
     .from("league_members")
@@ -353,17 +412,54 @@ export async function joinHumanLeagueByToken(
     .maybeSingle();
 
   if (existingMember) {
-    return { error: "You are already in this league." };
+    return loadHumanLeagueById(preview.leagueId);
   }
+
+  const { data: leagueRow, error: leagueRowError } = await supabase
+    .from("leagues")
+    .select(
+      "owner_user_id, status, player_count, visibility, opponent_type, scheduled_draft_at"
+    )
+    .eq("id", preview.leagueId)
+    .maybeSingle();
+
+  if (leagueRowError || !leagueRow) {
+    return { error: leagueRowError?.message ?? "League not found." };
+  }
+
+  if (leagueRow.owner_user_id === userId) {
+    return { error: "You are already the commissioner of this league." };
+  }
+
+  if (leagueRow.status !== "waiting") {
+    return { error: "This league is no longer accepting players." };
+  }
+
+  const { count: memberCount, error: countError } = await supabase
+    .from("league_members")
+    .select("*", { count: "exact", head: true })
+    .eq("league_id", preview.leagueId);
+
+  if (countError) return { error: countError.message };
+
+  const playerCount = leagueRow.player_count ?? preview.playerCount;
+  if ((memberCount ?? 0) >= playerCount) {
+    return { error: "This league is already full." };
+  }
+
+  const nextDraftSlot = memberCount ?? 0;
 
   const { error: memberError } = await supabase.from("league_members").insert({
     league_id: preview.leagueId,
     user_id: userId,
     display_name: trimmedTeam,
-    draft_slot: preview.memberCount,
+    draft_slot: nextDraftSlot,
   });
 
   if (memberError) {
+    if (isUniqueViolation(memberError)) {
+      return loadHumanLeagueById(preview.leagueId);
+    }
     return { error: memberError.message };
   }
 
@@ -372,48 +468,24 @@ export async function joinHumanLeagueByToken(
     user_id: userId,
   });
 
-  if (draftError) {
+  if (draftError && !isUniqueViolation(draftError)) {
     return { error: draftError.message };
   }
 
-  const { data: leagueMeta } = await supabase
-    .from("leagues")
-    .select("visibility, opponent_type, scheduled_draft_at, player_count")
-    .eq("id", preview.leagueId)
-    .maybeSingle();
+  const hasScheduledDraft = Boolean(leagueRow.scheduled_draft_at);
+  const isFull = nextDraftSlot + 1 >= playerCount;
 
-  const fillBots = leagueMeta
-    ? shouldFillEmptySlotsWithBots({
-        visibility: leagueMeta.visibility as "private" | "public",
-        opponentType: leagueMeta.opponent_type as
-          | "all_ai"
-          | "all_human"
-          | "mixed",
-      })
-    : false;
-
-  const hasScheduledDraft = Boolean(leagueMeta?.scheduled_draft_at);
-  const isFull =
-    preview.memberCount + 1 >= (leagueMeta?.player_count ?? preview.playerCount);
-
-  if (!fillBots && !hasScheduledDraft && isFull) {
+  if (!hasScheduledDraft && isFull) {
     const startResult = await maybeStartHumanLeagueDraft(preview.leagueId);
     if (startResult.error) {
-      return { error: startResult.error };
+      console.error(
+        `joinHumanLeagueByToken: draft start failed for ${preview.leagueId}:`,
+        startResult.error
+      );
     }
   }
 
-  const { data: league, error: statusError } = await supabase
-    .from("leagues")
-    .select(HUMAN_LEAGUE_FIELDS)
-    .eq("id", preview.leagueId)
-    .maybeSingle();
-
-  if (statusError || !league) {
-    return { error: statusError?.message ?? "Could not load league." };
-  }
-
-  return { league: league as HumanLeague };
+  return loadHumanLeagueById(preview.leagueId);
 }
 
 export async function listHumanLeaguesForUser(
@@ -441,16 +513,16 @@ export async function listHumanLeaguesForUser(
   return Promise.all(
     leagues.map(async (league) => {
       const members = await getHumanLeagueMembers(league.id);
-      const humanDraft = await loadDraftStateDetailed(userId, {
-        leagueId: league.id,
-      });
+      const humanDraftComplete = await isHumanLeagueDraftFinished(
+        league as HumanLeague,
+        userId
+      );
 
       return {
         league: league as HumanLeague,
         humanTeamName: await getLeagueMemberTeamName(league.id, userId),
         memberCount: members.length,
-        humanDraftComplete:
-          humanDraft.ok && humanDraft.state.draft.status === "complete",
+        humanDraftComplete,
         inviteLink: league.invite_token
           ? buildInviteLink(league.invite_token)
           : null,

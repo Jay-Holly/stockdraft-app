@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { setActiveLeagueCookie } from "@/lib/league/active-league";
 import {
@@ -16,7 +17,20 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Invite not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ preview });
+  const { user } = await getAuthenticatedUserId();
+  let isMember = false;
+  if (user) {
+    const supabase = await createClient();
+    const { data: membership } = await supabase
+      .from("league_members")
+      .select("user_id")
+      .eq("league_id", preview.leagueId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    isMember = Boolean(membership);
+  }
+
+  return NextResponse.json({ preview, isMember });
 }
 
 export async function POST(request: Request, context: RouteContext) {

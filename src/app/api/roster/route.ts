@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
-import { resolveActiveAiLeague } from "@/lib/league/active-league";
-import { loadRosterView, requireSeasonLeague } from "@/lib/roster/server";
+import { loadRosterView, requireSeasonLeague, resolveSeasonLeague } from "@/lib/roster/server";
 
 export const dynamic = "force-dynamic";
 
@@ -30,13 +29,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    const league = await resolveActiveAiLeague(user.id, season.league.id);
+    const league = await resolveSeasonLeague(user.id, season.league.id);
     const elapsedMs = Date.now() - started;
 
     return NextResponse.json(
       {
         ...result.roster,
-        leagueName: league?.name ?? "Free AI League",
+        leagueName: league?.name ?? season.league.name,
       },
       { headers: { "X-Roster-Load-Ms": String(elapsedMs) } }
     );

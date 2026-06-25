@@ -91,7 +91,12 @@ export async function loadDraftApiPayload(
         : getAiLeagueBotDraftBoards(userId, leagueId);
 
     const [liveDraft, draftFeed, draftChat, botDraftBoards] = await Promise.all([
-      live ? buildLiveDraftView(leagueId, userId) : Promise.resolve(null),
+      live
+        ? buildLiveDraftView(leagueId, userId).catch((err) => {
+            console.error("buildLiveDraftView failed:", err);
+            return null;
+          })
+        : Promise.resolve(null),
       live ? getDraftFeed(leagueId) : Promise.resolve([]),
       live ? getDraftChatMessages(leagueId) : Promise.resolve([]),
       opponentBoardsPromise.catch((err) => {

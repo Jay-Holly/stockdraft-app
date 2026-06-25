@@ -31,6 +31,24 @@ const POOL_QUOTE_BATCH = 80;
 const POLL_STALE_MS = 10000;
 const DRAFT_LOAD_TIMEOUT_MS = 45_000;
 
+function postDraftRedirectKey(leagueId: string | undefined): string | null {
+  return leagueId ? `post-draft-redirect:${leagueId}` : null;
+}
+
+function schedulePostDraftRedirect(
+  router: ReturnType<typeof useRouter>,
+  leagueId: string | undefined,
+  hasLiveDraft: boolean
+) {
+  const key = postDraftRedirectKey(leagueId);
+  if (key && sessionStorage.getItem(key)) return;
+
+  if (key) sessionStorage.setItem(key, "1");
+
+  const destination = hasLiveDraft ? "/league" : "/dashboard";
+  window.setTimeout(() => router.replace(destination), 2500);
+}
+
 export function DraftRoom({
   profile,
   initialDraft = null,
@@ -223,7 +241,11 @@ export function DraftRoom({
           typeof data.liveDraft === "object" &&
           (data.liveDraft as { status?: string }).status === "complete"
         ) {
-          window.setTimeout(() => router.replace("/dashboard"), 2500);
+          schedulePostDraftRedirect(
+            router,
+            activeLeagueIdRef.current ?? undefined,
+            true
+          );
         } else if (
           data.complete ||
           (data.draft &&
@@ -231,7 +253,11 @@ export function DraftRoom({
             (data.draft as { status?: string }).status === "complete")
         ) {
           if (!data.liveDraft) {
-            router.replace("/dashboard");
+            schedulePostDraftRedirect(
+              router,
+              activeLeagueIdRef.current ?? undefined,
+              false
+            );
           }
         }
       } catch (err) {
@@ -404,7 +430,7 @@ export function DraftRoom({
         await loadDraft();
 
         if (data.complete) {
-          window.setTimeout(() => router.replace("/dashboard"), 2500);
+          schedulePostDraftRedirect(router, state?.leagueId, Boolean(state?.liveDraft));
         }
       } catch (err) {
         setError(
@@ -547,7 +573,7 @@ export function DraftRoom({
           }}
         >
           Live draft complete — matchups are being scheduled. Redirecting to
-          dashboard…
+          League…
         </div>
       )}
 
