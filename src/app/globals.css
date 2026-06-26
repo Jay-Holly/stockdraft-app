@@ -2103,6 +2103,89 @@ body:has(.landing-screen) {
   background: rgba(59, 130, 246, 0.1);
 }
 
+.stock-detail-modal {
+  max-width: 28rem;
+}
+
+.stock-detail-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.stock-detail-logo {
+  border-radius: 0.375rem;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.stock-detail-tabs {
+  display: flex;
+  gap: 0.375rem;
+  margin-top: 1rem;
+  padding: 0.25rem;
+  border-radius: 0.625rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.stock-detail-tab {
+  flex: 1;
+  padding: 0.4375rem 0.5rem;
+  border-radius: 0.4375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.stock-detail-tab:hover:not(:disabled) {
+  color: white;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.stock-detail-tab--active {
+  color: white;
+  background: rgba(59, 130, 246, 0.22);
+}
+
+.stock-detail-tab:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.stock-detail-body {
+  min-height: 12rem;
+}
+
+.stock-detail-link {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.stock-detail-link:hover {
+  color: #bfdbfe;
+}
+
+.stock-detail-chart-caption {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-bottom: 0.5rem;
+}
+
+.stock-price-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.stock-price-chart-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--color-muted);
+}
+
 .stock-detail-modal-header {
   display: flex;
   align-items: flex-start;
