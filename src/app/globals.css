@@ -242,12 +242,12 @@ body:has(.landing-screen) {
 
   .landing-hero-panel {
     width: min(
-      44rem,
-      calc(100vw - (var(--landing-ticker-width) * 2) - 3rem)
+      52rem,
+      calc(100vw - (var(--landing-ticker-width) * 2) - 2rem)
     );
     max-width: none;
-    gap: 1rem;
-    padding: 1.25rem 1.5rem 1.75rem;
+    gap: 1.25rem;
+    padding: 1.5rem 1.75rem 2rem;
     border-radius: 1.25rem;
     background: linear-gradient(
       180deg,
@@ -265,8 +265,8 @@ body:has(.landing-screen) {
   }
 
   .landing-hero-image-wrap {
-    aspect-ratio: 1178 / 880;
-    max-height: min(68dvh, calc(100dvh - 12rem));
+    aspect-ratio: 1178 / 1120;
+    max-height: min(74dvh, calc(100dvh - 10.5rem));
     border-radius: 0.75rem;
     overflow: hidden;
     background: var(--color-primary);
@@ -288,8 +288,8 @@ body:has(.landing-screen) {
   }
 
   .landing-btn {
-    font-size: 1.0625rem;
-    padding: 0.95rem 1.25rem;
+    font-size: 1.125rem;
+    padding: 1rem 1.375rem;
     border-radius: 0.875rem;
   }
 
