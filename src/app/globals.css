@@ -315,15 +315,17 @@ body:has(.landing-screen) {
   .landing-main--stacked {
     justify-content: center;
     align-items: center;
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-top: max(2.75rem, calc(env(safe-area-inset-top) + 2rem));
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
   }
 
   .landing-hero-panel {
     width: min(
       52rem,
-      calc(100vw - (var(--landing-ticker-width) * 2) - 2rem)
+      calc(100vw - (var(--landing-ticker-width) * 2) - 4.5rem)
     );
     max-width: none;
+    margin: 1.25rem;
     gap: 1.25rem;
     padding: 1.5rem 1.75rem 2rem;
     border-radius: 1.25rem;
