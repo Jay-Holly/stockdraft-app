@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useDraftPool } from "@/hooks/useDraftPool";
 import { CRYPTO_DISPLAY_NAMES } from "@/lib/market/draft-pool";
 import { isCryptoSymbol } from "@/lib/draft/engine";
-import type { StockDetailMeta } from "@/components/market/StockDetailModal";
+import type { StockDetailMeta } from "@/components/market/stock-detail-types";
 
 export function useStockMetaLookup() {
   const { stocks } = useDraftPool();

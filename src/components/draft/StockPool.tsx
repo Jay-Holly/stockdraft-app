@@ -18,10 +18,7 @@ import {
 } from "@/lib/draft/engine";
 import type { CryptoBuyerCounts, DraftTurn } from "@/lib/draft/types";
 import type { MarketQuote } from "@/lib/market/types";
-import {
-  StockDetailChartButton,
-  StockDetailModal,
-} from "@/components/market/StockDetailModal";
+import { StockDetailChartButton } from "@/components/market/StockDetailChartButton";
 import {
   getSafetyPickQueuePriority,
   SAFETY_PICK_QUEUE_MAX,
@@ -320,12 +317,6 @@ export function StockPool({
   const [searchFeedback, setSearchFeedback] = useState<SearchFeedback | null>(
     null
   );
-  const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
-  const [detailMeta, setDetailMeta] = useState<{
-    name: string;
-    sector: string;
-  } | null>(null);
-  const [detailQuote, setDetailQuote] = useState<MarketQuote | null>(null);
 
   const enrichedPool = useMemo(
     () => enrichDraftPoolStocks(poolStocks),
@@ -678,17 +669,6 @@ export function StockPool({
     return { eligible: false, label: "Wait" };
   }
 
-  function openDetail(
-    symbol: string,
-    name: string,
-    sectorLabel: string,
-    quote: MarketQuote | undefined
-  ) {
-    setDetailSymbol(symbol);
-    setDetailMeta({ name, sector: sectorLabel });
-    setDetailQuote(quote ?? null);
-  }
-
   function renderRow(
     symbol: string,
     name: string,
@@ -740,9 +720,7 @@ export function StockPool({
           {price > 0 ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%` : "—"}
         </p>
         <div className="draft-pool-actions">
-          <StockDetailChartButton
-            onClick={() => openDetail(symbol, name, sectorLabel, quote)}
-          />
+          <StockDetailChartButton symbol={symbol} />
           {!crypto && onToggleSafetyPick && turn.type !== "complete" && (
             <button
               type="button"
@@ -1019,29 +997,6 @@ export function StockPool({
           </>
         )}
       </div>
-
-      <StockDetailModal
-        open={!!detailSymbol}
-        symbol={detailSymbol}
-        meta={
-          detailMeta
-            ? { name: detailMeta.name, sector: detailMeta.sector }
-            : undefined
-        }
-        quote={
-          detailQuote
-            ? {
-                price: detailQuote.price,
-                changePercent: detailQuote.changePercent,
-              }
-            : null
-        }
-        onClose={() => {
-          setDetailSymbol(null);
-          setDetailMeta(null);
-          setDetailQuote(null);
-        }}
-      />
     </section>
   );
 }

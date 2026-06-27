@@ -7,11 +7,7 @@ import { computeCryptoPick, formatShares } from "@/lib/draft/engine";
 import type { RosterPickView, RosterView } from "@/lib/roster/types";
 import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
 import { Button } from "@/components/Button";
-import {
-  StockDetailModal,
-  type StockDetailContext,
-} from "@/components/market/StockDetailModal";
-import { useStockMetaLookup } from "@/hooks/useStockMetaLookup";
+import { StockDetailChartButton } from "@/components/market/StockDetailChartButton";
 import {
   fetchJsonWithTimeout,
   formatFetchError,
@@ -35,10 +31,6 @@ export function MyTeamPageContent() {
 
   const [cryptoTarget, setCryptoTarget] = useState<string>("BTC");
   const [cryptoSellPercent, setCryptoSellPercent] = useState(100);
-  const [detailPick, setDetailPick] = useState<RosterPickView | null>(null);
-  const [detailSlotLabel, setDetailSlotLabel] = useState<string>("");
-
-  const { getMeta } = useStockMetaLookup();
 
   const selectedCryptoPick = useMemo(
     () => roster?.crypto.find((p) => p.id === cryptoPickId) ?? null,
@@ -323,10 +315,6 @@ export function MyTeamPageContent() {
           setIrStarterId((prev) => (prev === id ? null : id))
         }
         selectLabel="Bench"
-        onOpenDetail={(pick) => {
-          setDetailPick(pick);
-          setDetailSlotLabel("Starter");
-        }}
       />
 
       <RosterBlock
@@ -339,10 +327,6 @@ export function MyTeamPageContent() {
         selectedId={irBenchId}
         onSelect={(id) => setIrBenchId((prev) => (prev === id ? null : id))}
         selectLabel="Promote"
-        onOpenDetail={(pick) => {
-          setDetailPick(pick);
-          setDetailSlotLabel("Bench");
-        }}
       />
 
       {!viewingHistorical && (
@@ -374,10 +358,6 @@ export function MyTeamPageContent() {
         selectedId={cryptoPickId}
         onSelect={(id) => setCryptoPickId((prev) => (prev === id ? null : id))}
         selectLabel="Sell"
-        onOpenDetail={(pick) => {
-          setDetailPick(pick);
-          setDetailSlotLabel("Crypto flex");
-        }}
       />
 
       {!viewingHistorical && (
@@ -516,34 +496,6 @@ export function MyTeamPageContent() {
       </section>
       )}
 
-      <StockDetailModal
-        open={!!detailPick}
-        symbol={detailPick?.symbol ?? null}
-        meta={detailPick ? getMeta(detailPick.symbol) : undefined}
-        quote={
-          detailPick
-            ? {
-                price: detailPick.currentPrice,
-                changePercent: detailPick.changePercent,
-              }
-            : null
-        }
-        context={
-          detailPick
-            ? ({
-                slotLabel: detailSlotLabel,
-                budgetSpent: detailPick.budget_spent,
-                shares: detailPick.shares,
-                scores: detailPick.scores,
-                gainPercent: detailPick.gainPercent,
-              } satisfies StockDetailContext)
-            : undefined
-        }
-        onClose={() => {
-          setDetailPick(null);
-          setDetailSlotLabel("");
-        }}
-      />
     </div>
   );
 }
@@ -631,7 +583,6 @@ function RosterBlock({
   selectedId,
   onSelect,
   selectLabel,
-  onOpenDetail,
 }: {
   title: string;
   subtitle: string;
@@ -642,7 +593,6 @@ function RosterBlock({
   selectedId?: string | null;
   onSelect?: (id: string) => void;
   selectLabel?: string;
-  onOpenDetail?: (pick: RosterPickView) => void;
 }) {
   return (
     <section className="season-card overflow-hidden p-0">
@@ -659,20 +609,16 @@ function RosterBlock({
           picks.map((pick) => (
             <div key={pick.id} className="season-roster-row">
               <div className="min-w-0 flex-1">
-                <button
-                  type="button"
-                  className="stock-detail-symbol-btn"
-                  onClick={() =>
-                    pick.symbol.toUpperCase() !== "__OPEN__"
-                      ? onOpenDetail?.(pick)
-                      : undefined
-                  }
-                  disabled={pick.symbol.toUpperCase() === "__OPEN__"}
-                >
-                  {pick.symbol.toUpperCase() === "__OPEN__"
-                    ? "Empty slot"
-                    : pick.symbol}
-                </button>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold">
+                    {pick.symbol.toUpperCase() === "__OPEN__"
+                      ? "Empty slot"
+                      : pick.symbol}
+                  </p>
+                  {pick.symbol.toUpperCase() !== "__OPEN__" && (
+                    <StockDetailChartButton symbol={pick.symbol} />
+                  )}
+                </div>
                 <p className="text-xs text-muted">
                   {pick.symbol.toUpperCase() === "__OPEN__"
                     ? "Released to free agency"
