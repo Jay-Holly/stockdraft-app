@@ -220,8 +220,8 @@ body:has(.landing-screen) {
     isolation: isolate;
     overflow: hidden;
     gap: 0.75rem;
-    padding: 0.75rem 0.875rem 1rem;
-    border-radius: 1rem;
+    padding: 0.625rem 0 0.875rem;
+    border-radius: 0.875rem;
     background-color: #081a3d;
     background-image: linear-gradient(
       180deg,
@@ -233,9 +233,9 @@ body:has(.landing-screen) {
   }
 
   .landing-hero-image-wrap {
-    aspect-ratio: 1178 / 1020;
+    aspect-ratio: 1178 / 1075;
     max-height: none;
-    border-radius: 0.625rem;
+    border-radius: 0;
     background-color: var(--color-primary);
   }
 
@@ -248,7 +248,7 @@ body:has(.landing-screen) {
 
   .landing-actions {
     max-width: none;
-    padding: 0 0.125rem;
+    padding: 0 0.625rem;
     background-color: #081a3d;
   }
 
