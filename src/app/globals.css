@@ -61,8 +61,20 @@ body:has(.landing-screen) {
 .landing-main--stacked {
   flex-direction: column;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0;
   min-height: 0;
+}
+
+.landing-hero-panel {
+  position: relative;
+  width: 100%;
+  max-width: 24rem;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.625rem;
+  z-index: 1;
 }
 
 .landing-hero-frame {
@@ -71,17 +83,16 @@ body:has(.landing-screen) {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
   align-self: stretch;
   line-height: 0;
 }
 
 .landing-hero-image-wrap {
   width: 100%;
-  max-height: min(var(--landing-max-height), calc(100dvh - 11rem));
   overflow: hidden;
   line-height: 0;
+  background: var(--color-primary);
 }
 
 .landing-hero-image {
@@ -168,6 +179,59 @@ body:has(.landing-screen) {
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* Mobile: one cohesive hero block; crop baked-in art buttons; hide side tickers. */
+@media (max-width: 767px) {
+  .stock-tickers-layer {
+    display: none;
+  }
+
+  .landing-main {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  .landing-main--stacked {
+    justify-content: center;
+  }
+
+  .landing-hero-panel {
+    width: 100%;
+    max-width: none;
+    gap: 0.75rem;
+    padding: 0.75rem 0.875rem 1rem;
+    border-radius: 1rem;
+    background: linear-gradient(
+      180deg,
+      var(--color-primary) 0%,
+      var(--color-primary-light) 52%,
+      #081a3d 100%
+    );
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  .landing-hero-image-wrap {
+    aspect-ratio: 1178 / 900;
+    max-height: min(58dvh, calc(100dvh - 14rem));
+    border-radius: 0.625rem;
+  }
+
+  .landing-hero-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center top;
+  }
+
+  .landing-actions {
+    max-width: none;
+    padding: 0 0.125rem;
+  }
+
+  .landing-btn--primary {
+    margin-top: 0;
+  }
+}
+
 /* Desktop: extend hero art behind the action buttons (My Leagues / Rules). */
 @media (min-width: 768px) {
   .landing-main--stacked {
@@ -175,6 +239,20 @@ body:has(.landing-screen) {
     justify-content: flex-end;
     gap: 0;
     padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .landing-hero-panel {
+    position: static;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
   }
 
   .landing-hero-frame {
@@ -190,6 +268,8 @@ body:has(.landing-screen) {
   .landing-hero-image-wrap {
     height: 100%;
     max-height: none;
+    aspect-ratio: auto;
+    background: transparent;
   }
 
   .landing-hero-image {

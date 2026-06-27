@@ -34,24 +34,26 @@ export default async function HomePage() {
       <StockTickers />
 
       <main className="landing-main landing-main--stacked">
-        <div className="landing-hero-frame">
-          <div className="landing-hero-image-wrap">
-            <Image
-              src={hero.src}
-              alt={heroAlt}
-              width={hero.width}
-              height={hero.height}
-              priority
-              className="landing-hero-image"
-              sizes="calc(100vw - 120px)"
-            />
+        <div className="landing-hero-panel">
+          <div className="landing-hero-frame">
+            <div className="landing-hero-image-wrap">
+              <Image
+                src={hero.src}
+                alt={heroAlt}
+                width={hero.width}
+                height={hero.height}
+                priority
+                className="landing-hero-image"
+                sizes="(max-width: 767px) 100vw, calc(100vw - 120px)"
+              />
+            </div>
           </div>
-        </div>
 
-        <LandingActions
-          isLoggedIn={isLoggedIn}
-          showDayTraderTeaser={showDayTraderTeaser}
-        />
+          <LandingActions
+            isLoggedIn={isLoggedIn}
+            showDayTraderTeaser={showDayTraderTeaser}
+          />
+        </div>
       </main>
     </div>
   );
