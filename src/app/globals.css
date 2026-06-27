@@ -327,7 +327,7 @@ body:has(.landing-screen) {
     max-width: none;
     margin: 1.25rem;
     gap: 1.25rem;
-    padding: 1.5rem 1.75rem 2rem;
+    padding: 1.5rem 1.75rem 1.125rem;
     border-radius: 1.25rem;
     background: linear-gradient(
       180deg,
@@ -364,7 +364,7 @@ body:has(.landing-screen) {
     z-index: auto;
     max-width: none;
     gap: 0.5rem;
-    padding: 0 0.5rem 0.5rem;
+    padding: 0 0.5rem 0;
   }
 
   .landing-btn {
