@@ -168,6 +168,44 @@ body:has(.landing-screen) {
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* Desktop: extend hero art behind the action buttons (My Leagues / Rules). */
+@media (min-width: 768px) {
+  .landing-main--stacked {
+    position: relative;
+    justify-content: flex-end;
+    gap: 0;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .landing-hero-frame {
+    position: absolute;
+    top: env(safe-area-inset-top);
+    right: calc(var(--landing-ticker-width) + env(safe-area-inset-right));
+    bottom: 0;
+    left: calc(var(--landing-ticker-width) + env(safe-area-inset-left));
+    z-index: 0;
+    flex: none;
+  }
+
+  .landing-hero-image-wrap {
+    height: 100%;
+    max-height: none;
+  }
+
+  .landing-hero-image {
+    height: 100%;
+    width: 100%;
+    object-fit: cover;
+    object-position: center top;
+  }
+
+  .landing-actions {
+    position: relative;
+    z-index: 1;
+    padding-bottom: 0.25rem;
+  }
+}
+
 /* ── Stock tickers (fixed narrow side columns) ── */
 .stock-tickers-layer {
   position: fixed;
