@@ -345,7 +345,7 @@ body:has(.landing-screen) {
   }
 
   .landing-hero-image-wrap {
-    aspect-ratio: 1178 / 1120;
+    aspect-ratio: 1178 / 1065;
     max-height: min(74dvh, calc(100dvh - 10.5rem));
     border-radius: 0.75rem;
     overflow: hidden;
