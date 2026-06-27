@@ -179,7 +179,7 @@ body:has(.landing-screen) {
   color: rgba(255, 255, 255, 0.35);
 }
 
-/* Mobile: cohesive hero block, top-aligned, horizontal ticker strips. */
+/* Mobile: hero block inset between side ticker gutters, opaque panel. */
 @media (max-width: 767px) {
   body:has(.landing-screen) {
     overflow: auto;
@@ -197,8 +197,8 @@ body:has(.landing-screen) {
     height: auto;
     min-height: calc(100dvh - 4.5rem);
     max-height: none;
-    padding-left: max(0.75rem, env(safe-area-inset-left));
-    padding-right: max(0.75rem, env(safe-area-inset-right));
+    padding-left: calc(var(--landing-ticker-width) + env(safe-area-inset-left));
+    padding-right: calc(var(--landing-ticker-width) + env(safe-area-inset-right));
     padding-top: calc(env(safe-area-inset-top) + 2.75rem);
     padding-bottom: calc(env(safe-area-inset-bottom) + 2.75rem);
     align-items: stretch;
@@ -209,76 +209,21 @@ body:has(.landing-screen) {
   }
 
   .stock-tickers-layer {
-    z-index: 5;
-  }
-
-  .stock-ticker {
-    top: auto;
-    left: 0;
-    right: 0;
-    width: 100%;
-    max-width: none;
-    height: 2.25rem;
-    mask-image: linear-gradient(
-      to right,
-      transparent 0%,
-      black 6%,
-      black 94%,
-      transparent 100%
-    );
-  }
-
-  .stock-ticker--up {
-    top: 0;
-    bottom: auto;
-  }
-
-  .stock-ticker--down {
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
-  }
-
-  .stock-ticker-track {
-    flex-direction: row;
-    width: max-content;
-    max-width: none;
-    animation: ticker-scroll-horizontal 42s linear infinite;
-  }
-
-  .stock-ticker-track--down {
-    animation-direction: reverse;
-  }
-
-  .stock-ticker-set {
-    flex-direction: row;
-    width: max-content;
-    max-width: none;
-  }
-
-  .stock-ticker-item {
-    flex-direction: row;
-    width: auto;
-    max-width: none;
-    padding: 0 0.625rem;
-    gap: 0.3rem;
-  }
-
-  .stock-ticker-symbol,
-  .stock-ticker-change {
-    width: auto;
-    max-width: none;
-    font-size: 9px;
+    z-index: 1;
   }
 
   .landing-hero-panel {
     width: 100%;
     max-width: none;
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
+    overflow: hidden;
     gap: 0.75rem;
     padding: 0.75rem 0.875rem 1rem;
     border-radius: 1rem;
-    background: linear-gradient(
+    background-color: #081a3d;
+    background-image: linear-gradient(
       180deg,
       var(--color-primary) 0%,
       var(--color-primary-light) 52%,
@@ -291,6 +236,7 @@ body:has(.landing-screen) {
     aspect-ratio: 1178 / 1020;
     max-height: none;
     border-radius: 0.625rem;
+    background-color: var(--color-primary);
   }
 
   .landing-hero-image {
@@ -303,6 +249,11 @@ body:has(.landing-screen) {
   .landing-actions {
     max-width: none;
     padding: 0 0.125rem;
+    background-color: #081a3d;
+  }
+
+  .landing-btn--daytrader {
+    background: var(--color-primary);
   }
 
   .landing-btn--primary {
