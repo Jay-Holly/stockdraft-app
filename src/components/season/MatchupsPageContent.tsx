@@ -5,6 +5,7 @@ import { formatMoney, formatPct, formatSignedMoney } from "@/lib/format";
 import { getAvatarHex } from "@/lib/types";
 import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
 import type { MatchupDetail, MatchupsPageData } from "@/lib/matchup/page-data";
+import { formatPlayoffRoundLabel } from "@/lib/matchup/schedule";
 import {
   getOrderedGainStats,
   getOrderedPickGainStats,
@@ -190,7 +191,7 @@ function MatchupDetailPanel({
           <h2 className="season-card-title">
             Week {matchup.weekNumber}
             {matchup.isPlayoff && matchup.playoffRound
-              ? ` · ${matchup.playoffRound === "final" ? "Championship" : "Semifinal"}`
+              ? ` · ${formatPlayoffRoundLabel(matchup.playoffRound)}`
               : ""}
           </h2>
           <p className="text-sm text-muted">

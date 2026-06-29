@@ -6,9 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { activateHumanLeagueSchedule } from "@/lib/league/human-league";
 import {
+  generateCyclingRegularSeasonSchedule,
   generateRegularSeasonSchedule,
   normalizePlayerCount,
 } from "@/lib/matchup/schedule";
+import { resolveSeasonSettings } from "@/lib/season/calendar";
+import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
+import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
 
 async function createSeedSupabase(): Promise<SupabaseClient> {
   try {
@@ -84,7 +88,9 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
 
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
-    .select("player_count, owner_user_id, league_type")
+    .select(
+      "player_count, owner_user_id, league_type, format_type, sports_league_id"
+    )
     .eq("id", leagueId)
     .maybeSingle();
 
@@ -111,7 +117,37 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
     };
   }
 
-  const schedule = generateRegularSeasonSchedule(teamIds);
+  const isSdpl = isSdplSeasonRulesLeague({
+    formatType: league.format_type ?? "standard",
+    sportsLeagueId: league.sports_league_id ?? null,
+    playerCount: league.player_count ?? null,
+  });
+
+  let schedule;
+  if (isSdpl) {
+    const settingsResult = await supabase
+      .from("league_season_settings")
+      .select("season_format, regular_season_weeks, week_calendar")
+      .eq("league_id", leagueId)
+      .maybeSingle();
+
+    const settings = resolveSeasonSettings(
+      {
+        formatType: league.format_type ?? "standard",
+        sportsLeagueId: league.sports_league_id ?? null,
+        playerCount: league.player_count ?? null,
+      },
+      settingsResult.data ?? null
+    );
+
+    schedule = generateCyclingRegularSeasonSchedule(
+      teamIds,
+      settings.regularSeasonWeeks || SDPL_REGULAR_SEASON_WEEKS
+    );
+  } else {
+    schedule = generateRegularSeasonSchedule(teamIds);
+  }
+
   if (schedule.length === 0) {
     return {
       seeded: false,

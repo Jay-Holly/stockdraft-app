@@ -63,7 +63,7 @@ begin
     updated_at = now();
 
   update public.leagues
-  set status = 'active', current_week = 1, updated_at = now()
+  set status = 'active', current_week = 1
   where id = v_league_id;
 
   select array_agg(lm.user_id order by lm.draft_slot nulls last, lm.user_id),

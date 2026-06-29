@@ -22,9 +22,10 @@ import { backfillFinalizeAtForLeague } from "@/lib/matchup/finalize-week";
 import { AI_LEAGUE_FIELDS } from "@/lib/league/fields";
 import { DEFAULT_LEAGUE_SCORING_MODE } from "@/lib/league/scoring-mode";
 import {
-  generateRegularSeasonSchedule,
+  generateCyclingRegularSeasonSchedule,
   normalizePlayerCount,
 } from "@/lib/matchup/schedule";
+import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 import { getLeagueTeamIds } from "@/lib/matchup/league-teams";
 import {
   findHumanMatchupForWeek,
@@ -320,7 +321,10 @@ export async function activateAiLeagueSchedule(
   const ownerId = leagueRow?.owner_user_id ?? humanUserId;
   const playerCount = normalizePlayerCount(leagueRow?.player_count ?? 4);
   const teamIds = await getLeagueTeamIds(leagueId, ownerId);
-  const schedule = generateRegularSeasonSchedule(teamIds);
+  const schedule = generateCyclingRegularSeasonSchedule(
+    teamIds,
+    SDPL_REGULAR_SEASON_WEEKS
+  );
 
   const rows = await Promise.all(
     schedule.map(async (game) => {

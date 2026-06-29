@@ -12,6 +12,7 @@ import {
   setNextWeekFinalizeAt,
 } from "@/lib/matchup/finalize-week";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 import { weekUsesWeekendExtension } from "@/lib/season/finalize-times";
 import { baselinesHaveFridayClose } from "@/lib/season/weekend-scoring";
 import { loadWeekBaselineExtendedMap } from "@/lib/roster/weekly";
@@ -24,12 +25,15 @@ import {
   syncLeagueCurrentWeek,
 } from "@/lib/matchup/league-teams";
 import {
-  buildChampionshipFromWinners,
   buildFourTeamSemifinals,
+  buildPlayoffFinalsWeek,
   buildTwoTeamChampionship,
   getNextCalendarWeek,
   getRegularSeasonWeeks,
+  getSdplPlayoffWeeks,
   isRegularSeasonComplete,
+  isSdplRegularSeasonComplete,
+  partitionSemifinalResults,
   PLAYOFF_START_WEEK,
   SEASON_FINAL_WEEK,
   sortStandingsForSeeding,
@@ -102,7 +106,8 @@ async function insertScheduledGames(
 
 async function seedPlayoffsIfNeeded(
   leagueId: string,
-  playerCount: number
+  playerCount: number,
+  options?: { sdpl?: boolean; semifinalWeek?: number }
 ): Promise<{ error?: string; seeded?: boolean }> {
   const supabase = await createClient();
 
@@ -129,7 +134,20 @@ async function seedPlayoffsIfNeeded(
 
   let games: ScheduledGame[] = [];
 
-  if (usesTwoTeamPlayoff(playerCount)) {
+  if (options?.sdpl) {
+    if (seeds.length < 4) {
+      return { error: "Not enough teams for SDPL playoffs (top 4 required)." };
+    }
+    games = buildFourTeamSemifinals(
+      options.semifinalWeek ?? getSdplPlayoffWeeks(SDPL_REGULAR_SEASON_WEEKS).semifinalWeek,
+      [
+        seeds[0].userId,
+        seeds[1].userId,
+        seeds[2].userId,
+        seeds[3].userId,
+      ]
+    );
+  } else if (usesTwoTeamPlayoff(playerCount)) {
     games = [
       buildTwoTeamChampionship(
         SEASON_FINAL_WEEK,
@@ -158,7 +176,60 @@ async function seedPlayoffsIfNeeded(
   return { seeded: true };
 }
 
-async function seedChampionshipIfNeeded(
+async function seedPlayoffFinalsIfNeeded(
+  leagueId: string,
+  semifinalWeek: number,
+  finalsWeek: number
+): Promise<{ error?: string; seeded?: boolean }> {
+  const supabase = await createClient();
+
+  const { count: finalsWeekCount } = await supabase
+    .from("league_matchups")
+    .select("*", { count: "exact", head: true })
+    .eq("league_id", leagueId)
+    .eq("week_number", finalsWeek)
+    .eq("is_playoff", true);
+
+  if (finalsWeekCount && finalsWeekCount > 0) {
+    return { seeded: false };
+  }
+
+  const { data: semis } = await supabase
+    .from("league_matchups")
+    .select("home_user_id, away_user_id, winner_user_id")
+    .eq("league_id", leagueId)
+    .eq("week_number", semifinalWeek)
+    .eq("playoff_round", "semifinal")
+    .eq("status", "complete");
+
+  const partitioned = partitionSemifinalResults(semis ?? []);
+  if (!partitioned) {
+    return { seeded: false };
+  }
+
+  const { data: league } = await supabase
+    .from("leagues")
+    .select("owner_user_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  const games = buildPlayoffFinalsWeek(
+    finalsWeek,
+    partitioned.winners,
+    partitioned.losers
+  );
+
+  const result = await insertScheduledGames(
+    leagueId,
+    games,
+    league?.owner_user_id
+  );
+  if (result.error) return result;
+  return { seeded: true };
+}
+
+/** Legacy sports-sim path: championship only, no 3rd-place game. */
+async function seedLegacyChampionshipIfNeeded(
   leagueId: string
 ): Promise<{ error?: string; seeded?: boolean }> {
   const supabase = await createClient();
@@ -176,19 +247,15 @@ async function seedChampionshipIfNeeded(
 
   const { data: semis } = await supabase
     .from("league_matchups")
-    .select("*")
+    .select("home_user_id, away_user_id, winner_user_id")
     .eq("league_id", leagueId)
     .eq("week_number", PLAYOFF_START_WEEK)
     .eq("playoff_round", "semifinal")
     .eq("status", "complete");
 
-  if (!semis || semis.length < 2) {
+  const partitioned = partitionSemifinalResults(semis ?? []);
+  if (!partitioned) {
     return { seeded: false };
-  }
-
-  const winners = semis.map((row) => row.winner_user_id).filter(Boolean) as string[];
-  if (winners.length !== 2) {
-    return { error: "Could not determine championship participants." };
   }
 
   const { data: league } = await supabase
@@ -199,7 +266,13 @@ async function seedChampionshipIfNeeded(
 
   const result = await insertScheduledGames(
     leagueId,
-    [buildChampionshipFromWinners(SEASON_FINAL_WEEK, winners[0], winners[1])],
+    [
+      buildTwoTeamChampionship(
+        SEASON_FINAL_WEEK,
+        partitioned.winners[0],
+        partitioned.winners[1]
+      ),
+    ],
     league?.owner_user_id
   );
   if (result.error) return result;
@@ -370,19 +443,39 @@ async function advanceLeagueCalendar(
 ): Promise<{ seasonComplete?: boolean; nextWeek?: number }> {
   const supabase = await createClient();
   const scheduledWeeks = await getScheduledWeekNumbers(leagueId);
+  const { settings } = await loadSeasonCalendarForLeague(leagueId);
 
-  if (
-    isRegularSeasonComplete(currentWeek, playerCount) &&
-    !scheduledWeeks.some((week) => week > getRegularSeasonWeeks(playerCount))
-  ) {
-    await seedPlayoffsIfNeeded(leagueId, playerCount);
-  }
+  if (settings.rulesApply) {
+    const regularSeasonWeeks = settings.regularSeasonWeeks;
+    const { semifinalWeek, finalsWeek } = getSdplPlayoffWeeks(regularSeasonWeeks);
 
-  if (
-    currentWeek === PLAYOFF_START_WEEK &&
-    usesFourTeamPlayoff(playerCount)
-  ) {
-    await seedChampionshipIfNeeded(leagueId);
+    if (
+      isSdplRegularSeasonComplete(currentWeek, regularSeasonWeeks) &&
+      !scheduledWeeks.some((week) => week > regularSeasonWeeks)
+    ) {
+      await seedPlayoffsIfNeeded(leagueId, playerCount, {
+        sdpl: true,
+        semifinalWeek,
+      });
+    }
+
+    if (currentWeek === semifinalWeek) {
+      await seedPlayoffFinalsIfNeeded(leagueId, semifinalWeek, finalsWeek);
+    }
+  } else {
+    if (
+      isRegularSeasonComplete(currentWeek, playerCount) &&
+      !scheduledWeeks.some((week) => week > getRegularSeasonWeeks(playerCount))
+    ) {
+      await seedPlayoffsIfNeeded(leagueId, playerCount);
+    }
+
+    if (
+      currentWeek === PLAYOFF_START_WEEK &&
+      usesFourTeamPlayoff(playerCount)
+    ) {
+      await seedLegacyChampionshipIfNeeded(leagueId);
+    }
   }
 
   const refreshedWeeks = await getScheduledWeekNumbers(leagueId);

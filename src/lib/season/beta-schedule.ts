@@ -4,10 +4,7 @@ import {
   SDPL_SEMIFINAL_WEEK,
 } from "@/lib/season/constants";
 import type { WeekCalendarEntry } from "@/lib/season/types";
-import {
-  generateRoundRobinPairings,
-  type ScheduledGame,
-} from "@/lib/matchup/schedule";
+import { generateCyclingRegularSeasonSchedule } from "@/lib/matchup/schedule";
 
 /** SDAI-00039 compressed daily-week beta calendar (Jun 29 – Jul 15, 2026). */
 export const SDAI_BETA_WEEK_CALENDAR: WeekCalendarEntry[] = [
@@ -26,27 +23,6 @@ export const SDAI_BETA_WEEK_CALENDAR: WeekCalendarEntry[] = [
   { week: SDPL_FINALS_WEEK, date: "2026-07-15" },
 ];
 
-/** 11 regular-season weeks cycling round-robin pairings (supports 4–12 teams). */
-export function generateBetaDailyRegularSeasonSchedule(
-  teamIds: string[],
-  regularSeasonWeeks: number = SDPL_REGULAR_SEASON_WEEKS
-): ScheduledGame[] {
-  const pairings = generateRoundRobinPairings(teamIds);
-  if (pairings.length === 0) return [];
-
-  const games: ScheduledGame[] = [];
-
-  for (let week = 1; week <= regularSeasonWeeks; week++) {
-    const weekPairings = pairings[(week - 1) % pairings.length];
-    for (const [homeUserId, awayUserId] of weekPairings) {
-      games.push({
-        weekNumber: week,
-        homeUserId,
-        awayUserId,
-        isPlayoff: false,
-      });
-    }
-  }
-
-  return games;
-}
+/** @deprecated Use generateCyclingRegularSeasonSchedule from schedule.ts */
+export const generateBetaDailyRegularSeasonSchedule =
+  generateCyclingRegularSeasonSchedule;
