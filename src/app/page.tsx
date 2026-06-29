@@ -16,6 +16,12 @@ const LANDING_HERO_LOGGED_IN = {
   height: 1335,
 } as const;
 
+const LANDING_HERO_MOBILE = {
+  src: "/images/landing/hero-mobile.png",
+  width: 472,
+  height: 695,
+} as const;
+
 export default async function HomePage() {
   const supabase = await createClient();
   const {
@@ -43,8 +49,17 @@ export default async function HomePage() {
                 width={hero.width}
                 height={hero.height}
                 priority
-                className="landing-hero-image"
+                className="landing-hero-image landing-hero-image--desktop"
                 sizes="(max-width: 767px) 100vw, calc(100vw - 120px)"
+              />
+              <Image
+                src={LANDING_HERO_MOBILE.src}
+                alt={heroAlt}
+                width={LANDING_HERO_MOBILE.width}
+                height={LANDING_HERO_MOBILE.height}
+                priority
+                className="landing-hero-image landing-hero-image--mobile"
+                sizes="100vw"
               />
             </div>
           </div>
