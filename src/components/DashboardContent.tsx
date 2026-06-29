@@ -37,6 +37,15 @@ function leagueStatusLabel(status: string): string {
   return "Season complete";
 }
 
+function canEnterSeasonLeague(
+  status: string,
+  humanDraftComplete: boolean
+): boolean {
+  return (
+    humanDraftComplete && status !== "drafting" && status !== "waiting"
+  );
+}
+
 function MatchupResultCard({
   weekNumber,
   opponentName,
@@ -578,17 +587,30 @@ export function DashboardContent({
                       Enter Draft Room
                     </Button>
                   )}
-                  {item.league.status === "active" && item.humanDraftComplete && (
+                  {canEnterSeasonLeague(
+                    item.league.status,
+                    item.humanDraftComplete
+                  ) && (
                     <>
                       <Button
-                        variant="secondary"
+                        variant="primary"
                         className="text-xs px-3"
                         disabled={busy}
                         onClick={() =>
                           void setActiveLeague(item.league.id, "/league")
                         }
                       >
-                        League
+                        Open league
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="text-xs px-3"
+                        disabled={busy}
+                        onClick={() =>
+                          void setActiveLeague(item.league.id, "/matchups")
+                        }
+                      >
+                        Matchups
                       </Button>
                       <Button
                         variant="secondary"
@@ -660,6 +682,54 @@ export function DashboardContent({
                 Continue live draft
               </Button>
             )}
+
+          {canEnterSeasonLeague(
+            activeSummary.league.status,
+            activeSummary.humanDraftComplete
+          ) && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                className="flex-1 text-sm"
+                disabled={switchingLeagueId === activeSummary.league.id}
+                onClick={() =>
+                  void setActiveLeague(activeSummary.league.id, "/league")
+                }
+              >
+                Open league
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1 text-sm"
+                disabled={switchingLeagueId === activeSummary.league.id}
+                onClick={() =>
+                  void setActiveLeague(activeSummary.league.id, "/matchups")
+                }
+              >
+                Matchups
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1 text-sm"
+                disabled={switchingLeagueId === activeSummary.league.id}
+                onClick={() =>
+                  void setActiveLeague(activeSummary.league.id, "/my-team")
+                }
+              >
+                My Team
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex-1 text-sm"
+                disabled={switchingLeagueId === activeSummary.league.id}
+                onClick={() =>
+                  void setActiveLeague(activeSummary.league.id, "/free-agents")
+                }
+              >
+                Free Agents
+              </Button>
+            </div>
+          )}
 
           {activeSummary.lastCompletedMatchup &&
             activeSummary.league.status !== "drafting" && (

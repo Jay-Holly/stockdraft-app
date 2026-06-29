@@ -382,9 +382,10 @@ export async function captureWeekBaselinesForUser(
 
 export async function captureWeekBaselinesForLeague(
   leagueId: string,
-  weekNumber: number
+  weekNumber: number,
+  supabaseClient?: SupabaseClient
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = supabaseClient ?? (await createClient());
   const { data: drafts } = await supabase
     .from("drafts")
     .select("user_id")
