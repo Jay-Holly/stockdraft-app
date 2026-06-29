@@ -422,6 +422,12 @@ export function StockPool({
 
   const isReferenceMode = turn.type === "complete";
 
+  function handlePoolFilterClick(filter: DraftPoolFilter) {
+    setPoolFilter(filter);
+    setPoolSort("default");
+    setPriceSortDirection("asc");
+  }
+
   function handlePriceSortClick() {
     if (poolSort === "price") {
       setPriceSortDirection((dir) => (dir === "asc" ? "desc" : "asc"));
@@ -837,7 +843,7 @@ export function StockPool({
             key={filter}
             type="button"
             className={`draft-filter-btn ${poolFilter === filter ? "draft-filter-btn--active" : ""} ${filter === "Top 100" ? "draft-filter-btn--top100" : ""} ${filter === "Crypto" ? "draft-filter-btn--crypto-tab" : ""}`}
-            onClick={() => setPoolFilter(filter)}
+            onClick={() => handlePoolFilterClick(filter)}
           >
             {filterButtonLabel(filter)}
           </button>
