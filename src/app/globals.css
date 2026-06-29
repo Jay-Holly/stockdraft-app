@@ -652,6 +652,8 @@ body:has(.landing-screen) {
 
 /* ── Dashboard live ticker tape ── */
 .live-ticker-tape {
+  --live-ticker-scroll-duration: 90s;
+
   border-bottom: 1px solid var(--color-dark-border);
   background: #0a0a08;
 }
@@ -712,7 +714,7 @@ body:has(.landing-screen) {
   gap: 1.25rem;
   width: max-content;
   padding: 0 1rem;
-  animation: live-ticker-scroll 45s linear infinite;
+  animation: live-ticker-scroll var(--live-ticker-scroll-duration) linear infinite;
   will-change: transform;
 }
 
