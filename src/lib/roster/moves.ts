@@ -19,6 +19,11 @@ import {
 } from "@/lib/roster/quotes";
 import { requireSeasonLeague } from "@/lib/roster/server";
 import {
+  enforceFreeAgencyOpenForLeague,
+  enforceLineupUnlockedForLeague,
+  type RosterMoveResult,
+} from "@/lib/season/move-gates";
+import {
   applyCryptoRebalanceWeekBaselines,
   applyIrSwapWeekBaselines,
 } from "@/lib/roster/weekly";
@@ -210,11 +215,13 @@ export async function applyIrSwap(
   userId: string,
   starterPickId: string,
   benchPickId: string
-): Promise<{ error?: string }> {
+): Promise<RosterMoveResult> {
   const season = await requireSeasonLeague(userId);
   if ("error" in season) return { error: season.error };
 
   const { league } = season;
+  const gate = await enforceLineupUnlockedForLeague(league.id);
+  if (gate) return gate;
   const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
   if (!state.ok) return { error: state.error };
 
@@ -473,12 +480,14 @@ export async function applyWaiverClaim(
   userId: string,
   droppedPickId: string,
   addSymbol: string
-): Promise<{ error?: string }> {
+): Promise<RosterMoveResult> {
   const season = await requireSeasonLeague(userId);
   if ("error" in season) return { error: season.error };
 
   const upper = addSymbol.toUpperCase();
   const { league } = season;
+  const gate = await enforceFreeAgencyOpenForLeague(league.id);
+  if (gate) return gate;
   const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
   if (!state.ok) return { error: state.error };
 
@@ -572,11 +581,13 @@ export async function applyWaiverClaim(
 export async function applyBenchDrop(
   userId: string,
   benchPickId: string
-): Promise<{ error?: string; releasedSymbol?: string }> {
+): Promise<RosterMoveResult & { releasedSymbol?: string }> {
   const season = await requireSeasonLeague(userId);
   if ("error" in season) return { error: season.error };
 
   const { league } = season;
+  const gate = await enforceFreeAgencyOpenForLeague(league.id);
+  if (gate) return gate;
   const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
   if (!state.ok) return { error: state.error };
 

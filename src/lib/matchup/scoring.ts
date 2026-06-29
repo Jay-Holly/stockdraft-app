@@ -1,9 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { activateAiLeagueSchedule } from "@/lib/league/ai-league";
-import { captureWeekBaselinesForLeague, captureWeekCloseSnapshots } from "@/lib/roster/weekly";
+import {
+  captureWeekBaselinesForLeague,
+  captureWeekCloseSnapshots,
+} from "@/lib/roster/weekly";
 import { getLastCryptoQuoteSource } from "@/lib/roster/quotes";
 import { listAiLeaguesForUser } from "@/lib/league/active-league";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
+import {
+  canFinalizeLeagueWeek,
+  setNextWeekFinalizeAt,
+} from "@/lib/matchup/finalize-week";
+import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import { weekUsesWeekendExtension } from "@/lib/season/finalize-times";
+import { baselinesHaveFridayClose } from "@/lib/season/weekend-scoring";
+import { loadWeekBaselineExtendedMap } from "@/lib/roster/weekly";
 import {
   computeWeeklyScoreForUser,
   getLeagueMemberDisplayName,
@@ -197,7 +208,13 @@ async function seedChampionshipIfNeeded(
 
 async function scoreSingleMatchup(
   matchup: LeagueMatchupRow,
-  scoringMode: ReturnType<typeof parseLeagueScoringMode>
+  scoringMode: ReturnType<typeof parseLeagueScoringMode>,
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: Awaited<ReturnType<typeof createClient>>;
+  }
 ): Promise<{ error?: string }> {
   if (
     !matchup.home_user_id ||
@@ -215,12 +232,24 @@ async function scoreSingleMatchup(
     homeScore = await computeWeeklyScoreForUser(
       matchup.home_user_id,
       matchup.league_id,
-      scoringMode
+      scoringMode,
+      {
+        forceHybrid: options?.forceHybrid,
+        weekNumber: options?.weekNumber ?? matchup.week_number,
+        at: options?.at,
+        supabase: options?.supabase,
+      }
     );
     awayScore = await computeWeeklyScoreForUser(
       matchup.away_user_id,
       matchup.league_id,
-      scoringMode
+      scoringMode,
+      {
+        forceHybrid: options?.forceHybrid,
+        weekNumber: options?.weekNumber ?? matchup.week_number,
+        at: options?.at,
+        supabase: options?.supabase,
+      }
     );
   } catch (error) {
     console.error(
@@ -369,7 +398,101 @@ async function advanceLeagueCalendar(
 
   await syncLeagueCurrentWeek(leagueId, nextWeek);
   await captureWeekBaselinesForLeague(leagueId, nextWeek);
+  await setNextWeekFinalizeAt(leagueId, nextWeek, new Date());
   return { seasonComplete: false, nextWeek };
+}
+
+async function shouldForceHybridForWeek(
+  leagueId: string,
+  weekNumber: number
+): Promise<boolean> {
+  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  if (!settings.rulesApply || !weekUsesWeekendExtension(settings, weekNumber)) {
+    return false;
+  }
+
+  const supabase = await createClient();
+  const { data: matchups } = await supabase
+    .from("league_matchups")
+    .select("stock_close_captured_at")
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber)
+    .limit(1);
+
+  if (matchups?.[0]?.stock_close_captured_at) return true;
+
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("user_id")
+    .eq("league_id", leagueId)
+    .limit(1);
+
+  const userId = drafts?.[0]?.user_id;
+  if (!userId) return false;
+
+  const baselines = await loadWeekBaselineExtendedMap(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber
+  );
+  return baselinesHaveFridayClose(baselines);
+}
+
+export async function finalizeMatchupsForLeagueWeek(
+  leagueId: string,
+  weekNumber: number,
+  at: Date = new Date(),
+  supabaseOverride?: Awaited<ReturnType<typeof createClient>>
+): Promise<{ finalized?: boolean; error?: string }> {
+  const supabase = supabaseOverride ?? (await createClient());
+
+  const { data: league } = await supabase
+    .from("leagues")
+    .select("status, scoring_mode")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (!league || league.status !== "active") {
+    return { finalized: false };
+  }
+
+  const scoringMode = parseLeagueScoringMode(league.scoring_mode);
+  const playerCount = await getLeaguePlayerCount(leagueId);
+
+  const { data: weekMatchups } = await supabase
+    .from("league_matchups")
+    .select("*")
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber)
+    .eq("status", "scheduled");
+
+  if (!weekMatchups?.length) {
+    return { finalized: false };
+  }
+
+  const forceHybrid = await shouldForceHybridForWeek(leagueId, weekNumber);
+  let lastError: string | undefined;
+
+  for (const matchup of weekMatchups as LeagueMatchupRow[]) {
+    const result = await scoreSingleMatchup(matchup, scoringMode, {
+      forceHybrid,
+      weekNumber,
+      at,
+      supabase,
+    });
+    if (result.error) lastError = result.error;
+  }
+
+  if (lastError) {
+    return { error: lastError, finalized: false };
+  }
+
+  await captureWeekCloseSnapshots(leagueId, weekNumber);
+  await applyStandingsForCompletedWeek(leagueId, weekNumber);
+  await advanceLeagueCalendar(leagueId, playerCount, weekNumber);
+
+  return { finalized: true };
 }
 
 export async function scoreMatchupForLeague(
@@ -402,6 +525,13 @@ export async function scoreMatchupForLeague(
 
   const currentWeek = league.current_week ?? humanStandings.current_week ?? 1;
 
+  const canFinalize = await canFinalizeLeagueWeek(leagueId, currentWeek);
+  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+
+  if (settings.rulesApply && !canFinalize) {
+    return { scored: false };
+  }
+
   const { data: weekMatchups } = await supabase
     .from("league_matchups")
     .select("*")
@@ -429,9 +559,13 @@ export async function scoreMatchupForLeague(
   }
 
   let lastError: string | undefined;
+  const forceHybrid = await shouldForceHybridForWeek(leagueId, currentWeek);
 
   for (const matchup of weekMatchups as LeagueMatchupRow[]) {
-    const result = await scoreSingleMatchup(matchup, scoringMode);
+    const result = await scoreSingleMatchup(matchup, scoringMode, {
+      forceHybrid,
+      weekNumber: currentWeek,
+    });
     if (result.error) lastError = result.error;
   }
 
@@ -520,6 +654,51 @@ export async function ensureAiLeagueReadyForMatchups(
 
     const result = await activateAiLeagueSchedule(league.id, userId);
     if (result.error) lastError = result.error;
+  }
+
+  return lastError ? { error: lastError } : {};
+}
+
+export async function ensureHumanLeagueReadyForMatchups(
+  userId: string
+): Promise<{ error?: string }> {
+  const { listHumanLeaguesForUser } = await import("@/lib/league/human-league");
+
+  const humanLeagues = await listHumanLeaguesForUser(userId);
+  const supabase = await createClient();
+  let lastError: string | undefined;
+
+  for (const item of humanLeagues) {
+    if (item.league.status === "waiting") continue;
+
+    const readyToSeed =
+      item.humanDraftComplete ||
+      item.league.status === "active" ||
+      item.league.status === "complete";
+
+    if (!readyToSeed) continue;
+
+    const { count } = await supabase
+      .from("league_matchups")
+      .select("*", { count: "exact", head: true })
+      .eq("league_id", item.league.id);
+
+    if (count && count > 0) continue;
+
+    const { seedHumanLeagueRegularSeasonIfMissing } = await import(
+      "@/lib/matchup/seed-human-schedule"
+    );
+    const result = await seedHumanLeagueRegularSeasonIfMissing(
+      item.league.id,
+      item.league.owner_user_id
+    );
+    if (result.error) {
+      console.error(
+        `[ensureHumanLeagueReadyForMatchups] ${item.league.support_code}:`,
+        result.error
+      );
+      lastError = result.error;
+    }
   }
 
   return lastError ? { error: lastError } : {};

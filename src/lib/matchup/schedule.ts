@@ -42,8 +42,10 @@ export function normalizePlayerCount(count: number | null | undefined): LeaguePl
 }
 
 /**
- * Round-robin with the first team fixed (human / commissioner slot).
+ * Round-robin with the first team fixed (commissioner / draft_slot 0).
+ * Player-count agnostic for even n ≥ 2: n/2 matchups per week, (n−1) weeks.
  * 4 teams → Week 1: A-B, C-D · Week 2: A-C, B-D · Week 3: A-D, B-C
+ * 12 teams → 6 matchups/week × 11 weeks (66 unique pairings).
  */
 export function generateRoundRobinPairings(
   teamIds: string[]

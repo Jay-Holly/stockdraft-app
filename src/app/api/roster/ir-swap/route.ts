@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { applyIrSwap } from "@/lib/roster/moves";
+import { rosterMoveHttpStatus } from "@/lib/season/move-gates";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +36,16 @@ export async function POST(request: Request) {
 
     if (result.error) {
       return NextResponse.json(
-        { error: result.error, step: "applyIrSwap", elapsedMs },
-        { status: 400, headers: { "X-Roster-Move-Ms": String(elapsedMs) } }
+        {
+          error: result.error,
+          code: result.code,
+          step: "applyIrSwap",
+          elapsedMs,
+        },
+        {
+          status: rosterMoveHttpStatus(result),
+          headers: { "X-Roster-Move-Ms": String(elapsedMs) },
+        }
       );
     }
 

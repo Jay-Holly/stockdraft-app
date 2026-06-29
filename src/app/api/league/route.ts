@@ -3,6 +3,7 @@ import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { loadLeaguePageData } from "@/lib/roster/server";
 import {
   ensureAiLeagueReadyForMatchups,
+  ensureHumanLeagueReadyForMatchups,
   scoreCurrentAiMatchup,
 } from "@/lib/matchup/scoring";
 
@@ -21,6 +22,7 @@ export async function GET() {
 
     try {
       await ensureAiLeagueReadyForMatchups(user.id);
+      await ensureHumanLeagueReadyForMatchups(user.id);
       await scoreCurrentAiMatchup(user.id);
     } catch (sideEffectError) {
       console.error("GET /api/league scoring side effect failed:", sideEffectError);

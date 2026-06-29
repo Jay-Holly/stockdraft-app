@@ -1,5 +1,6 @@
 import type { DraftPick, CryptoBuyerCounts } from "@/lib/draft/types";
 import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
+import type { SeasonCalendarState } from "@/lib/season/types";
 
 export type RosterPickView = DraftPick & {
   acquired_via?: string;
@@ -36,6 +37,7 @@ export type RosterView = {
   scoringWeekDollarGain: number;
   /** Weekly $ gain across all roster slots (Winner of the Week). */
   totalWeekDollarGain: number;
+  calendar?: SeasonCalendarState;
 };
 
 export type LeagueTeamStanding = {
@@ -88,4 +90,5 @@ export type FreeAgentsPageData = {
   leagueId: string;
   freeAgents: FreeAgentStock[];
   benchSlots: Array<{ pickId: string; symbol: string; isOpen?: boolean }>;
+  calendar?: SeasonCalendarState;
 };

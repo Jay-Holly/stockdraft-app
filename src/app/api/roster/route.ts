@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { loadRosterView, requireSeasonLeague, resolveSeasonLeague } from "@/lib/roster/server";
+import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 
 export const dynamic = "force-dynamic";
 
@@ -30,12 +31,14 @@ export async function GET(request: Request) {
     }
 
     const league = await resolveSeasonLeague(user.id, season.league.id);
+    const { calendar } = await loadSeasonCalendarForLeague(season.league.id);
     const elapsedMs = Date.now() - started;
 
     return NextResponse.json(
       {
         ...result.roster,
         leagueName: league?.name ?? season.league.name,
+        calendar,
       },
       { headers: { "X-Roster-Load-Ms": String(elapsedMs) } }
     );

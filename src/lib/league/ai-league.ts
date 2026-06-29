@@ -18,6 +18,7 @@ import {
   verifyUserOwnsLeague,
 } from "@/lib/league/active-league";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
+import { backfillFinalizeAtForLeague } from "@/lib/matchup/finalize-week";
 import { AI_LEAGUE_FIELDS } from "@/lib/league/fields";
 import { DEFAULT_LEAGUE_SCORING_MODE } from "@/lib/league/scoring-mode";
 import {
@@ -366,6 +367,7 @@ export async function activateAiLeagueSchedule(
   if (leagueError) return { error: leagueError.message };
 
   await captureWeekBaselinesForLeague(leagueId, 1);
+  await backfillFinalizeAtForLeague(leagueId);
 
   return {};
 }

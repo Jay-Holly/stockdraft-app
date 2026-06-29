@@ -8,6 +8,15 @@ import {
 import { isCryptoSymbol } from "@/lib/draft/engine";
 import type { CryptoQuote } from "@/lib/coingecko/service";
 import { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
+import {
+  baselinesHaveFridayClose,
+  fetchLivePricesForPicks,
+  resolveHybridScoringValue,
+  type WeekBaselineRow,
+} from "@/lib/season/weekend-scoring";
+import { isPastFinalizeAt } from "@/lib/season/finalize-times";
+import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import type { SeasonSettings } from "@/lib/season/types";
 
 export { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
 
@@ -81,9 +90,26 @@ export async function loadWeekBaselineMap(
   userId: string,
   weekNumber: number
 ): Promise<Map<string, number>> {
+  const extended = await loadWeekBaselineExtendedMap(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber
+  );
+  return new Map(
+    [...extended.entries()].map(([pickId, row]) => [pickId, row.valueAtOpen])
+  );
+}
+
+export async function loadWeekBaselineExtendedMap(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  weekNumber: number
+): Promise<Map<string, WeekBaselineRow>> {
   const { data, error } = await supabase
     .from("roster_week_baselines")
-    .select("pick_id, value_at_open")
+    .select("pick_id, value_at_open, stock_value_at_friday_close")
     .eq("league_id", leagueId)
     .eq("user_id", userId)
     .eq("week_number", weekNumber);
@@ -91,8 +117,237 @@ export async function loadWeekBaselineMap(
   if (error || !data) return new Map();
 
   return new Map(
-    data.map((row) => [row.pick_id, Number(row.value_at_open)])
+    data.map((row) => [
+      row.pick_id,
+      {
+        valueAtOpen: Number(row.value_at_open),
+        stockValueAtFridayClose:
+          row.stock_value_at_friday_close != null
+            ? Number(row.stock_value_at_friday_close)
+            : null,
+      },
+    ])
   );
+}
+
+async function getWeekFinalizeAtForLeague(
+  supabase: SupabaseClient,
+  leagueId: string,
+  weekNumber: number
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("league_matchups")
+    .select("finalize_at")
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber)
+    .not("finalize_at", "is", null)
+    .limit(1)
+    .maybeSingle();
+
+  return data?.finalize_at ?? null;
+}
+
+async function shouldUseHybridScoring(
+  supabase: SupabaseClient,
+  leagueId: string,
+  weekNumber: number,
+  settings: SeasonSettings,
+  baselineMap: Map<string, WeekBaselineRow>,
+  now: Date,
+  forceHybrid?: boolean
+): Promise<boolean> {
+  if (forceHybrid) return baselinesHaveFridayClose(baselineMap);
+  if (!settings.rulesApply) return false;
+  if (!baselinesHaveFridayClose(baselineMap)) return false;
+
+  const finalizeAt = await getWeekFinalizeAtForLeague(
+    supabase,
+    leagueId,
+    weekNumber
+  );
+  if (finalizeAt && isPastFinalizeAt(finalizeAt, now)) return false;
+
+  return true;
+}
+
+async function loadUserDraftPicks(
+  supabase: SupabaseClient,
+  userId: string,
+  leagueId: string
+): Promise<DraftPick[]> {
+  const { data: draft } = await supabase
+    .from("drafts")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!draft?.id) return [];
+
+  const { data: picks } = await supabase
+    .from("draft_picks")
+    .select("*")
+    .eq("draft_id", draft.id)
+    .order("pick_order", { ascending: true });
+
+  return (picks ?? []) as DraftPick[];
+}
+
+async function computeScoringWeekInputs(
+  userId: string,
+  leagueId: string,
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: SupabaseClient;
+  }
+): Promise<
+  Array<{ currentValue: number; weekOpenValue: number }>
+> {
+  const supabase = options?.supabase ?? (await createClient());
+
+  let picks: DraftPick[];
+  if (options?.supabase) {
+    picks = (await loadUserDraftPicks(supabase, userId, leagueId)).filter(
+      (p) => p.pick_type !== "skip"
+    );
+  } else {
+    const state = await loadDraftStateDetailed(userId, { leagueId });
+    if (!state.ok) return [];
+    picks = state.state.picks.filter((p) => p.pick_type !== "skip");
+  }
+
+  if (picks.length === 0) return [];
+
+  const weekNumber =
+    options?.weekNumber ??
+    (await getCurrentWeek(supabase, leagueId, userId));
+
+  await ensureWeekBaselines(supabase, leagueId, userId, weekNumber, picks);
+
+  const refreshedBaselines = await loadWeekBaselineExtendedMap(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber
+  );
+
+  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  const now = options?.at ?? new Date();
+  const useHybrid = await shouldUseHybridScoring(
+    supabase,
+    leagueId,
+    weekNumber,
+    settings,
+    refreshedBaselines,
+    now,
+    options?.forceHybrid
+  );
+
+  const livePrices = await fetchLivePricesForPicks(picks);
+
+  return picks
+    .filter((p) => p.pick_type === "stock" || p.pick_type === "crypto")
+    .map((pick) => {
+      const baseline = refreshedBaselines.get(pick.id);
+      const weekOpenValue =
+        baseline?.valueAtOpen ??
+        pickMarketValue(
+          pick,
+          livePrices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
+        );
+      const currentValue = resolveHybridScoringValue(
+        pick,
+        livePrices,
+        baseline,
+        useHybrid
+      );
+
+      return { currentValue, weekOpenValue };
+    });
+}
+
+export async function captureFridayStockCloseForUser(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  weekNumber: number
+): Promise<void> {
+  const state = await loadDraftStateDetailed(userId, { leagueId });
+  if (!state.ok) return;
+
+  const stockPicks = state.state.picks.filter(
+    (p) => p.pick_type === "stock" || p.pick_type === "bench"
+  );
+  if (stockPicks.length === 0) return;
+
+  const livePrices = await fetchLivePricesForPicks(stockPicks);
+
+  for (const pick of stockPicks) {
+    if (pick.pick_type !== "stock" && pick.symbol.toUpperCase() === "__OPEN__") {
+      continue;
+    }
+    if (pick.pick_type === "bench" && pick.symbol.toUpperCase() === "__OPEN__") {
+      continue;
+    }
+
+    const closeValue = pickMarketValue(
+      pick,
+      livePrices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
+    );
+
+    const { data: existing } = await supabase
+      .from("roster_week_baselines")
+      .select("value_at_open")
+      .eq("league_id", leagueId)
+      .eq("user_id", userId)
+      .eq("week_number", weekNumber)
+      .eq("pick_id", pick.id)
+      .maybeSingle();
+
+    await supabase.from("roster_week_baselines").upsert(
+      {
+        league_id: leagueId,
+        user_id: userId,
+        week_number: weekNumber,
+        pick_id: pick.id,
+        value_at_open: existing?.value_at_open ?? closeValue,
+        stock_value_at_friday_close: closeValue,
+      },
+      { onConflict: "league_id,user_id,week_number,pick_id" }
+    );
+  }
+}
+
+export async function captureFridayStockCloseForLeague(
+  leagueId: string,
+  weekNumber: number,
+  supabaseClient?: SupabaseClient
+): Promise<{ captured: boolean }> {
+  const supabase = supabaseClient ?? (await createClient());
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("user_id")
+    .eq("league_id", leagueId);
+
+  for (const draft of drafts ?? []) {
+    await captureFridayStockCloseForUser(
+      supabase,
+      leagueId,
+      draft.user_id,
+      weekNumber
+    );
+  }
+
+  await supabase
+    .from("league_matchups")
+    .update({ stock_close_captured_at: new Date().toISOString() })
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber)
+    .eq("status", "scheduled");
+
+  return { captured: true };
 }
 
 export async function captureWeekBaselinesForUser(
@@ -364,69 +619,32 @@ export function computeWeekGainPercent(
 
 export async function computeScoringWeekGainPercentForUser(
   userId: string,
-  leagueId: string
+  leagueId: string,
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: SupabaseClient;
+  }
 ): Promise<number> {
-  const state = await loadDraftStateDetailed(userId, { leagueId });
-  if (!state.ok) return 0;
-
-  const supabase = await createClient();
-  const weekNumber = await getCurrentWeek(supabase, leagueId, userId);
-  const picks = state.state.picks.filter((p) => p.pick_type !== "skip");
-  const baselineMap = await ensureWeekBaselines(
-    supabase,
-    leagueId,
-    userId,
-    weekNumber,
-    picks
-  );
-  const prices = await fetchPricesForPicks(picks);
-
-  const scoringInputs = picks
-    .filter((p) => p.pick_type === "stock" || p.pick_type === "crypto")
-    .map((pick) => {
-      const price =
-        prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick;
-      const currentValue = pickMarketValue(pick, price);
-      const weekOpenValue =
-        baselineMap.get(pick.id) ?? pickMarketValue(pick, price);
-
-      return { currentValue, weekOpenValue };
-    });
-
+  const scoringInputs = await computeScoringWeekInputs(userId, leagueId, options);
   return computeScoringWeekGainPercent(scoringInputs);
 }
 
 export async function computeScoringWeekDollarGainForUser(
   userId: string,
-  leagueId: string
-): Promise<number> {
-  const state = await loadDraftStateDetailed(userId, { leagueId });
-  if (!state.ok) return 0;
-
-  const supabase = await createClient();
-  const weekNumber = await getCurrentWeek(supabase, leagueId, userId);
-  const picks = state.state.picks.filter((p) => p.pick_type !== "skip");
-  const baselineMap = await ensureWeekBaselines(
-    supabase,
-    leagueId,
-    userId,
-    weekNumber,
-    picks
-  );
-  const prices = await fetchPricesForPicks(picks);
-
-  let total = 0;
-
-  for (const pick of picks) {
-    if (pick.pick_type !== "stock" && pick.pick_type !== "crypto") continue;
-
-    const price = prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick;
-    const currentValue = pickMarketValue(pick, price);
-    const weekOpenValue =
-      baselineMap.get(pick.id) ?? pickMarketValue(pick, price);
-
-    total += computeWeekDollarGain(currentValue, weekOpenValue);
+  leagueId: string,
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: SupabaseClient;
   }
-
+): Promise<number> {
+  const scoringInputs = await computeScoringWeekInputs(userId, leagueId, options);
+  let total = 0;
+  for (const pick of scoringInputs) {
+    total += computeWeekDollarGain(pick.currentValue, pick.weekOpenValue);
+  }
   return total;
 }

@@ -13,6 +13,7 @@ import {
   formatFetchError,
 } from "@/lib/fetch-client";
 import { SeasonWeekNavigator } from "@/components/season/SeasonWeekNavigator";
+import { SeasonCalendarBanner } from "@/components/season/SeasonCalendarBanner";
 
 export function MyTeamPageContent() {
   const [roster, setRoster] = useState<RosterView | null>(null);
@@ -236,6 +237,8 @@ export function MyTeamPageContent() {
   if (!roster) return null;
 
   const viewingHistorical = roster.isHistorical;
+  const lineupLocked =
+    !viewingHistorical && roster.calendar?.lineupLocked === true;
 
   return (
     <div className="space-y-4">
@@ -297,6 +300,10 @@ export function MyTeamPageContent() {
         </div>
       </section>
 
+      {!viewingHistorical && (
+        <SeasonCalendarBanner calendar={roster.calendar} variant="lineup" />
+      )}
+
       {error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
@@ -309,7 +316,7 @@ export function MyTeamPageContent() {
         tone="starters"
         scoringMode={roster.scoringMode}
         picks={roster.starters}
-        selectable={!viewingHistorical}
+        selectable={!viewingHistorical && !lineupLocked}
         selectedId={irStarterId}
         onSelect={(id) =>
           setIrStarterId((prev) => (prev === id ? null : id))
@@ -323,7 +330,7 @@ export function MyTeamPageContent() {
         tone="bench"
         scoringMode={roster.scoringMode}
         picks={roster.bench}
-        selectable={!viewingHistorical}
+        selectable={!viewingHistorical && !lineupLocked}
         selectedId={irBenchId}
         onSelect={(id) => setIrBenchId((prev) => (prev === id ? null : id))}
         selectLabel="Promote"
@@ -340,10 +347,14 @@ export function MyTeamPageContent() {
         <Button
           variant="primary"
           className="w-full"
-          disabled={busy || !irStarterId || !irBenchId}
+          disabled={busy || lineupLocked || !irStarterId || !irBenchId}
           onClick={handleIrSwap}
         >
-          {busy ? "Processing…" : "Confirm IR swap"}
+          {busy
+            ? "Processing…"
+            : lineupLocked
+              ? "Lineups locked until 4:00 PM ET"
+              : "Confirm IR swap"}
         </Button>
       </section>
       )}

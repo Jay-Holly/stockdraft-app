@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { applyBenchDrop } from "@/lib/roster/moves";
 import { loadFreeAgentsPageData } from "@/lib/roster/server";
+import { rosterMoveHttpStatus } from "@/lib/season/move-gates";
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +21,10 @@ export async function POST(request: Request) {
 
     const result = await applyBenchDrop(user.id, body.benchPickId);
     if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json(
+        { error: result.error, code: result.code },
+        { status: rosterMoveHttpStatus(result) }
+      );
     }
 
     const data = await loadFreeAgentsPageData(user.id);

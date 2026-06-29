@@ -44,6 +44,7 @@ import {
   clampViewWeek,
   getSeasonWeekContext,
 } from "@/lib/league/season-weeks";
+import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import {
   computeGainPercent,
   fetchStockQuotes,
@@ -603,6 +604,8 @@ export async function loadFreeAgentsPageData(
 
   freeAgents.sort((a, b) => a.symbol.localeCompare(b.symbol));
 
+  const { calendar } = await loadSeasonCalendarForLeague(league.id);
+
   return {
     ok: true,
     data: {
@@ -613,6 +616,7 @@ export async function loadFreeAgentsPageData(
         symbol: p.symbol,
         isOpen: p.symbol.toUpperCase() === "__OPEN__",
       })),
+      calendar,
     },
   };
 }

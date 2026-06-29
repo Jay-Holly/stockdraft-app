@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatMoney, formatPct } from "@/lib/format";
 import type { FreeAgentsPageData } from "@/lib/roster/types";
 import { Button } from "@/components/Button";
+import { SeasonCalendarBanner } from "@/components/season/SeasonCalendarBanner";
 
 export function FreeAgentsPageContent() {
   const [data, setData] = useState<FreeAgentsPageData | null>(null);
@@ -28,6 +29,8 @@ export function FreeAgentsPageContent() {
 
   useEffect(() => {
     void load();
+    const id = window.setInterval(() => void load(), 60_000);
+    return () => window.clearInterval(id);
   }, [load]);
 
   const filtered = useMemo(() => {
@@ -105,6 +108,8 @@ export function FreeAgentsPageContent() {
 
   if (!data) return null;
 
+  const faClosed = data.calendar?.freeAgencyOpen === false;
+
   return (
     <div className="space-y-4">
       <section className="season-card">
@@ -114,6 +119,8 @@ export function FreeAgentsPageContent() {
           a pickup to that bench slot at $0 — promote via IR swap on My Team.
         </p>
       </section>
+
+      <SeasonCalendarBanner calendar={data.calendar} variant="freeAgency" />
 
       {error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -132,6 +139,7 @@ export function FreeAgentsPageContent() {
               key={slot.pickId}
               type="button"
               className={`season-chip ${dropPickId === slot.pickId ? "season-chip--active" : ""}`}
+              disabled={faClosed || busy}
               onClick={() =>
                 setDropPickId((prev) =>
                   prev === slot.pickId ? null : slot.pickId
@@ -163,6 +171,7 @@ export function FreeAgentsPageContent() {
               key={stock.symbol}
               type="button"
               className={`season-fa-row ${selectedSymbol === stock.symbol ? "season-fa-row--selected" : ""}`}
+              disabled={faClosed || busy}
               onClick={() =>
                 setSelectedSymbol((prev) =>
                   prev === stock.symbol ? null : stock.symbol
@@ -200,7 +209,7 @@ export function FreeAgentsPageContent() {
           <Button
             variant="secondary"
             className="w-full"
-            disabled={busy}
+            disabled={busy || faClosed}
             onClick={handleDropOnly}
           >
             {busy
@@ -214,14 +223,16 @@ export function FreeAgentsPageContent() {
       <Button
         variant="primary"
         className="w-full"
-        disabled={busy || !selectedSymbol || !dropPickId}
+        disabled={busy || faClosed || !selectedSymbol || !dropPickId}
         onClick={handleClaim}
       >
         {busy
           ? "Claiming…"
-          : selectedSymbol && dropPickId
-            ? `Drop bench · add ${selectedSymbol}`
-            : "Select a bench drop and free agent"}
+          : faClosed
+            ? "Free agency closed"
+            : selectedSymbol && dropPickId
+              ? `Drop bench · add ${selectedSymbol}`
+              : "Select a bench drop and free agent"}
       </Button>
     </div>
   );

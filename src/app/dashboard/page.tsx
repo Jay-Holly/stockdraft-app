@@ -10,6 +10,7 @@ import {
 } from "@/lib/league/ai-league";
 import {
   ensureAiLeagueReadyForMatchups,
+  ensureHumanLeagueReadyForMatchups,
   scoreAllActiveAiMatchups,
 } from "@/lib/matchup/scoring";
 import { DashboardContent } from "@/components/DashboardContent";
@@ -74,6 +75,7 @@ export default async function DashboardPage() {
   }
 
   await ensureAiLeagueReadyForMatchups(user.id);
+  await ensureHumanLeagueReadyForMatchups(user.id);
 
   let scoringNotice: string | null = null;
   try {

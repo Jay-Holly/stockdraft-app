@@ -7,12 +7,7 @@ import {
 } from "@/lib/league/bot-fill";
 import { resolveDraftOrderForLeague } from "@/lib/league/draft-order-server";
 import { HUMAN_LEAGUE_FIELDS } from "@/lib/league/fields";
-import { activateHumanLeagueSchedule } from "@/lib/league/human-league";
-import {
-  generateRegularSeasonSchedule,
-  normalizePlayerCount,
-} from "@/lib/matchup/schedule";
-import { getLeagueTeamIds } from "@/lib/matchup/league-teams";
+import { finalizeHumanLeagueAfterDraft } from "@/lib/matchup/seed-human-schedule";
 
 export async function ensureDraftRowsForAllMembers(
   leagueId: string
@@ -195,53 +190,5 @@ export async function activateHumanLeagueScheduleWithMatchups(
   leagueId: string,
   ownerUserId: string
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: league } = await supabase
-    .from("leagues")
-    .select("player_count")
-    .eq("id", leagueId)
-    .maybeSingle();
-
-  const playerCount = normalizePlayerCount(league?.player_count ?? 2);
-  const teamIds = await getLeagueTeamIds(leagueId, ownerUserId);
-
-  if (teamIds.length >= 4) {
-    const games = generateRegularSeasonSchedule(teamIds);
-    const rows = await Promise.all(
-      games.map(async (game) => {
-        const { data: homeMember } = await supabase
-          .from("league_members")
-          .select("display_name")
-          .eq("league_id", leagueId)
-          .eq("user_id", game.homeUserId)
-          .maybeSingle();
-        const { data: awayMember } = await supabase
-          .from("league_members")
-          .select("display_name")
-          .eq("league_id", leagueId)
-          .eq("user_id", game.awayUserId)
-          .maybeSingle();
-
-        return {
-          league_id: leagueId,
-          week_number: game.weekNumber,
-          home_user_id: game.homeUserId,
-          away_user_id: game.awayUserId,
-          is_playoff: game.isPlayoff,
-          playoff_round: game.playoffRound ?? null,
-          opponent_bot_id: game.awayUserId,
-          opponent_name: `${homeMember?.display_name ?? "Home"} vs ${awayMember?.display_name ?? "Away"}`,
-          status: "scheduled" as const,
-        };
-      })
-    );
-
-    const { error: matchupError } = await supabase
-      .from("league_matchups")
-      .insert(rows);
-
-    if (matchupError) return { error: matchupError.message };
-  }
-
-  return activateHumanLeagueSchedule(leagueId);
+  return finalizeHumanLeagueAfterDraft(leagueId, ownerUserId);
 }

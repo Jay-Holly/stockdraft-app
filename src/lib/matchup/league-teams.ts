@@ -28,6 +28,17 @@ export async function getLeagueTeamIds(
   leagueId: string,
   humanUserId: string
 ): Promise<string[]> {
+  const supabase = await createClient();
+  const { data: members } = await supabase
+    .from("league_members")
+    .select("user_id")
+    .eq("league_id", leagueId)
+    .order("draft_slot", { ascending: true, nullsFirst: false });
+
+  if (members && members.length > 0) {
+    return members.map((member) => member.user_id);
+  }
+
   const bots = await getLeagueBotMembers(leagueId);
   return [humanUserId, ...bots.map((bot) => bot.id)];
 }
@@ -91,12 +102,18 @@ export async function loadStandingSeeds(
 export async function computeWeeklyScoreForUser(
   userId: string,
   leagueId: string,
-  scoringMode: "percent_gain" | "dollar_gain"
+  scoringMode: "percent_gain" | "dollar_gain",
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: Awaited<ReturnType<typeof createClient>>;
+  }
 ): Promise<number> {
   if (scoringMode === "dollar_gain") {
-    return computeScoringWeekDollarGainForUser(userId, leagueId);
+    return computeScoringWeekDollarGainForUser(userId, leagueId, options);
   }
-  return computeScoringWeekGainPercentForUser(userId, leagueId);
+  return computeScoringWeekGainPercentForUser(userId, leagueId, options);
 }
 
 export async function syncLeagueCurrentWeek(

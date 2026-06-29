@@ -3,6 +3,7 @@ import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { loadMatchupsPageData } from "@/lib/matchup/page-data";
 import {
   ensureAiLeagueReadyForMatchups,
+  ensureHumanLeagueReadyForMatchups,
   scoreCurrentAiMatchup,
 } from "@/lib/matchup/scoring";
 
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
 
     try {
       await ensureAiLeagueReadyForMatchups(user.id);
+      await ensureHumanLeagueReadyForMatchups(user.id);
       if (!viewWeek) {
         await scoreCurrentAiMatchup(user.id);
       }
