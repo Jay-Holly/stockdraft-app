@@ -109,7 +109,7 @@ export function SalaryCapBar({
       </div>
 
       <p className="text-xs text-muted px-4 pb-2">
-        R1–R{OPEN_ROUNDS} open (stock or crypto) · R{BENCH_START_ROUND}–R{TOTAL_ROUNDS} bench
+        R1–R{OPEN_ROUNDS} open (stock or crypto) · R{BENCH_START_ROUND}–R{TOTAL_ROUNDS} bench (crypto still available)
       </p>
 
       <div className="draft-cap-rounds">{slots}</div>

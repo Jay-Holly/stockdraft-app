@@ -135,9 +135,19 @@ export function getOpenPhaseCryptoPicks(picks: DraftPick[]): DraftPick[] {
 
 export function isOpenPhaseComplete(picks: DraftPick[]): boolean {
   const summary = summarizePicks(picks);
+  return summary.stockPicks >= STOCK_ROUNDS;
+}
+
+export function hasRosterStructureComplete(picks: DraftPick[]): boolean {
+  const summary = summarizePicks(picks);
   return (
-    summary.stockPicks >= STOCK_ROUNDS && summary.cryptoRemaining <= 0
+    summary.stockPicks >= STOCK_ROUNDS && summary.benchPicks >= BENCH_ROUNDS
   );
+}
+
+export function isDraftComplete(picks: DraftPick[]): boolean {
+  const summary = summarizePicks(picks);
+  return hasRosterStructureComplete(picks) && summary.cryptoRemaining <= 0;
 }
 
 export function calculatePushback(cryptoPicksInOpenPhase: DraftPick[]): number {
@@ -219,12 +229,28 @@ export function getTurn(draft: Draft, picks: DraftPick[]): DraftTurn {
 
   if (summary.benchPicks < BENCH_ROUNDS) {
     const benchRound = Math.max(round, BENCH_START_ROUND);
+    const canPickCrypto = summary.cryptoRemaining > 0;
     return {
       type: "bench",
       round: benchRound,
-      label: `Round ${benchRound} — bench pick (free)`,
+      label: canPickCrypto
+        ? `Round ${benchRound} — bench pick or crypto (${formatMoney(summary.cryptoRemaining)} left)`
+        : `Round ${benchRound} — bench pick (free)`,
       canPickStock: true,
-      canPickCrypto: false,
+      canPickCrypto,
+      stockBudget: 0,
+      cryptoRemaining: summary.cryptoRemaining,
+    };
+  }
+
+  if (summary.cryptoRemaining > 0) {
+    const cryptoRound = Math.max(round, BENCH_START_ROUND);
+    return {
+      type: "crypto",
+      round: cryptoRound,
+      label: `Spend remaining crypto (${formatMoney(summary.cryptoRemaining)})`,
+      canPickStock: false,
+      canPickCrypto: true,
       stockBudget: 0,
       cryptoRemaining: summary.cryptoRemaining,
     };
@@ -241,20 +267,13 @@ export function getTurn(draft: Draft, picks: DraftPick[]): DraftTurn {
   };
 }
 
-export function isDraftComplete(picks: DraftPick[]): boolean {
-  const summary = summarizePicks(picks);
-  return (
-    isOpenPhaseComplete(picks) &&
-    summary.benchPicks >= BENCH_ROUNDS
-  );
-}
-
 export function getNextRoundAfterPick(
   draft: Draft,
   picks: DraftPick[],
   pickType: PickType
 ): number {
   const round = draft.current_round;
+  const summary = summarizePicks(picks);
 
   if (pickType === "skip") {
     if (round < OPEN_ROUNDS) {
@@ -263,11 +282,16 @@ export function getNextRoundAfterPick(
     return BENCH_START_ROUND;
   }
 
-  if (pickType === "stock" || pickType === "crypto") {
-    if (isOpenPhaseComplete(picks)) {
-      return BENCH_START_ROUND;
+  if (pickType === "crypto") {
+    if (summary.cryptoRemaining > 0) {
+      return round;
     }
-    if (round < OPEN_ROUNDS) {
+    if (!isOpenPhaseComplete(picks)) {
+      if (round < OPEN_ROUNDS) {
+        return round + 1;
+      }
+    }
+    if (round >= BENCH_START_ROUND) {
       return round + 1;
     }
     return BENCH_START_ROUND;
@@ -277,6 +301,19 @@ export function getNextRoundAfterPick(
     if (round < BENCH_START_ROUND + BENCH_ROUNDS - 1) {
       return round + 1;
     }
+    return round + 1;
+  }
+
+  if (pickType === "stock") {
+    if (!isOpenPhaseComplete(picks)) {
+      if (round < OPEN_ROUNDS) {
+        return round + 1;
+      }
+    }
+    if (round >= BENCH_START_ROUND) {
+      return round + 1;
+    }
+    return BENCH_START_ROUND;
   }
 
   return round + 1;

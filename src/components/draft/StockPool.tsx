@@ -659,6 +659,10 @@ export function StockPool({
       return { eligible: Boolean(quote), label: "Draft" };
     }
 
+    if (turn.type === "crypto") {
+      return { eligible: false, label: "Crypto only" };
+    }
+
     if (turn.type === "open") {
       if (!turn.canPickStock) {
         return { eligible: false, label: "Stock limit" };

@@ -5,6 +5,7 @@ import {
   getMyStockSymbols,
   getSurchargePercent,
   isCryptoSymbol,
+  isDraftComplete,
   isStockPickEligible,
 } from "@/lib/draft/engine";
 import {
@@ -416,6 +417,55 @@ async function recordDraftEvent(
   return event as DraftFeedEvent;
 }
 
+async function isUserDraftComplete(
+  leagueId: string,
+  userId: string
+): Promise<boolean> {
+  const state = await loadDraftStateDetailed(userId, { leagueId });
+  if (!state.ok) return true;
+  if (state.state.draft.status === "complete") return true;
+  return isDraftComplete(state.state.picks);
+}
+
+async function allTeamsDraftComplete(
+  leagueId: string,
+  draftOrder: string[]
+): Promise<boolean> {
+  for (const userId of draftOrder) {
+    if (!(await isUserDraftComplete(leagueId, userId))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function extendLiveDraftSlotsIfNeeded(
+  leagueId: string,
+  pickIndex: number,
+  totalPickSlots: number,
+  draftOrder: string[]
+): Promise<number> {
+  let total = totalPickSlots;
+  while (
+    pickIndex >= total &&
+    !(await allTeamsDraftComplete(leagueId, draftOrder))
+  ) {
+    total += draftOrder.length;
+  }
+
+  if (total > totalPickSlots) {
+    const supabase = await createClient();
+    await supabase
+      .from("league_draft_state")
+      .update({
+        total_pick_slots: total,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("league_id", leagueId);
+  }
+
+  return total;
+}
 
 async function prepareTeamOnClock(
   leagueId: string,
@@ -439,7 +489,7 @@ async function prepareTeamOnClock(
 
     if (
       state.state.draft.status === "complete" ||
-      state.state.turn.type === "complete"
+      isDraftComplete(state.state.picks)
     ) {
       return { ready: false, complete: true };
     }
@@ -467,7 +517,7 @@ async function prepareTeamOnClock(
 
   if (
     state.state.draft.status === "complete" ||
-    state.state.turn.type === "complete"
+    isDraftComplete(state.state.picks)
   ) {
     return { ready: false, complete: true };
   }
@@ -500,7 +550,7 @@ async function peekTeamOnClockStatus(
 
   if (
     state.state.draft.status === "complete" ||
-    state.state.turn.type === "complete"
+    isDraftComplete(state.state.picks)
   ) {
     return "complete";
   }
@@ -580,7 +630,8 @@ export async function repairLiveDraftClock(
     }
 
     const syncedIndex = Math.min(maxFeedGlobal, state.total_pick_slots);
-    const draftComplete = syncedIndex >= state.total_pick_slots;
+    const draftOrder = normalizeDraftOrder(state.draft_order);
+    const draftComplete = await allTeamsDraftComplete(leagueId, draftOrder);
 
     const { error } = await supabase
       .from("league_draft_state")
@@ -598,6 +649,7 @@ export async function repairLiveDraftClock(
 
     if (draftComplete) {
       await supabase.from("leagues").update({ status: "active" }).eq("id", leagueId);
+      await maybeFinalizeHumanLeagueAfterDraft(supabase, leagueId);
       return { repaired: true };
     }
 
@@ -639,8 +691,21 @@ export async function assignOnClock(
 
   const pickTimeSeconds = league?.pick_time_seconds ?? 120;
   let pickIndex = state.current_pick_index;
+  let totalPickSlots = state.total_pick_slots;
 
-  while (pickIndex < state.total_pick_slots) {
+  while (true) {
+    if (pickIndex >= totalPickSlots) {
+      totalPickSlots = await extendLiveDraftSlotsIfNeeded(
+        leagueId,
+        pickIndex,
+        totalPickSlots,
+        draftOrder
+      );
+      if (pickIndex >= totalPickSlots) {
+        break;
+      }
+    }
+
     const teamIndex = pickIndex % draftOrder.length;
     const userId = draftOrder[teamIndex];
 
@@ -648,7 +713,6 @@ export async function assignOnClock(
     if (prepared.error) return { error: prepared.error };
 
     if (prepared.liveSkipAdvanced) {
-      // advanceAfterPick recorded the skip and re-entered assignOnClock.
       return {};
     }
 
@@ -658,8 +722,7 @@ export async function assignOnClock(
     }
 
     if (!prepared.ready) {
-      pickIndex += 1;
-      continue;
+      return { error: `Could not prepare draft turn for ${userId}` };
     }
 
     const deadline = (await isLeagueBotUser(supabase, leagueId, userId))
@@ -678,8 +741,15 @@ export async function assignOnClock(
 
     if (error) return { error: error.message };
 
-    // Bot picks run asynchronously via GET /api/draft → ensureLiveDraftProgress.
     return {};
+  }
+
+  const allComplete = await allTeamsDraftComplete(leagueId, draftOrder);
+  if (!allComplete) {
+    return {
+      error:
+        "Live draft slots exhausted before all teams finished — retry assignOnClock",
+    };
   }
 
   await supabase
@@ -693,8 +763,36 @@ export async function assignOnClock(
     .eq("league_id", leagueId);
 
   await supabase.from("leagues").update({ status: "active" }).eq("id", leagueId);
+  await maybeFinalizeHumanLeagueAfterDraft(supabase, leagueId);
 
   return {};
+}
+
+async function maybeFinalizeHumanLeagueAfterDraft(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leagueId: string
+): Promise<void> {
+  const { data: league } = await supabase
+    .from("leagues")
+    .select("league_type, owner_user_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (league?.league_type !== "human" || !league.owner_user_id) return;
+
+  const { finalizeHumanLeagueAfterDraft } = await import(
+    "@/lib/matchup/seed-human-schedule"
+  );
+  const result = await finalizeHumanLeagueAfterDraft(
+    leagueId,
+    league.owner_user_id
+  );
+  if (result.error) {
+    console.error(
+      `[maybeFinalizeHumanLeagueAfterDraft] league=${leagueId}:`,
+      result.error
+    );
+  }
 }
 
 export async function advanceAfterPick(
@@ -709,7 +807,20 @@ export async function advanceAfterPick(
 
   const globalPickNumber = state.global_pick_number + 1;
   const nextPickIndex = state.current_pick_index + 1;
-  const draftComplete = nextPickIndex >= state.total_pick_slots;
+  const draftOrder = normalizeDraftOrder(state.draft_order);
+  let totalPickSlots = state.total_pick_slots;
+
+  if (nextPickIndex >= totalPickSlots && draftOrder.length > 0) {
+    totalPickSlots = await extendLiveDraftSlotsIfNeeded(
+      leagueId,
+      nextPickIndex,
+      totalPickSlots,
+      draftOrder
+    );
+  }
+
+  const allComplete = await allTeamsDraftComplete(leagueId, draftOrder);
+  const draftComplete = allComplete;
 
   // Advance league state before writing the feed event so a failed DB update
   // cannot leave the feed ahead of league_draft_state (which steals the clock on repair).
@@ -721,6 +832,7 @@ export async function advanceAfterPick(
       on_clock_user_id: null,
       pick_deadline_at: null,
       status: draftComplete ? "complete" : "in_progress",
+      total_pick_slots: totalPickSlots,
       updated_at: new Date().toISOString(),
     })
     .eq("league_id", leagueId);
@@ -751,10 +863,16 @@ export async function advanceAfterPick(
         .eq("id", leagueId)
         .maybeSingle();
       if (ownerRow?.owner_user_id) {
-        await activateHumanLeagueScheduleWithMatchups(
+        const result = await activateHumanLeagueScheduleWithMatchups(
           leagueId,
           ownerRow.owner_user_id
         );
+        if (result.error) {
+          console.error(
+            `[advanceAfterPick] matchup seed failed league=${leagueId}:`,
+            result.error
+          );
+        }
       } else {
         const { activateHumanLeagueSchedule } = await import(
           "@/lib/league/human-league"
@@ -908,36 +1026,43 @@ async function resolveAutoCryptoPick(
 
   const supabase = await createClient();
   const buyerCounts = await fetchBuyerCounts(supabase, leagueId);
-  const myCryptoSymbols = new Set(
+  const myDraftedCrypto = new Set(
     picks
-      .filter(
-        (pick) =>
-          pick.pick_type === "crypto" &&
-          (pick.budget_spent > 0.01 || pick.shares > 0)
-      )
+      .filter((pick) => pick.pick_type === "crypto")
       .map((pick) => pick.symbol.toUpperCase())
   );
 
-  let best: { symbol: string; price: number; marketCapRank: number } | null =
-    null;
+  type Candidate = { symbol: string; price: number; marketCapRank: number };
+  const eligible: Candidate[] = [];
 
   for (const coin of symbols) {
     const symbol = coin.symbol.toUpperCase();
     const price = quotes?.[symbol]?.price ?? coin.referencePriceUsd ?? 0;
     if (price <= 0 || !isCryptoPickEligible(symbol, price)) continue;
 
-    const alreadyHold = myCryptoSymbols.has(symbol);
     const leagueBuyers = buyerCounts[symbol] ?? 0;
-    const surcharge = getSurchargePercent(alreadyHold ? 0 : leagueBuyers);
-    if (surcharge >= 15) continue;
+    const surcharge = getSurchargePercent(leagueBuyers);
+    if (surcharge >= 80) continue;
 
-    const marketCapRank = coin.marketCapRank ?? 9999;
+    eligible.push({
+      symbol,
+      price,
+      marketCapRank: coin.marketCapRank ?? 9999,
+    });
+  }
+
+  const undrafted = eligible.filter((c) => !myDraftedCrypto.has(c.symbol));
+  const candidatePool = undrafted.length > 0 ? undrafted : eligible;
+
+  let best: Candidate | null = null;
+  for (const candidate of candidatePool) {
     if (
       !best ||
-      marketCapRank < best.marketCapRank ||
-      (marketCapRank === best.marketCapRank && price > best.price)
+      candidate.price > best.price ||
+      (candidate.price === best.price &&
+        candidate.marketCapRank < best.marketCapRank)
     ) {
-      best = { symbol, price, marketCapRank };
+      best = candidate;
     }
   }
 
@@ -1003,7 +1128,14 @@ export async function resolveAutoPick(
   }
 
   const safety = await trySafetyStockAutoPick(leagueId, userId);
-  if (safety) return safety;
+  if (safety && turn.type !== "crypto") return safety;
+
+  if (turn.type === "crypto" || (turn.canPickCrypto && !turn.canPickStock)) {
+    const crypto = await resolveAutoCryptoPick(leagueId, userId, state.state);
+    if (crypto) {
+      return { ...crypto, reason: "timer" };
+    }
+  }
 
   if (turn.type === "bench" || (turn.type === "open" && turn.canPickStock)) {
     for (const tier of ["strict", "relaxed", "desperate"] as const) {

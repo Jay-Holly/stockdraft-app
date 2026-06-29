@@ -58,7 +58,7 @@ export type DraftPick = {
 
 export type CryptoBuyerCounts = Record<string, number>;
 
-export type TurnType = "open" | "bench" | "pushback_skip" | "complete";
+export type TurnType = "open" | "bench" | "crypto" | "pushback_skip" | "complete";
 
 export type DraftTurn = {
   type: TurnType;

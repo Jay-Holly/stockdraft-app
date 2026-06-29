@@ -533,7 +533,7 @@ export async function makeDraftPickForLeague(
 
   if (isCryptoPick) {
     if (!turn.canPickCrypto) {
-      return { error: "Crypto picks are only available during open rounds 1–13" };
+      return { error: "No crypto budget remaining" };
     }
 
     const cryptoDuplicate = getDuplicateRosterError(
@@ -604,9 +604,11 @@ export async function makeDraftPickForLeague(
       return { error: "Use search to draft stocks outside the S&P 500 pool" };
     }
     pickType = "bench";
+  } else if (turn.type === "crypto") {
+    return { error: "Spend remaining crypto budget — stock picks are complete" };
   } else if (turn.type === "open") {
     if (!turn.canPickStock) {
-      return { error: "All 10 stock picks are already made — choose crypto or finish open rounds" };
+      return { error: "All 10 stock picks are already made" };
     }
 
     const stockDuplicate = getDuplicateRosterError(

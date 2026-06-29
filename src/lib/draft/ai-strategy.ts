@@ -383,6 +383,10 @@ export async function decideAiPick(
   const offBoard = new Set(leagueOffBoard);
   const myDrafted = getMyStockSymbols(picks);
 
+  if (turn.type === "crypto" && turn.canPickCrypto && summary.cryptoRemaining > 0) {
+    return defaultCryptoChunk(summary, 0, summary.cryptoRemaining);
+  }
+
   if (personality === "crypto_king") {
     const cryptoPicks = picks.filter((p) => p.pick_type === "crypto");
     const openRound = turn.round;
