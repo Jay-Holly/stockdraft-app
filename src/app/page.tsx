@@ -16,10 +16,16 @@ const LANDING_HERO_LOGGED_IN = {
   height: 1335,
 } as const;
 
-const LANDING_HERO_MOBILE = {
-  src: "/images/landing/hero-mobile.png",
-  width: 472,
-  height: 695,
+const LANDING_HERO_MOBILE_LOGGED_OUT = {
+  src: "/images/landing/hero-mobile-logged-out.png",
+  width: 852,
+  height: 1290,
+} as const;
+
+const LANDING_HERO_MOBILE_LOGGED_IN = {
+  src: "/images/landing/hero-mobile-logged-in.png",
+  width: 852,
+  height: 1290,
 } as const;
 
 export default async function HomePage() {
@@ -32,6 +38,9 @@ export default async function HomePage() {
   const showDayTraderTeaser =
     isLoggedIn && user ? !(await hasJoinedDayTrader(user.id)) : false;
   const hero = isLoggedIn ? LANDING_HERO_LOGGED_IN : LANDING_HERO_LOGGED_OUT;
+  const mobileHero = isLoggedIn
+    ? LANDING_HERO_MOBILE_LOGGED_IN
+    : LANDING_HERO_MOBILE_LOGGED_OUT;
   const heroAlt =
     "StockDraft — Where Fantasy Sports Meet Real Markets. Draft stocks like players. Win your league. Learn the markets. You've never seen a season like this, until now!";
 
@@ -53,10 +62,10 @@ export default async function HomePage() {
                 sizes="(max-width: 767px) 100vw, calc(100vw - 120px)"
               />
               <Image
-                src={LANDING_HERO_MOBILE.src}
+                src={mobileHero.src}
                 alt={heroAlt}
-                width={LANDING_HERO_MOBILE.width}
-                height={LANDING_HERO_MOBILE.height}
+                width={mobileHero.width}
+                height={mobileHero.height}
                 priority
                 className="landing-hero-image landing-hero-image--mobile"
                 sizes="100vw"

@@ -13,7 +13,12 @@ export function LandingActions({
     return (
       <nav className="landing-actions" aria-label="Welcome back">
         <Link href="/dashboard" className="landing-btn landing-btn--primary">
-          My Leagues
+          <span className="landing-btn-text landing-btn-text--mobile">
+            My Leagues 🔥
+          </span>
+          <span className="landing-btn-text landing-btn-text--desktop">
+            My Leagues
+          </span>
         </Link>
         {showDayTraderTeaser && (
           <Link
@@ -41,13 +46,24 @@ export function LandingActions({
         href="/auth?mode=daytrader"
         className="landing-btn landing-btn--daytrader"
       >
-        ⚡ Day Trader — Enter Free
+        <span className="landing-btn-text landing-btn-text--mobile">
+          Play Day Trader — Win Prizes!
+        </span>
+        <span className="landing-btn-text landing-btn-text--desktop">
+          ⚡ Day Trader — Enter Free
+        </span>
       </Link>
       <div className="landing-secondary-links">
-        <Link href="/auth?mode=login" className="landing-secondary-link">
+        <Link
+          href="/auth?mode=login"
+          className="landing-secondary-link landing-secondary-link--desktop-only"
+        >
           View Demo
         </Link>
-        <span className="landing-secondary-divider" aria-hidden="true">
+        <span
+          className="landing-secondary-divider landing-secondary-link--desktop-only"
+          aria-hidden="true"
+        >
           ·
         </span>
         <Link href="/game-rules" className="landing-secondary-link">
