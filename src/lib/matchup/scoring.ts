@@ -604,6 +604,21 @@ export async function finalizeMatchupsForLeagueWeek(
     await captureWeekCloseSnapshots(leagueId, weekNumber, supabase);
   }
   await applyStandingsForCompletedWeek(leagueId, weekNumber, supabase);
+
+  const { computeWeeklyAwardsForLeagueWeek } = await import(
+    "@/lib/awards/finalize"
+  );
+  const awardResult = await computeWeeklyAwardsForLeagueWeek(
+    leagueId,
+    weekNumber
+  );
+  if (awardResult.errors?.length) {
+    console.error(
+      `weekly awards league=${leagueId} week=${weekNumber}:`,
+      awardResult.errors
+    );
+  }
+
   await advanceLeagueCalendar(leagueId, playerCount, weekNumber, supabase);
 
   return { finalized: true };
@@ -697,6 +712,20 @@ export async function scoreMatchupForLeague(
     await captureWeekCloseSnapshots(leagueId, currentWeek, supabase);
   }
   await applyStandingsForCompletedWeek(leagueId, currentWeek);
+
+  const { computeWeeklyAwardsForLeagueWeek } = await import(
+    "@/lib/awards/finalize"
+  );
+  const awardResult = await computeWeeklyAwardsForLeagueWeek(
+    leagueId,
+    currentWeek
+  );
+  if (awardResult.errors?.length) {
+    console.error(
+      `weekly awards league=${leagueId} week=${currentWeek}:`,
+      awardResult.errors
+    );
+  }
 
   const cryptoSource = getLastCryptoQuoteSource();
   const notice =
