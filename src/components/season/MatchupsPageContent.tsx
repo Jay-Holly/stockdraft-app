@@ -24,6 +24,12 @@ function formatGainStat(stat: OrderedGainStat): string {
     : formatPct(stat.value);
 }
 
+function gainToneClass(value: number): string {
+  if (value > 0) return "matchup-stat-value--gain";
+  if (value < 0) return "matchup-stat-value--loss";
+  return "matchup-stat-value--flat";
+}
+
 function TeamGainStatsBlock({
   stats,
   scoringMode,
@@ -45,11 +51,7 @@ function TeamGainStatsBlock({
           }`}
         >
           <p className="matchup-team-stat__label">{stat.label}</p>
-          <p
-            className={`matchup-team-stat__value ${
-              stat.value >= 0 ? "text-green-400" : "text-red-400"
-            }`}
-          >
+          <p className={`matchup-team-stat__value ${gainToneClass(stat.value)}`}>
             {formatGainStat(stat)}
           </p>
         </div>
@@ -70,12 +72,15 @@ function PickGainLine({
   return (
     <div className="matchup-pick-stats">
       {stats.map((stat, index) => (
-        <span
+        <div
           key={stat.key}
-          className={index === 0 ? "matchup-pick-stat--primary" : ""}
+          className={`matchup-pick-stat ${index === 0 ? "matchup-pick-stat--primary" : ""}`}
         >
-          {formatGainStat(stat)}
-        </span>
+          <span className="matchup-pick-stat__label">{stat.label}</span>
+          <span className={`matchup-pick-stat__value ${gainToneClass(stat.value)}`}>
+            {formatGainStat(stat)}
+          </span>
+        </div>
       ))}
     </div>
   );
@@ -116,7 +121,7 @@ function RosterColumn({
         isLeading={isLeading}
       />
 
-      <div className="matchup-roster-section">
+      <div className="matchup-roster-section matchup-roster-section--starters">
         <p className="matchup-roster-section__title">Starters</p>
         {side.starters.length === 0 ? (
           <p className="text-xs text-muted">No starters</p>
@@ -135,7 +140,7 @@ function RosterColumn({
         )}
       </div>
 
-      <div className="matchup-roster-section">
+      <div className="matchup-roster-section matchup-roster-section--crypto">
         <p className="matchup-roster-section__title">Crypto</p>
         {side.crypto.length === 0 ? (
           <p className="text-xs text-muted">No crypto</p>
@@ -155,7 +160,7 @@ function RosterColumn({
       </div>
 
       {side.bench.some((pick) => pick.symbol.toUpperCase() !== "__OPEN__") && (
-        <div className="matchup-roster-section">
+        <div className="matchup-roster-section matchup-roster-section--bench">
           <p className="matchup-roster-section__title">Bench</p>
           {side.bench
             .filter((pick) => pick.symbol.toUpperCase() !== "__OPEN__")
@@ -188,19 +193,33 @@ function MatchupDetailPanel({
     <section className="season-card matchup-detail-panel">
       <div className="matchup-detail-panel__header">
         <div>
-          <h2 className="season-card-title">
-            Week {matchup.weekNumber}
-            {matchup.isPlayoff && matchup.playoffRound
-              ? ` · ${formatPlayoffRoundLabel(matchup.playoffRound)}`
-              : ""}
-          </h2>
-          <p className="text-sm text-muted">
+          <div className="matchup-detail-panel__title-row">
+            <h2 className="season-card-title">
+              Week {matchup.weekNumber}
+              {matchup.isPlayoff && matchup.playoffRound
+                ? ` · ${formatPlayoffRoundLabel(matchup.playoffRound)}`
+                : ""}
+            </h2>
+            <span
+              className={`matchup-detail-panel__status ${
+                matchup.status === "complete"
+                  ? "matchup-detail-panel__status--final"
+                  : "matchup-detail-panel__status--live"
+              }`}
+            >
+              {matchup.status === "complete" ? "Final" : "Live"}
+            </span>
+          </div>
+          <p className="matchup-detail-panel__subtitle">
             {matchup.homeTeamName} vs {matchup.awayTeamName}
-            {matchup.status === "complete" ? " · Final" : " · Live"}
           </p>
         </div>
         {matchup.leader && (
-          <p className="matchup-detail-panel__leader">
+          <p
+            className={`matchup-detail-panel__leader ${
+              matchup.leader === "tie" ? "matchup-detail-panel__leader--tie" : ""
+            }`}
+          >
             {matchup.leader === "tie"
               ? "Tied"
               : matchup.leader === "home"
@@ -253,13 +272,25 @@ function MatchupPreviewCard({
         {matchup.awayTeamName}
       </p>
       <div className="matchup-preview-card__scores">
-        <span className={matchup.leader === "home" ? "text-green-400 font-semibold" : ""}>
+        <span
+          className={
+            matchup.leader === "home"
+              ? "matchup-preview-card__score matchup-preview-card__score--leading"
+              : "matchup-preview-card__score"
+          }
+        >
           {scoringMode === "dollar_gain"
             ? formatSignedMoney(matchup.homePrimaryScore)
             : formatPct(matchup.homePrimaryScore)}
         </span>
-        <span className="text-muted">–</span>
-        <span className={matchup.leader === "away" ? "text-green-400 font-semibold" : ""}>
+        <span className="matchup-preview-card__dash">–</span>
+        <span
+          className={
+            matchup.leader === "away"
+              ? "matchup-preview-card__score matchup-preview-card__score--leading"
+              : "matchup-preview-card__score"
+          }
+        >
           {scoringMode === "dollar_gain"
             ? formatSignedMoney(matchup.awayPrimaryScore)
             : formatPct(matchup.awayPrimaryScore)}
@@ -368,8 +399,8 @@ export function MatchupsPageContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <section className="season-card">
+    <div className="matchups-page space-y-6">
+      <section className="season-card matchup-page-header">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold">Matchups</h1>
@@ -398,8 +429,8 @@ export function MatchupsPageContent() {
         </div>
       )}
 
-      <div>
-        <p className="text-xs uppercase tracking-wider text-muted mb-2">
+      <div className="matchup-focus-block">
+        <p className="matchup-focus-block__label">
           {focusedMatchup.includesViewer ? "Your matchup" : "Matchup detail"}
         </p>
         <MatchupDetailPanel
@@ -409,8 +440,8 @@ export function MatchupsPageContent() {
       </div>
 
       {otherMatchups.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wider">
+        <section className="matchup-other-section space-y-4">
+          <h2 className="matchup-other-section__title">
             {data.viewWeek === data.currentWeek
               ? "Other matchups this week"
               : `Other week ${data.viewWeek} matchups`}
