@@ -10,6 +10,7 @@ import {
 import { getEasternParts, minutesOfDay } from "@/lib/season/eastern-time";
 import { LINEUP_LOCK_END_MINUTES } from "@/lib/season/constants";
 import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
+import { SDAI_BETA_WEEK_CALENDAR } from "@/lib/season/beta-schedule";
 import type { SeasonSettings, SeasonSettingsRow } from "@/lib/season/types";
 
 type JobSupabase = ReturnType<typeof createServiceClient>;
@@ -44,6 +45,34 @@ async function loadLeagueSeasonSettings(
       playerCount: leagueRow?.player_count ?? null,
     },
     settingsRow
+  );
+}
+
+/** Bootstrap beta_daily settings when migration seeded matchups but not season settings. */
+async function ensureBetaSeasonSettingsIfMissing(
+  supabase: JobSupabase,
+  leagueId: string,
+  supportCode: string | null | undefined
+): Promise<void> {
+  if (supportCode !== "SDAI-00039") return;
+
+  const { data: existing } = await supabase
+    .from("league_season_settings")
+    .select("league_id")
+    .eq("league_id", leagueId)
+    .maybeSingle();
+
+  if (existing) return;
+
+  await supabase.from("league_season_settings").upsert(
+    {
+      league_id: leagueId,
+      season_format: "beta_daily",
+      regular_season_weeks: 11,
+      week_calendar: SDAI_BETA_WEEK_CALENDAR,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "league_id" }
   );
 }
 
@@ -190,9 +219,13 @@ export async function finalizeDueMatchupsForAllLeagues(
   errors: string[];
 }> {
   const supabase = createServiceClient();
+  // Active AI + human leagues share this cron. SDPL rows wait for finalize_at;
+  // sports-sim leagues keep legacy immediate finalization.
   const { data: leagues } = await supabase
     .from("leagues")
-    .select("id, format_type, sports_league_id, player_count, status")
+    .select(
+      "id, support_code, format_type, sports_league_id, player_count, status"
+    )
     .eq("status", "active");
 
   let weeksFinalized = 0;
@@ -216,11 +249,15 @@ export async function finalizeDueMatchupsForAllLeagues(
     ];
 
     for (const weekNumber of weekNumbers) {
-      const settings = isSdpl
-        ? await loadLeagueSeasonSettings(supabase, league.id)
-        : null;
+      let settings: SeasonSettings | null = null;
 
-      if (isSdpl && settings) {
+      if (isSdpl) {
+        await ensureBetaSeasonSettingsIfMissing(
+          supabase,
+          league.id,
+          league.support_code
+        );
+        settings = await loadLeagueSeasonSettings(supabase, league.id);
         await backfillFinalizeAtForLeagueWeek(
           league.id,
           weekNumber,
@@ -230,10 +267,10 @@ export async function finalizeDueMatchupsForAllLeagues(
         );
       }
 
-      const weekRow = scheduledWeeks?.find(
-        (row) => row.week_number === weekNumber
-      );
-      const finalizeAt = weekRow?.finalize_at ?? null;
+      const finalizeAt = isSdpl && settings
+        ? computeWeekFinalizeAt(settings, weekNumber, now).toISOString()
+        : (scheduledWeeks?.find((row) => row.week_number === weekNumber)
+            ?.finalize_at ?? null);
 
       if (isSdpl && finalizeAt && !isPastFinalizeAt(finalizeAt, now)) {
         continue;

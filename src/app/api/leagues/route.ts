@@ -20,7 +20,7 @@ import {
 import {
   ensureAiLeagueReadyForMatchups,
   ensureHumanLeagueReadyForMatchups,
-  scoreAllActiveAiMatchups,
+  scoreActiveMatchupsOnVisit,
 } from "@/lib/matchup/scoring";
 
 export async function GET() {
@@ -31,7 +31,7 @@ export async function GET() {
 
   await ensureAiLeagueReadyForMatchups(user.id);
   await ensureHumanLeagueReadyForMatchups(user.id);
-  await scoreAllActiveAiMatchups(user.id);
+  await scoreActiveMatchupsOnVisit(user.id);
 
   const [aiLeagues, humanLeagues, activeLeagueId] = await Promise.all([
     listAiLeagueListItems(user.id),

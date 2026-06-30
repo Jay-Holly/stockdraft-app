@@ -118,9 +118,10 @@ export async function computeWeeklyScoreForUser(
 
 export async function syncLeagueCurrentWeek(
   leagueId: string,
-  weekNumber: number
+  weekNumber: number,
+  supabaseOverride?: Awaited<ReturnType<typeof createClient>>
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
 
   await supabase
     .from("leagues")
@@ -137,9 +138,10 @@ export async function syncLeagueCurrentWeek(
 }
 
 export async function getScheduledWeekNumbers(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: Awaited<ReturnType<typeof createClient>>
 ): Promise<number[]> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data } = await supabase
     .from("league_matchups")
     .select("week_number")

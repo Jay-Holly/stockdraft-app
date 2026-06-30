@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { activateAiLeagueSchedule } from "@/lib/league/ai-league";
 import {
@@ -12,6 +13,7 @@ import {
   setNextWeekFinalizeAt,
 } from "@/lib/matchup/finalize-week";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
 import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 import { weekUsesWeekendExtension } from "@/lib/season/finalize-times";
 import { baselinesHaveFridayClose } from "@/lib/season/weekend-scoring";
@@ -297,7 +299,7 @@ async function scoreSingleMatchup(
     return {};
   }
 
-  const supabase = await createClient();
+  const supabase = options?.supabase ?? (await createClient());
   let homeScore: number;
   let awayScore: number;
 
@@ -391,9 +393,10 @@ async function scoreSingleMatchup(
 
 async function applyStandingsForCompletedWeek(
   leagueId: string,
-  weekNumber: number
+  weekNumber: number,
+  supabaseOverride?: SupabaseClient
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: completed } = await supabase
     .from("league_matchups")
     .select("home_user_id, away_user_id, winner_user_id")
@@ -439,10 +442,11 @@ async function applyStandingsForCompletedWeek(
 async function advanceLeagueCalendar(
   leagueId: string,
   playerCount: number,
-  currentWeek: number
+  currentWeek: number,
+  supabaseOverride?: SupabaseClient
 ): Promise<{ seasonComplete?: boolean; nextWeek?: number }> {
-  const supabase = await createClient();
-  const scheduledWeeks = await getScheduledWeekNumbers(leagueId);
+  const supabase = supabaseOverride ?? (await createClient());
+  const scheduledWeeks = await getScheduledWeekNumbers(leagueId, supabase);
   const { settings } = await loadSeasonCalendarForLeague(leagueId);
 
   if (settings.rulesApply) {
@@ -478,7 +482,7 @@ async function advanceLeagueCalendar(
     }
   }
 
-  const refreshedWeeks = await getScheduledWeekNumbers(leagueId);
+  const refreshedWeeks = await getScheduledWeekNumbers(leagueId, supabase);
   const nextWeek = getNextCalendarWeek(currentWeek, refreshedWeeks);
 
   if (!nextWeek) {
@@ -489,22 +493,23 @@ async function advanceLeagueCalendar(
     return { seasonComplete: true };
   }
 
-  await syncLeagueCurrentWeek(leagueId, nextWeek);
-  await captureWeekBaselinesForLeague(leagueId, nextWeek);
+  await syncLeagueCurrentWeek(leagueId, nextWeek, supabase);
+  await captureWeekBaselinesForLeague(leagueId, nextWeek, supabase);
   await setNextWeekFinalizeAt(leagueId, nextWeek, new Date());
   return { seasonComplete: false, nextWeek };
 }
 
 async function shouldForceHybridForWeek(
   leagueId: string,
-  weekNumber: number
+  weekNumber: number,
+  supabaseOverride?: SupabaseClient
 ): Promise<boolean> {
   const { settings } = await loadSeasonCalendarForLeague(leagueId);
   if (!settings.rulesApply || !weekUsesWeekendExtension(settings, weekNumber)) {
     return false;
   }
 
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: matchups } = await supabase
     .from("league_matchups")
     .select("stock_close_captured_at")
@@ -564,7 +569,11 @@ export async function finalizeMatchupsForLeagueWeek(
     return { finalized: false };
   }
 
-  const forceHybrid = await shouldForceHybridForWeek(leagueId, weekNumber);
+  const forceHybrid = await shouldForceHybridForWeek(
+    leagueId,
+    weekNumber,
+    supabase
+  );
   let lastError: string | undefined;
 
   for (const matchup of weekMatchups as LeagueMatchupRow[]) {
@@ -581,9 +590,9 @@ export async function finalizeMatchupsForLeagueWeek(
     return { error: lastError, finalized: false };
   }
 
-  await captureWeekCloseSnapshots(leagueId, weekNumber);
-  await applyStandingsForCompletedWeek(leagueId, weekNumber);
-  await advanceLeagueCalendar(leagueId, playerCount, weekNumber);
+  await captureWeekCloseSnapshots(leagueId, weekNumber, supabase);
+  await applyStandingsForCompletedWeek(leagueId, weekNumber, supabase);
+  await advanceLeagueCalendar(leagueId, playerCount, weekNumber, supabase);
 
   return { finalized: true };
 }
@@ -678,23 +687,47 @@ export async function scoreMatchupForLeague(
   return { scored: true, notice };
 }
 
-export async function scoreCurrentAiMatchup(
-  userId: string
-): Promise<{ error?: string; scored?: boolean }> {
-  return scoreAllActiveAiMatchups(userId);
-}
-
-export async function scoreAllActiveAiMatchups(
+/**
+ * Scores active matchups when a user loads a page.
+ * - Sports-sim AI leagues: primary driver (scores the current week immediately).
+ * - SDPL leagues (AI + human): fallback only — `scoreMatchupForLeague` waits until
+ *   `finalize_at` so the Monday cron remains the primary scorer.
+ */
+export async function scoreActiveMatchupsOnVisit(
   userId: string
 ): Promise<{ error?: string; notice?: string; scored?: boolean }> {
-  const leagues = await listAiLeaguesForUser(userId);
+  const aiLeagues = await listAiLeaguesForUser(userId);
+  const { listHumanLeaguesForUser } = await import("@/lib/league/human-league");
+  const humanLeagues = await listHumanLeaguesForUser(userId);
+
   let scoredAny = false;
   let lastError: string | undefined;
   let lastNotice: string | undefined;
 
-  for (const league of leagues) {
+  for (const league of aiLeagues) {
     if (league.status !== "active") continue;
+
+    // Sports-sim: scores immediately. SDPL: gated by finalize_at inside scoreMatchupForLeague.
     const result = await scoreMatchupForLeague(userId, league.id);
+    if (result.error) lastError = result.error;
+    if (result.notice) lastNotice = result.notice;
+    if (result.scored) scoredAny = true;
+  }
+
+  for (const item of humanLeagues) {
+    if (item.league.status !== "active") continue;
+
+    if (
+      !isSdplSeasonRulesLeague({
+        formatType: item.league.format_type,
+        sportsLeagueId: item.league.sports_league_id,
+        playerCount: item.league.player_count,
+      })
+    ) {
+      continue;
+    }
+
+    const result = await scoreMatchupForLeague(userId, item.league.id);
     if (result.error) lastError = result.error;
     if (result.notice) lastNotice = result.notice;
     if (result.scored) scoredAny = true;
@@ -705,6 +738,20 @@ export async function scoreAllActiveAiMatchups(
     notice: lastNotice,
     scored: scoredAny,
   };
+}
+
+/** @deprecated Use scoreActiveMatchupsOnVisit */
+export async function scoreCurrentAiMatchup(
+  userId: string
+): Promise<{ error?: string; notice?: string; scored?: boolean }> {
+  return scoreActiveMatchupsOnVisit(userId);
+}
+
+/** @deprecated Use scoreActiveMatchupsOnVisit */
+export async function scoreAllActiveAiMatchups(
+  userId: string
+): Promise<{ error?: string; notice?: string; scored?: boolean }> {
+  return scoreActiveMatchupsOnVisit(userId);
 }
 
 export async function ensureAiLeagueReadyForMatchups(

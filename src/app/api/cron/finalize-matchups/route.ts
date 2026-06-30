@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { verifyCronAuth } from "@/lib/cron/auth";
-import { finalizeDueMatchupsForAllLeagues } from "@/lib/matchup/finalize-week";
+import {
+  captureFridayStockCloseForActiveLeagues,
+  finalizeDueMatchupsForAllLeagues,
+} from "@/lib/matchup/finalize-week";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -11,8 +14,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await finalizeDueMatchupsForAllLeagues();
-    return NextResponse.json(result);
+    const now = new Date();
+    const capture = await captureFridayStockCloseForActiveLeagues(now);
+    const finalize = await finalizeDueMatchupsForAllLeagues(now);
+    return NextResponse.json({ capture, ...finalize });
   } catch (error) {
     console.error("Matchup finalization failed:", error);
     return NextResponse.json(

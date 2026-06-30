@@ -4,7 +4,7 @@ import { loadMatchupsPageData } from "@/lib/matchup/page-data";
 import {
   ensureAiLeagueReadyForMatchups,
   ensureHumanLeagueReadyForMatchups,
-  scoreCurrentAiMatchup,
+  scoreActiveMatchupsOnVisit,
 } from "@/lib/matchup/scoring";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       await ensureAiLeagueReadyForMatchups(user.id);
       await ensureHumanLeagueReadyForMatchups(user.id);
       if (!viewWeek) {
-        await scoreCurrentAiMatchup(user.id);
+        await scoreActiveMatchupsOnVisit(user.id);
       }
     } catch (sideEffectError) {
       console.error("GET /api/matchups scoring side effect failed:", sideEffectError);

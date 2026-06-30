@@ -8,6 +8,7 @@ import {
   weekUsesWeekendExtension,
 } from "../src/lib/season/finalize-times";
 import { resolveSeasonSettings } from "../src/lib/season/calendar";
+import { SDAI_BETA_WEEK_CALENDAR } from "../src/lib/season/beta-schedule";
 import { zonedDateTimeFromIso } from "../src/lib/season/eastern-time";
 import {
   baselinesHaveFridayClose,
@@ -55,6 +56,21 @@ const betaFri = computeWeekFinalizeAt(beta, 5, zonedDateTimeFromIso("2026-07-03"
 assert(
   betaFri.getTime() === zonedDateTimeFromIso("2026-07-06", 6, 0).getTime(),
   "beta Fri week 5 finalizes Mon Jul 6 6 AM"
+);
+
+const sdaiBeta = resolveSeasonSettings(sdpl4, {
+  season_format: "beta_daily",
+  regular_season_weeks: 11,
+  week_calendar: SDAI_BETA_WEEK_CALENDAR,
+});
+const sdaiWeek1 = computeWeekFinalizeAt(
+  sdaiBeta,
+  1,
+  zonedDateTimeFromIso("2026-06-29", 10, 0)
+);
+assert(
+  sdaiWeek1.getTime() === zonedDateTimeFromIso("2026-06-29", 16, 0).getTime(),
+  "SDAI-00039 beta week 1 (Mon Jun 29) finalizes same day 4 PM ET"
 );
 
 const standardFinalize = computeWeekFinalizeAt(

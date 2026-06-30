@@ -11,7 +11,7 @@ import {
 import {
   ensureAiLeagueReadyForMatchups,
   ensureHumanLeagueReadyForMatchups,
-  scoreAllActiveAiMatchups,
+  scoreActiveMatchupsOnVisit,
 } from "@/lib/matchup/scoring";
 import { DashboardContent } from "@/components/DashboardContent";
 import { Logo } from "@/components/Logo";
@@ -79,7 +79,7 @@ export default async function DashboardPage() {
 
   let scoringNotice: string | null = null;
   try {
-    const scoring = await scoreAllActiveAiMatchups(user.id);
+    const scoring = await scoreActiveMatchupsOnVisit(user.id);
     if (scoring.error && !scoring.scored) {
       scoringNotice = scoring.error;
     } else if (scoring.notice) {

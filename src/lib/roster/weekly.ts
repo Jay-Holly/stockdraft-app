@@ -403,9 +403,10 @@ export async function captureWeekBaselinesForLeague(
 
 export async function captureWeekCloseSnapshots(
   leagueId: string,
-  weekNumber: number
+  weekNumber: number,
+  supabaseOverride?: Awaited<ReturnType<typeof createClient>>
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: drafts } = await supabase
     .from("drafts")
     .select("user_id")

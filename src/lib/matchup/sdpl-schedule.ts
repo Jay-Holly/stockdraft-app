@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getLeagueMemberTeamName } from "@/lib/league/server";
-import { getLeagueTeamIds } from "@/lib/matchup/league-teams";
 import {
   generateCyclingRegularSeasonSchedule,
   getSdplPlayoffWeeks,
@@ -32,6 +31,24 @@ export function isSdplRulesLeagueRow(league: SdplLeagueMeta): boolean {
     sportsLeagueId: league.sports_league_id ?? null,
     playerCount: league.player_count ?? null,
   });
+}
+
+async function getLeagueTeamIdsWithServiceClient(
+  supabase: SupabaseClient,
+  leagueId: string,
+  ownerUserId: string
+): Promise<string[]> {
+  const { data: members } = await supabase
+    .from("league_members")
+    .select("user_id")
+    .eq("league_id", leagueId)
+    .order("draft_slot", { ascending: true, nullsFirst: false });
+
+  if (members?.length) {
+    return members.map((member) => member.user_id);
+  }
+
+  return [ownerUserId];
 }
 
 export function resolveSdplRegularSeasonWeeks(
@@ -171,7 +188,11 @@ export async function migrateSdplLeagueToCyclingSchedule(
     };
   }
 
-  const teamIds = await getLeagueTeamIds(leagueId, ownerUserId);
+  const teamIds = await getLeagueTeamIdsWithServiceClient(
+    supabase,
+    leagueId,
+    ownerUserId
+  );
   if (teamIds.length < 2) {
     return {
       leagueId,

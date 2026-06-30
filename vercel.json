@@ -5,8 +5,8 @@
       "schedule": "0 10 * * 1"
     },
     {
-      "path": "/api/cron/capture-friday-stock-close",
-      "schedule": "5 20 * * 5"
+      "path": "/api/cron/finalize-matchups",
+      "schedule": "5 20 * * 1-5"
     }
   ]
 }
