@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
   let matchupsQuery = supabase
     .from("league_matchups")
     .select(
-      "id, week_number, status, home_score, away_score, finalize_at, winner_team_id, stock_close_captured_at"
+      "id, week_number, status, home_score, away_score, finalize_at, winner_user_id, stock_close_captured_at"
     )
     .eq("league_id", league.id)
     .order("week_number")
@@ -69,7 +69,14 @@ export async function GET(request: NextRequest) {
     matchupsQuery = matchupsQuery.eq("week_number", weekNumber);
   }
 
-  const { data: matchups } = await matchupsQuery;
+  const { data: matchups, error: matchupsError } = await matchupsQuery;
+
+  if (matchupsError) {
+    return NextResponse.json(
+      { error: matchupsError.message, supportCode },
+      { status: 500 }
+    );
+  }
 
   const now = new Date();
   const weeks = [...new Set((matchups ?? []).map((m) => m.week_number))].map(
