@@ -177,6 +177,21 @@ export default async function DayTraderPage() {
           <p>One entry per user per week.</p>
         </div>
 
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <Link
+            href="/day-trader/leaderboard/dollar-gainer"
+            className="text-center text-sm text-gold hover:text-gold-dark"
+          >
+            $ Gainer leaderboard
+          </Link>
+          <Link
+            href="/day-trader/leaderboard/percent-gainer"
+            className="text-center text-sm text-gold hover:text-gold-dark"
+          >
+            % Gainer leaderboard
+          </Link>
+        </div>
+
         <Link
           href="/dashboard"
           className="block text-center text-sm text-muted hover:text-white"
