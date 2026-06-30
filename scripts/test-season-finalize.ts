@@ -107,7 +107,11 @@ const pick = {
 } as DraftPick;
 
 const livePrices = new Map([["AAPL", 110]]);
-const baseline = { valueAtOpen: 1000, stockValueAtFridayClose: 1050 };
+const baseline = {
+  valueAtOpen: 1000,
+  valueAtClose: null,
+  stockValueAtFridayClose: 1050,
+};
 
 assert(
   resolveHybridScoringValue(pick, livePrices, baseline, true) === 1050,

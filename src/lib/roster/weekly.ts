@@ -109,7 +109,7 @@ export async function loadWeekBaselineExtendedMap(
 ): Promise<Map<string, WeekBaselineRow>> {
   const { data, error } = await supabase
     .from("roster_week_baselines")
-    .select("pick_id, value_at_open, stock_value_at_friday_close")
+    .select("pick_id, value_at_open, value_at_close, stock_value_at_friday_close")
     .eq("league_id", leagueId)
     .eq("user_id", userId)
     .eq("week_number", weekNumber);
@@ -121,6 +121,8 @@ export async function loadWeekBaselineExtendedMap(
       row.pick_id,
       {
         valueAtOpen: Number(row.value_at_open),
+        valueAtClose:
+          row.value_at_close != null ? Number(row.value_at_close) : null,
         stockValueAtFridayClose:
           row.stock_value_at_friday_close != null
             ? Number(row.stock_value_at_friday_close)
@@ -257,12 +259,17 @@ async function computeScoringWeekInputs(
           pick,
           livePrices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
         );
-      const currentValue = resolveHybridScoringValue(
-        pick,
-        livePrices,
-        baseline,
-        useHybrid
-      );
+      const currentValue =
+        !useHybrid &&
+        baseline?.valueAtClose != null &&
+        (pick.pick_type === "stock" || pick.pick_type === "crypto")
+          ? baseline.valueAtClose
+          : resolveHybridScoringValue(
+              pick,
+              livePrices,
+              baseline,
+              useHybrid
+            );
 
       return { currentValue, weekOpenValue };
     });
@@ -421,10 +428,16 @@ export async function captureWeekCloseSnapshots(
     .eq("league_id", leagueId);
 
   for (const draft of drafts ?? []) {
-    const state = await loadDraftStateDetailed(draft.user_id, { leagueId });
-    if (!state.ok) continue;
+    let picks = (
+      await loadUserDraftPicks(supabase, draft.user_id, leagueId)
+    ).filter((pick) => pick.pick_type !== "skip");
 
-    const picks = state.state.picks.filter((pick) => pick.pick_type !== "skip");
+    if (picks.length === 0) {
+      const state = await loadDraftStateDetailed(draft.user_id, { leagueId });
+      if (!state.ok) continue;
+      picks = state.state.picks.filter((pick) => pick.pick_type !== "skip");
+    }
+
     const prices = await fetchPricesForPicks(picks);
 
     for (const pick of picks) {

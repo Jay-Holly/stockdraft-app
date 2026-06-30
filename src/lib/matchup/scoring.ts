@@ -569,6 +569,14 @@ export async function finalizeMatchupsForLeagueWeek(
     return { finalized: false };
   }
 
+  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  if (
+    settings.rulesApply &&
+    !weekUsesWeekendExtension(settings, weekNumber)
+  ) {
+    await captureWeekCloseSnapshots(leagueId, weekNumber, supabase);
+  }
+
   const forceHybrid = await shouldForceHybridForWeek(
     leagueId,
     weekNumber,

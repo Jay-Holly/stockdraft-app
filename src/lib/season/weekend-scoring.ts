@@ -9,6 +9,7 @@ import { pickMarketValue } from "@/lib/roster/weekly";
 
 export type WeekBaselineRow = {
   valueAtOpen: number;
+  valueAtClose: number | null;
   stockValueAtFridayClose: number | null;
 };
 
