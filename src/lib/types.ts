@@ -5,6 +5,7 @@ export type Profile = {
   avatar_color: string;
   created_at: string;
   day_trader_joined_at?: string | null;
+  is_admin?: boolean;
 };
 
 export const AVATAR_COLORS = [

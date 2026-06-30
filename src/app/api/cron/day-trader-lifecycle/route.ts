@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { syncDayTraderContestLifecycle } from "@/lib/day-trader/contest-lifecycle";
 import {
-  captureFridayStockCloseForActiveLeagues,
-  finalizeDueMatchupsForAllLeagues,
-} from "@/lib/matchup/finalize-week";
+  isDayTraderContestWindowOpen,
+  isDayTraderWeekFinalizeDue,
+} from "@/lib/day-trader/contest-period";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -16,14 +16,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const now = new Date();
-    const capture = await captureFridayStockCloseForActiveLeagues(now);
-    const finalize = await finalizeDueMatchupsForAllLeagues(now);
-    const dayTrader = await syncDayTraderContestLifecycle(now);
-    return NextResponse.json({ capture, dayTrader, ...finalize });
+    const lifecycle = await syncDayTraderContestLifecycle(now);
+    return NextResponse.json({
+      ok: true,
+      now: now.toISOString(),
+      windowOpen: isDayTraderContestWindowOpen(now),
+      finalizeDue: isDayTraderWeekFinalizeDue(now),
+      lifecycle,
+    });
   } catch (error) {
-    console.error("Matchup finalization failed:", error);
+    console.error("Day Trader lifecycle sync failed:", error);
     return NextResponse.json(
-      { error: "Matchup finalization failed" },
+      { error: "Day Trader lifecycle sync failed" },
       { status: 500 }
     );
   }
