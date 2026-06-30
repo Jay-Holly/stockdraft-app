@@ -1,13 +1,14 @@
 import "server-only";
 
-import { getDayTraderContestContext } from "@/lib/day-trader/contest-access";
+import { DAY_TRADER_STARTING_VALUE } from "@/lib/day-trader/constants";
+import { isDayTraderAdmin } from "@/lib/day-trader/admin-access";
 import {
   loadDayTraderDollarLeaderboard,
   loadDayTraderPercentLeaderboard,
 } from "@/lib/day-trader/leaderboard";
 import { loadDayTraderPortfolio } from "@/lib/day-trader/portfolio";
-import { isDayTraderAdmin } from "@/lib/day-trader/admin-access";
 import { hasJoinedDayTrader } from "@/lib/profile/day-trader";
+import { getDayTraderContestContext } from "@/lib/day-trader/contest-access";
 import type { DayTraderContestRow, DayTraderEntryRow } from "@/lib/day-trader/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,7 +17,8 @@ export type DayTraderDashboardSummary = {
   isAdmin: boolean;
   contest: DayTraderContestRow | null;
   entry: DayTraderEntryRow | null;
-  windowOpen: boolean;
+  entryOpen: boolean;
+  tradingOpen: boolean;
   canEnter: boolean;
   canTrade: boolean;
   dollarRank: number | null;
@@ -41,12 +43,10 @@ export async function loadDayTraderDashboardSummary(
     isAdmin,
     contest: context.contest,
     entry: context.entry,
-    windowOpen: context.windowOpen,
+    entryOpen: context.entryOpen,
+    tradingOpen: context.tradingOpen,
     canEnter: context.canEnter,
-    canTrade:
-      context.windowOpen &&
-      context.contest?.status === "open" &&
-      Boolean(context.entry),
+    canTrade: context.canTrade,
     dollarRank: null,
     percentRank: null,
     totalValue: null,

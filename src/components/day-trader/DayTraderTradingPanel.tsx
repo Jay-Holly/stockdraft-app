@@ -35,8 +35,8 @@ type SearchResult = {
 type DayTraderTradingPanelProps = {
   initialPortfolio: PortfolioView;
   canTrade: boolean;
-  windowOpen: boolean;
-  contestOpen: boolean;
+  tradingOpen: boolean;
+  contestStatus: string | null;
 };
 
 function formatMoney(value: number): string {
@@ -55,8 +55,8 @@ function formatPct(value: number): string {
 export function DayTraderTradingPanel({
   initialPortfolio,
   canTrade,
-  windowOpen,
-  contestOpen,
+  tradingOpen,
+  contestStatus,
 }: DayTraderTradingPanelProps) {
   const router = useRouter();
   const [portfolio, setPortfolio] = useState(initialPortfolio);
@@ -87,7 +87,17 @@ export function DayTraderTradingPanel({
     portfolio.positionCount >= DAY_TRADER_MAX_POSITIONS &&
     (!selectedSymbol || !heldSymbols.has(selectedSymbol));
 
-  const tradingDisabled = !canTrade || !windowOpen || !contestOpen;
+  const tradingDisabled = !canTrade;
+
+  function tradingBlockedMessage(): string {
+    if (contestStatus === "upcoming") {
+      return "Portfolio locked until trading opens Monday 9:30 AM ET.";
+    }
+    if (!tradingOpen) {
+      return "Trading is closed outside Mon–Fri, 9:30 AM – 4:00 PM ET.";
+    }
+    return "Trading is unavailable right now.";
+  }
 
   const runSearch = useCallback(async (query: string) => {
     const q = query.trim();
@@ -243,11 +253,7 @@ export function DayTraderTradingPanel({
 
       {tradingDisabled ? (
         <div className="rounded-xl border border-dark-border p-4 text-sm text-muted">
-          { !windowOpen
-            ? "Trading is closed outside Mon–Fri, 9:30 AM – 4:00 PM ET."
-            : !contestOpen
-              ? "This contest is not open for trading."
-              : "Trading is unavailable right now." }
+          {tradingBlockedMessage()}
         </div>
       ) : null}
 

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { syncDayTraderContestLifecycle } from "@/lib/day-trader/contest-lifecycle";
 import {
-  isDayTraderContestWindowOpen,
+  isDayTraderTradingWindowOpen,
   isDayTraderWeekFinalizeDue,
 } from "@/lib/day-trader/contest-period";
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       now: now.toISOString(),
-      windowOpen: isDayTraderContestWindowOpen(now),
+      windowOpen: isDayTraderTradingWindowOpen(now),
       finalizeDue: isDayTraderWeekFinalizeDue(now),
       lifecycle,
     });

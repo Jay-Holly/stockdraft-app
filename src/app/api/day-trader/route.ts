@@ -40,8 +40,10 @@ export async function GET() {
     return NextResponse.json({
       contest: context.contest,
       entry: context.entry,
-      windowOpen: context.windowOpen,
+      entryOpen: context.entryOpen,
+      tradingOpen: context.tradingOpen,
       canEnter: context.canEnter && eligibleLeagues.length > 0,
+      canTrade: context.canTrade,
       eligibleLeagues,
       positions,
       now: now.toISOString(),

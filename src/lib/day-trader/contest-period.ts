@@ -52,15 +52,15 @@ export function getDayTraderWeekBounds(now: Date = new Date()): {
 }
 
 /**
- * Contest row to create or open next: the active week while the window is open,
- * otherwise the next Mon–Fri block (early Monday, post-close Friday, weekend).
+ * Contest row to create or open next: the active week while trading is open,
+ * otherwise the next Mon–Fri block (post-close Friday, weekend, early Monday).
  */
 export function getDayTraderUpcomingWeekBounds(now: Date = new Date()): {
   weekStart: Date;
   weekEnd: Date;
 } {
   const current = getDayTraderWeekBounds(now);
-  if (isDayTraderContestWindowOpen(now)) {
+  if (isDayTraderTradingWindowOpen(now)) {
     return current;
   }
 
@@ -90,8 +90,69 @@ export function getDayTraderUpcomingWeekBounds(now: Date = new Date()): {
   return { weekStart: nextWeekStart, weekEnd: nextWeekEnd };
 }
 
-/** True during Mon 9:30 AM ET – Fri 4:00 PM ET (entries + trading). */
-export function isDayTraderContestWindowOpen(now: Date = new Date()): boolean {
+/** Previous Friday 4:00 PM ET — entry opens for the contest week starting that Monday. */
+export function getDayTraderEntryWindowStart(weekStart: Date): Date {
+  const parts = getEasternParts(weekStart);
+  return addEasternDays(
+    parts,
+    -3,
+    Math.floor(LINEUP_LOCK_END_MINUTES / 60),
+    LINEUP_LOCK_END_MINUTES % 60
+  );
+}
+
+type ContestWindowBounds = {
+  week_start_at: string;
+  week_end_at: string;
+  status: string;
+};
+
+/** Fri 4:00 PM ET (prior week) through Mon 9:30 AM ET (contest week start). */
+export function isDayTraderEntryWindowOpenForContest(
+  now: Date,
+  contest: ContestWindowBounds
+): boolean {
+  if (contest.status !== "upcoming" && contest.status !== "open") {
+    return false;
+  }
+
+  const entryStart = getDayTraderEntryWindowStart(
+    new Date(contest.week_start_at)
+  );
+  const entryEnd = new Date(contest.week_start_at);
+  return now >= entryStart && now < entryEnd;
+}
+
+export const DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE =
+  "The week is already in progress. Please sign up to play next week before 9:30am EST Monday morning.";
+
+/** Mon 9:30 AM – Fri 4:00 PM ET for this contest week. */
+export function isDayTraderTradingWeekUnderway(
+  now: Date,
+  contest: ContestWindowBounds
+): boolean {
+  const weekStart = new Date(contest.week_start_at);
+  const weekEnd = new Date(contest.week_end_at);
+  return now >= weekStart && now < weekEnd;
+}
+
+export function getDayTraderEntryBlockedMessage(
+  now: Date,
+  contest: ContestWindowBounds | null
+): string {
+  if (
+    contest &&
+    isDayTraderTradingWeekUnderway(now, contest) &&
+    !isDayTraderEntryWindowOpenForContest(now, contest)
+  ) {
+    return DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE;
+  }
+
+  return "Entry opens Friday 4:00 PM ET for the upcoming week and closes Monday 9:30 AM ET.";
+}
+
+/** True during Mon 9:30 AM ET – Fri 4:00 PM ET (active trading hours). */
+export function isDayTraderTradingWindowOpen(now: Date = new Date()): boolean {
   const parts = getEasternParts(now);
   const weekdayIndex = WEEKDAY_INDEX[parts.weekday] ?? 0;
 
@@ -102,6 +163,33 @@ export function isDayTraderContestWindowOpen(now: Date = new Date()): boolean {
   if (weekdayIndex === 5 && mins >= LINEUP_LOCK_END_MINUTES) return false;
 
   return true;
+}
+
+/** @deprecated Use isDayTraderTradingWindowOpen */
+export const isDayTraderContestWindowOpen = isDayTraderTradingWindowOpen;
+
+export function isDayTraderTradingActiveForContest(
+  now: Date,
+  contest: ContestWindowBounds
+): boolean {
+  if (contest.status !== "open") return false;
+  const weekStart = new Date(contest.week_start_at);
+  const weekEnd = new Date(contest.week_end_at);
+  return (
+    isDayTraderTradingWindowOpen(now) &&
+    now >= weekStart &&
+    now < weekEnd
+  );
+}
+
+export function getDayTraderTradingStatusLabel(input: {
+  entryOpen: boolean;
+  tradingOpen: boolean;
+  contestStatus: string | null;
+}): string {
+  if (input.tradingOpen) return "Open";
+  if (input.contestStatus === "upcoming") return "Opens Monday 9:30 AM ET";
+  return "Closed";
 }
 
 /** True when Friday contest should snapshot (at or after 4:00 PM ET). */

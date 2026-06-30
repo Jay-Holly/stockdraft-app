@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { Button } from "@/components/Button";
 import { formatPct, formatSignedMoney } from "@/lib/format";
+import {
+  DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE,
+  getDayTraderTradingStatusLabel,
+} from "@/lib/day-trader/contest-period";
 import type { DayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
 
 type DayTraderDashboardCardProps = {
@@ -9,6 +13,11 @@ type DayTraderDashboardCardProps = {
 
 export function DayTraderDashboardCard({ summary }: DayTraderDashboardCardProps) {
   const contest = summary.contest;
+  const tradingStatusLabel = getDayTraderTradingStatusLabel({
+    entryOpen: summary.entryOpen,
+    tradingOpen: summary.tradingOpen,
+    contestStatus: contest?.status ?? null,
+  });
 
   return (
     <section className="bg-dark-card border border-gold/30 rounded-2xl p-6 space-y-4">
@@ -16,16 +25,24 @@ export function DayTraderDashboardCard({ summary }: DayTraderDashboardCardProps)
         <div>
           <h2 className="text-lg font-semibold">Day Trader</h2>
           <p className="text-muted text-sm mt-1">
-            Weekly contest — trade Mon–Fri, compete on $ and % gain.
+            Weekly contest — enter Fri–Fri, trade Mon–Fri.
           </p>
         </div>
-        {summary.windowOpen ? (
-          <span className="text-xs font-semibold text-emerald-400 shrink-0">
-            Market open
-          </span>
-        ) : (
-          <span className="text-xs text-muted shrink-0">Market closed</span>
-        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="text-xs text-muted">Entry</p>
+          <p className={summary.entryOpen ? "text-emerald-400" : "text-muted"}>
+            {summary.entryOpen ? "Open" : "Closed"}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted">Trading</p>
+          <p className={summary.tradingOpen ? "text-emerald-400" : "text-muted"}>
+            {tradingStatusLabel}
+          </p>
+        </div>
       </div>
 
       {contest ? (
@@ -38,7 +55,7 @@ export function DayTraderDashboardCard({ summary }: DayTraderDashboardCardProps)
         </div>
       ) : (
         <p className="text-sm text-muted">
-          No active contest this week. Check back Monday morning.
+          No contest accepting entries right now.
         </p>
       )}
 
@@ -90,6 +107,13 @@ export function DayTraderDashboardCard({ summary }: DayTraderDashboardCardProps)
       ) : summary.joined && summary.canEnter ? (
         <p className="text-sm text-muted">
           You haven&apos;t entered this week&apos;s contest yet.
+        </p>
+      ) : summary.joined &&
+        !summary.entry &&
+        !summary.entryOpen &&
+        summary.contest?.status === "open" ? (
+        <p className="text-sm text-red-400">
+          {DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE}
         </p>
       ) : !summary.joined ? (
         <p className="text-sm text-muted">

@@ -25,9 +25,9 @@ export async function GET() {
     return NextResponse.json({
       contest: context.contest,
       entry: context.entry,
-      windowOpen: context.windowOpen,
-      canTrade:
-        context.windowOpen && context.contest?.status === "open",
+      entryOpen: context.entryOpen,
+      tradingOpen: context.tradingOpen,
+      canTrade: context.canTrade,
       portfolio,
     });
   } catch (error) {

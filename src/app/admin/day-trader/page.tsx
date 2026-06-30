@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { DayTraderAdminForm } from "@/components/day-trader/DayTraderAdminForm";
+import { DayTraderAdminForceEntryForm } from "@/components/day-trader/DayTraderAdminForceEntryForm";
 import { listDayTraderContestsForAdmin } from "@/lib/day-trader/admin-contest";
 import { isDayTraderAdmin } from "@/lib/day-trader/admin-access";
 import { resolveDayTraderLeaderboardContest } from "@/lib/day-trader/resolve-contest";
@@ -42,6 +43,10 @@ export default async function DayTraderAdminPage() {
             contests={contests}
             initialContestId={activeContest?.id ?? null}
           />
+        </div>
+
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <DayTraderAdminForceEntryForm />
         </div>
       </div>
     </div>

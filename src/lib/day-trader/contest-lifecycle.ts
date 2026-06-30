@@ -4,7 +4,7 @@ import { DAY_TRADER_STARTING_VALUE } from "@/lib/day-trader/constants";
 import {
   getDayTraderUpcomingWeekBounds,
   getDayTraderWeekBounds,
-  isDayTraderContestWindowOpen,
+  isDayTraderTradingWindowOpen,
 } from "@/lib/day-trader/contest-period";
 import {
   computeDayTraderEntryValue,
@@ -153,7 +153,7 @@ async function ensureContestRow(
     const contest = existing as DayTraderContestRow;
     if (
       contest.status === "upcoming" &&
-      isDayTraderContestWindowOpen(now) &&
+      isDayTraderTradingWindowOpen(now) &&
       now >= new Date(contest.week_start_at) &&
       now < new Date(contest.week_end_at)
     ) {
@@ -167,7 +167,7 @@ async function ensureContestRow(
   }
 
   const template = await loadLatestFinalizedContest(supabase);
-  const status = isDayTraderContestWindowOpen(now) ? "open" : "upcoming";
+  const status = isDayTraderTradingWindowOpen(now) ? "open" : "upcoming";
 
   const { data: created, error: createError } = await supabase
     .from("day_trader_contests")
@@ -239,7 +239,7 @@ export async function syncDayTraderContestLifecycle(
   }
 
   for (const contest of (readyToOpen ?? []) as DayTraderContestRow[]) {
-    if (!isDayTraderContestWindowOpen(now)) {
+    if (!isDayTraderTradingWindowOpen(now)) {
       result.skipped.push(`open-deferred:${contest.id}`);
       continue;
     }
@@ -250,7 +250,7 @@ export async function syncDayTraderContestLifecycle(
     result.opened.push({ contestId: contest.id });
   }
 
-  const ensureBounds = isDayTraderContestWindowOpen(now)
+  const ensureBounds = isDayTraderTradingWindowOpen(now)
     ? getDayTraderWeekBounds(now)
     : getDayTraderUpcomingWeekBounds(now);
 

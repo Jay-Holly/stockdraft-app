@@ -5,10 +5,13 @@ import {
   DAY_TRADER_STOCK_BUDGET,
 } from "@/lib/day-trader/constants";
 import { getDayTraderContestContext } from "@/lib/day-trader/contest-access";
-import { isDayTraderContestWindowOpen } from "@/lib/day-trader/contest-period";
+import {
+  getDayTraderEntryBlockedMessage,
+  isDayTraderEntryWindowOpenForContest,
+  isDayTraderTradingWeekUnderway,
+} from "@/lib/day-trader/contest-period";
 import { loadLeagueName, loadLeagueStockStarters } from "@/lib/day-trader/starters";
-import type { DayTraderEntryRow } from "@/lib/day-trader/types";
-import { isUsMarketOpen } from "@/lib/market/hours";
+import type { DayTraderContestRow, DayTraderEntryRow } from "@/lib/day-trader/types";
 import { fetchStockQuotes } from "@/lib/roster/quotes";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,31 +19,73 @@ export type CreateDayTraderEntryResult =
   | { ok: true; entry: DayTraderEntryRow }
   | { ok: false; error: string };
 
-export async function createDayTraderEntry(
-  userId: string,
-  leagueId: string,
-  now: Date = new Date()
-): Promise<CreateDayTraderEntryResult> {
-  if (!isDayTraderContestWindowOpen(now)) {
-    return {
-      ok: false,
-      error: "Day Trader entries are only accepted Mon–Fri, 9:30 AM – 4:00 PM ET.",
-    };
-  }
+export type CreateDayTraderEntryOptions = {
+  /** Admin beta: skip Fri 4 PM – Mon 9:30 AM entry window check. */
+  bypassEntryWindow?: boolean;
+  contestId?: string;
+};
 
-  if (!isUsMarketOpen(now)) {
-    return {
-      ok: false,
-      error: "Market is closed. Try again during regular trading hours.",
-    };
+async function resolveContestForEntry(
+  userId: string,
+  now: Date,
+  contestId?: string
+): Promise<DayTraderContestRow | null> {
+  if (contestId) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("day_trader_contests")
+      .select("*")
+      .eq("id", contestId)
+      .maybeSingle();
+    return (data as DayTraderContestRow | null) ?? null;
   }
 
   const context = await getDayTraderContestContext(userId, now);
-  if (!context.contest) {
-    return { ok: false, error: "No open Day Trader contest this week." };
+  return context.contest;
+}
+
+export async function createDayTraderEntry(
+  userId: string,
+  leagueId: string,
+  now: Date = new Date(),
+  options?: CreateDayTraderEntryOptions
+): Promise<CreateDayTraderEntryResult> {
+  const contest = await resolveContestForEntry(userId, now, options?.contestId);
+  if (!contest) {
+    return { ok: false, error: "No Day Trader contest is accepting entries." };
   }
 
-  if (context.entry) {
+  if (
+    !options?.bypassEntryWindow &&
+    !isDayTraderEntryWindowOpenForContest(now, contest)
+  ) {
+    return {
+      ok: false,
+      error: getDayTraderEntryBlockedMessage(now, contest),
+    };
+  }
+
+  if (
+    options?.bypassEntryWindow &&
+    !isDayTraderEntryWindowOpenForContest(now, contest) &&
+    !isDayTraderTradingWeekUnderway(now, contest)
+  ) {
+    return {
+      ok: false,
+      error:
+        "No active contest week to force entry into. Wait for lifecycle sync or pass contestId.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: existingEntry } = await supabase
+    .from("day_trader_entries")
+    .select("*")
+    .eq("contest_id", contest.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingEntry) {
     return { ok: false, error: "You already entered this week's contest." };
   }
 
@@ -58,17 +103,16 @@ export async function createDayTraderEntry(
   if (missingPrices.length > 0) {
     return {
       ok: false,
-      error: `Missing live prices for: ${missingPrices.join(", ")}.`,
+      error: `Missing prices for: ${missingPrices.join(", ")}. Try again shortly.`,
     };
   }
 
   const leagueName = (await loadLeagueName(leagueId)) ?? "League";
-  const supabase = await createClient();
 
   const { data: entry, error: entryError } = await supabase
     .from("day_trader_entries")
     .insert({
-      contest_id: context.contest.id,
+      contest_id: contest.id,
       user_id: userId,
       source_league_id: leagueId,
       source_league_name: leagueName,

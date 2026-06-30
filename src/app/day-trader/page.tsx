@@ -10,27 +10,19 @@ import {
   DAY_TRADER_STOCK_BUDGET,
 } from "@/lib/day-trader/constants";
 import { getDayTraderContestContext } from "@/lib/day-trader/contest-access";
+import {
+  DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE,
+  getDayTraderEntryBlockedMessage,
+  getDayTraderTradingStatusLabel,
+  isDayTraderTradingWeekUnderway,
+} from "@/lib/day-trader/contest-period";
 import { listDayTraderEligibleLeagues } from "@/lib/day-trader/eligible-leagues";
 import { loadDayTraderPortfolio } from "@/lib/day-trader/portfolio";
 import {
   hasJoinedDayTrader,
   markDayTraderJoined,
 } from "@/lib/profile/day-trader";
-
-function formatContestRange(weekStart: string, weekEnd: string): string {
-  const start = new Date(weekStart);
-  const end = new Date(weekEnd);
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  });
-  return `${fmt.format(start)} – ${fmt.format(end)}`;
-}
+import { formatDayTraderContestRange } from "@/lib/day-trader/format-contest";
 
 export default async function DayTraderPage() {
   const supabase = await createClient();
@@ -94,8 +86,11 @@ export default async function DayTraderPage() {
     : null;
 
   const contest = context.contest;
-  const canTrade =
-    context.windowOpen && contest?.status === "open" && Boolean(context.entry);
+  const tradingStatusLabel = getDayTraderTradingStatusLabel({
+    entryOpen: context.entryOpen,
+    tradingOpen: context.tradingOpen,
+    contestStatus: contest?.status ?? null,
+  });
 
   return (
     <div className="min-h-screen px-4 py-8">
@@ -107,28 +102,36 @@ export default async function DayTraderPage() {
           </h1>
           {contest ? (
             <p className="text-muted text-sm mt-2">
-              {formatContestRange(contest.week_start_at, contest.week_end_at)}
+              {formatDayTraderContestRange(
+                contest.week_start_at,
+                contest.week_end_at
+              )}
             </p>
           ) : (
             <p className="text-muted text-sm mt-2">
-              Contest opens Mon 9:30 AM ET and closes Fri 4:00 PM ET.
+              Trading runs Mon 9:30 AM – Fri 4:00 PM ET. Entry opens Friday
+              4:00 PM ET for the upcoming week.
             </p>
           )}
         </div>
 
         <div className="rounded-xl border border-dark-border bg-dark/40 p-4 space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted">Trading window</span>
-            <span className={context.windowOpen ? "text-emerald-400" : "text-muted"}>
-              {context.windowOpen ? "Open" : "Closed"}
+            <span className="text-muted">Entry</span>
+            <span className={context.entryOpen ? "text-emerald-400" : "text-muted"}>
+              {context.entryOpen ? "Open" : "Closed"}
             </span>
           </div>
-          {contest ? (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted">Contest status</span>
-              <span className="capitalize">{contest.status}</span>
-            </div>
-          ) : null}
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted">Trading</span>
+            <span
+              className={
+                context.tradingOpen ? "text-emerald-400" : "text-muted"
+              }
+            >
+              {tradingStatusLabel}
+            </span>
+          </div>
         </div>
 
         {context.entry && portfolio ? (
@@ -136,19 +139,27 @@ export default async function DayTraderPage() {
             <p className="text-xs text-muted text-center">
               Starters from {context.entry.source_league_name ?? "your league"} ·
               ${DAY_TRADER_STARTING_VALUE.toLocaleString()} starting value
+              {!context.tradingOpen ? " · portfolio locked until trading opens" : ""}
             </p>
             <DayTraderTradingPanel
               initialPortfolio={portfolio}
-              canTrade={canTrade}
-              windowOpen={context.windowOpen}
-              contestOpen={contest?.status === "open"}
+              canTrade={context.canTrade}
+              tradingOpen={context.tradingOpen}
+              contestStatus={contest?.status ?? null}
             />
           </div>
         ) : context.canEnter && eligibleLeagues.length > 0 ? (
           <DayTraderEnterForm eligibleLeagues={eligibleLeagues} />
-        ) : !context.windowOpen ? (
+        ) : context.contest &&
+          !context.entry &&
+          !context.entryOpen &&
+          isDayTraderTradingWeekUnderway(now, context.contest) ? (
+          <div className="rounded-xl border border-dark-border p-4 text-sm text-red-400">
+            {DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE}
+          </div>
+        ) : !context.entryOpen ? (
           <div className="rounded-xl border border-dark-border p-4 text-sm text-muted">
-            Entries open Mon–Fri, 9:30 AM – 4:00 PM ET when a contest is active.
+            {getDayTraderEntryBlockedMessage(now, context.contest)}
           </div>
         ) : eligibleLeagues.length === 0 ? (
           <div className="rounded-xl border border-dark-border p-4 text-sm text-muted space-y-3">
@@ -161,18 +172,18 @@ export default async function DayTraderPage() {
           </div>
         ) : (
           <div className="rounded-xl border border-dark-border p-4 text-sm text-muted">
-            No open contest right now. Check back when the weekly window opens.
+            No contest accepting entries right now.
           </div>
         )}
 
         <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-xs text-muted space-y-1">
           <p>
-            Entry copies 10 stock starters only — no bench or crypto. Each stock
-            is reset to ${DAY_TRADER_STOCK_BUDGET.toLocaleString()} at entry price.
+            Enter Fri 4:00 PM – Mon 9:30 AM ET (weekends included). Starters
+            lock at entry using the latest available prices.
           </p>
           <p>
-            Sells credit cash at the current market price. Buys spend available
-            cash. Max 10 symbols at once.
+            Trading opens Mon 9:30 AM ET. Sells credit cash at market price;
+            max 10 symbols.
           </p>
           <p>One entry per user per week.</p>
         </div>
