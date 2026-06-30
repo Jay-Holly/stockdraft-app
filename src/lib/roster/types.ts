@@ -12,6 +12,7 @@ export type RosterPickView = DraftPick & {
   weekDollarGain: number;
   weekGainPercent: number;
   seasonDollarGain: number;
+  seasonOpenValue: number;
   scores: boolean;
 };
 

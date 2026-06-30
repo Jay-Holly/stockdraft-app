@@ -28,7 +28,7 @@ export function computeTeamGainStats(picks: RosterPickView[]): TeamGainStats {
 
   const seasonInputs = scoring.map((pick) => ({
     currentValue: pick.currentValue,
-    weekOpenValue: pick.budget_spent,
+    weekOpenValue: pick.seasonOpenValue,
   }));
 
   return {

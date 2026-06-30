@@ -1,13 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import { calculateRosterGainPercent, getScoringPicks } from "@/lib/draft/ai-strategy";
-import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
 import { normalizePlayerCount } from "@/lib/matchup/schedule";
 import {
+  computeScoringSeasonGainPercentForUser,
   computeScoringWeekDollarGainForUser,
   computeScoringWeekGainPercentForUser,
 } from "@/lib/roster/weekly";
-import { getSymbolQuote } from "@/lib/roster/quotes";
 import type { TeamStandingSeed } from "@/lib/matchup/schedule";
 
 export async function getLeaguePlayerCount(leagueId: string): Promise<number> {
@@ -65,16 +63,7 @@ export async function computeTeamSeasonGainPercent(
   userId: string,
   leagueId: string
 ): Promise<number> {
-  const state = await loadDraftStateDetailed(userId, { leagueId });
-  if (!state.ok) return 0;
-
-  const quotes = new Map<string, number>();
-  for (const pick of getScoringPicks(state.state.picks)) {
-    const { price } = await getSymbolQuote(pick.symbol);
-    quotes.set(pick.symbol.toUpperCase(), price);
-  }
-
-  return calculateRosterGainPercent(state.state.picks, quotes);
+  return computeScoringSeasonGainPercentForUser(userId, leagueId);
 }
 
 export async function loadStandingSeeds(

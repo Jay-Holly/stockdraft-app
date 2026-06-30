@@ -1,3 +1,18 @@
+export function computeWeekDollarGain(
+  currentValue: number,
+  valueAtOpen: number
+): number {
+  return currentValue - valueAtOpen;
+}
+
+export function computeWeekGainPercent(
+  currentValue: number,
+  valueAtOpen: number
+): number {
+  if (valueAtOpen <= 0) return 0;
+  return ((currentValue - valueAtOpen) / valueAtOpen) * 100;
+}
+
 export function computeScoringWeekGainPercent(
   scoringPicks: Array<{ currentValue: number; weekOpenValue: number }>
 ): number {

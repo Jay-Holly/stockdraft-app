@@ -9,6 +9,11 @@ import { isCryptoSymbol } from "@/lib/draft/engine";
 import type { CryptoQuote } from "@/lib/coingecko/service";
 import { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
 import {
+  computePickSeasonMetrics,
+  computeTeamSeasonMetrics,
+  loadBaselinesThroughWeek,
+} from "@/lib/roster/season-totals";
+import {
   baselinesHaveFridayClose,
   fetchLivePricesForPicks,
   resolveHybridScoringValue,
@@ -19,7 +24,13 @@ import { isPastFinalizeAt } from "@/lib/season/finalize-times";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import type { SeasonSettings } from "@/lib/season/types";
 
-export { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
+export {
+  computeScoringWeekGainPercent,
+  computeWeekDollarGain,
+  computeWeekGainPercent,
+} from "@/lib/roster/scoring-math";
+
+export async function computeScoringWeekGainPercentForUser(
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -206,7 +217,7 @@ async function computeScoringWeekInputs(
     supabase?: SupabaseClient;
   }
 ): Promise<
-  Array<{ currentValue: number; weekOpenValue: number }>
+  Array<{ pickId: string; currentValue: number; weekOpenValue: number }>
 > {
   const supabase = options?.supabase ?? (await createClient());
 
@@ -272,7 +283,7 @@ async function computeScoringWeekInputs(
               useHybrid
             );
 
-      return { currentValue, weekOpenValue };
+      return { pickId: pick.id, currentValue, weekOpenValue };
     });
 }
 
@@ -661,21 +672,6 @@ export async function applyCryptoRebalanceWeekBaselines(
   );
 }
 
-export function computeWeekDollarGain(
-  currentValue: number,
-  valueAtOpen: number
-): number {
-  return currentValue - valueAtOpen;
-}
-
-export function computeWeekGainPercent(
-  currentValue: number,
-  valueAtOpen: number
-): number {
-  if (valueAtOpen <= 0) return 0;
-  return ((currentValue - valueAtOpen) / valueAtOpen) * 100;
-}
-
 export async function computeScoringWeekGainPercentForUser(
   userId: string,
   leagueId: string,
@@ -706,4 +702,76 @@ export async function computeScoringWeekDollarGainForUser(
     total += computeWeekDollarGain(pick.currentValue, pick.weekOpenValue);
   }
   return total;
+}
+
+async function computeScoringSeasonPickMetricsForUser(
+  userId: string,
+  leagueId: string,
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: SupabaseClient;
+  }
+) {
+  const supabase = options?.supabase ?? (await createClient());
+  const weekNumber =
+    options?.weekNumber ??
+    (await getCurrentWeek(supabase, leagueId, userId));
+  const weekInputs = await computeScoringWeekInputs(userId, leagueId, options);
+  const baselineByPick = await loadBaselinesThroughWeek(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber
+  );
+
+  return weekInputs.map((input) => {
+    const season = computePickSeasonMetrics(
+      baselineByPick.get(input.pickId),
+      weekNumber,
+      input.weekOpenValue,
+      input.currentValue
+    );
+    return {
+      currentValue: input.currentValue,
+      ...season,
+    };
+  });
+}
+
+export async function computeScoringSeasonGainPercentForUser(
+  userId: string,
+  leagueId: string,
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: SupabaseClient;
+  }
+): Promise<number> {
+  const seasonPicks = await computeScoringSeasonPickMetricsForUser(
+    userId,
+    leagueId,
+    options
+  );
+  return computeTeamSeasonMetrics(seasonPicks).seasonGainPercent;
+}
+
+export async function computeScoringSeasonDollarGainForUser(
+  userId: string,
+  leagueId: string,
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: SupabaseClient;
+  }
+): Promise<number> {
+  const seasonPicks = await computeScoringSeasonPickMetricsForUser(
+    userId,
+    leagueId,
+    options
+  );
+  return computeTeamSeasonMetrics(seasonPicks).seasonDollarGain;
 }

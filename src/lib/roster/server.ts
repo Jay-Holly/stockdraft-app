@@ -1,8 +1,4 @@
 import { fetchDraftPool } from "@/lib/draft-pool/server";
-import {
-  calculateRosterGainPercent,
-  getScoringPicks,
-} from "@/lib/draft/ai-strategy";
 import { isCryptoSymbol, isStockPickEligible } from "@/lib/draft/engine";
 import { loadDraftStateDetailed, fetchBuyerCounts } from "@/lib/draft/server";
 import type { DraftPick } from "@/lib/draft/types";
@@ -50,16 +46,20 @@ import {
   fetchStockQuotes,
   getCryptoQuotesMap,
   getStockQuote,
-  getSymbolQuote,
 } from "@/lib/roster/quotes";
 import {
+  computePickSeasonMetrics,
+  computeTeamSeasonMetrics,
+  loadBaselinesThroughWeek,
+} from "@/lib/roster/season-totals";
+import {
+  computeScoringSeasonGainPercentForUser,
   computeScoringWeekDollarGainForUser,
   computeScoringWeekGainPercent,
   computeScoringWeekGainPercentForUser,
   computeWeekDollarGain,
   computeWeekGainPercent,
   ensureWeekBaselines,
-  getCurrentWeek,
   pickMarketValue,
 } from "@/lib/roster/weekly";
 import type {
@@ -152,6 +152,7 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
         weekDollarGain: 0,
         weekGainPercent: 0,
         seasonDollarGain: 0,
+        seasonOpenValue: 0,
         scores: false,
       };
     }
@@ -186,6 +187,7 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
       weekDollarGain: 0,
       weekGainPercent: 0,
       seasonDollarGain: 0,
+      seasonOpenValue: 0,
       scores,
     };
   });
@@ -234,6 +236,13 @@ export async function loadRosterView(
         currentValue: pick.currentValue,
         weekOpenValue: pick.weekOpenValue,
       }));
+    const scoringSeasonInputs = historicalPicks
+      .filter((pick) => pick.pick_type === "stock" || pick.pick_type === "crypto")
+      .map((pick) => ({
+        currentValue: pick.currentValue,
+        seasonOpenValue: pick.seasonOpenValue,
+        seasonDollarGain: pick.seasonDollarGain,
+      }));
 
     return {
       ok: true,
@@ -251,14 +260,8 @@ export async function loadRosterView(
         crypto: partitioned.crypto,
         cryptoBuyerCounts: {},
         cryptoQuotes: {},
-        scoringGainPercent: calculateRosterGainPercent(
-          state.state.picks,
-          new Map(
-            historicalPicks
-              .filter((pick) => pick.pick_type === "stock" || pick.pick_type === "crypto")
-              .map((pick) => [pick.symbol.toUpperCase(), pick.currentPrice] as const)
-          )
-        ),
+        scoringGainPercent: computeTeamSeasonMetrics(scoringSeasonInputs)
+          .seasonGainPercent,
         scoringWeekGainPercent:
           computeScoringWeekGainPercent(scoringWeekInputs),
         scoringWeekDollarGain: scoringWeekInputs.reduce(
@@ -293,6 +296,12 @@ export async function loadRosterView(
     viewWeek,
     picks
   );
+  const baselineByPick = await loadBaselinesThroughWeek(
+    supabase,
+    leagueId,
+    userId,
+    viewWeek
+  );
 
   const withWeekMetrics: RosterPickView[] = enriched.map((pick) => {
     const weekOpenValue =
@@ -306,35 +315,37 @@ export async function loadRosterView(
       pick.currentValue,
       weekOpenValue
     );
-    const seasonDollarGain = computeWeekDollarGain(
-      pick.currentValue,
-      pick.budget_spent
+    const season = computePickSeasonMetrics(
+      baselineByPick.get(pick.id),
+      viewWeek,
+      weekOpenValue,
+      pick.currentValue
     );
-    const seasonGainPercent =
-      pick.budget_spent > 0
-        ? computeGainPercent(pick.budget_spent, pick.currentValue)
-        : pick.gainPercent;
 
     return {
       ...pick,
       weekOpenValue,
       weekDollarGain,
       weekGainPercent,
-      seasonDollarGain,
-      gainPercent: seasonGainPercent,
+      seasonOpenValue: season.seasonOpenValue,
+      seasonDollarGain: season.seasonDollarGain,
+      gainPercent: season.seasonGainPercent,
     };
   });
-
-  const quoteMap = new Map<string, number>();
-  for (const pick of withWeekMetrics) {
-    quoteMap.set(pick.symbol.toUpperCase(), pick.currentPrice);
-  }
 
   const scoringWeekInputs = withWeekMetrics
     .filter((p) => p.pick_type === "stock" || p.pick_type === "crypto")
     .map((p) => ({
       currentValue: p.currentValue,
       weekOpenValue: p.weekOpenValue,
+    }));
+
+  const scoringSeasonInputs = withWeekMetrics
+    .filter((p) => p.pick_type === "stock" || p.pick_type === "crypto")
+    .map((p) => ({
+      currentValue: p.currentValue,
+      seasonOpenValue: p.seasonOpenValue,
+      seasonDollarGain: p.seasonDollarGain,
     }));
 
   const totalWeekDollarGain = withWeekMetrics.reduce(
@@ -365,10 +376,8 @@ export async function loadRosterView(
       ),
       cryptoBuyerCounts: buyerCounts,
       cryptoQuotes,
-      scoringGainPercent: calculateRosterGainPercent(
-        state.state.picks,
-        quoteMap
-      ),
+      scoringGainPercent: computeTeamSeasonMetrics(scoringSeasonInputs)
+        .seasonGainPercent,
       scoringWeekGainPercent:
         computeScoringWeekGainPercent(scoringWeekInputs),
       scoringWeekDollarGain,
@@ -381,16 +390,7 @@ async function computeTeamGain(
   userId: string,
   leagueId: string
 ): Promise<number> {
-  const state = await loadDraftStateDetailed(userId, { leagueId });
-  if (!state.ok) return 0;
-
-  const quotes = new Map<string, number>();
-  for (const pick of getScoringPicks(state.state.picks)) {
-    const { price } = await getSymbolQuote(pick.symbol);
-    quotes.set(pick.symbol.toUpperCase(), price);
-  }
-
-  return calculateRosterGainPercent(state.state.picks, quotes);
+  return computeScoringSeasonGainPercentForUser(userId, leagueId);
 }
 
 export async function loadLeaguePageData(

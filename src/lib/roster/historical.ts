@@ -1,12 +1,14 @@
 import type { DraftPick } from "@/lib/draft/types";
 import { createClient } from "@/lib/supabase/server";
-import { computeGainPercent } from "@/lib/roster/quotes";
 import type { RosterPickView } from "@/lib/roster/types";
+import {
+  computePickSeasonMetrics,
+  loadBaselinesThroughWeek,
+} from "@/lib/roster/season-totals";
 import {
   computeWeekDollarGain,
   computeWeekGainPercent,
   loadWeekBaselineMap,
-  pickMarketValue,
 } from "@/lib/roster/weekly";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -64,9 +66,10 @@ export async function buildHistoricalRosterPicks(
   picks: DraftPick[]
 ): Promise<RosterPickView[]> {
   const supabase = await createClient();
-  const [weekBaselines, nextWeekBaselines] = await Promise.all([
+  const [weekBaselines, nextWeekBaselines, baselineByPick] = await Promise.all([
     loadWeekBaselineDetailMap(supabase, leagueId, userId, weekNumber),
     loadWeekBaselineMap(supabase, leagueId, userId, weekNumber + 1),
+    loadBaselinesThroughWeek(supabase, leagueId, userId, weekNumber),
   ]);
 
   const relevantPickIds = new Set<string>([
@@ -95,13 +98,13 @@ export async function buildHistoricalRosterPicks(
     const currentValue = weekCloseValue;
     const weekDollarGain = computeWeekDollarGain(weekCloseValue, weekOpenValue);
     const weekGainPercent = computeWeekGainPercent(weekCloseValue, weekOpenValue);
-    const seasonDollarGain = computeWeekDollarGain(
-      weekCloseValue,
-      pick.budget_spent
+    const season = computePickSeasonMetrics(
+      baselineByPick.get(pick.id),
+      weekNumber,
+      weekOpenValue,
+      weekCloseValue
     );
-    const gainPercent = scores
-      ? computeGainPercent(pick.budget_spent, weekCloseValue)
-      : 0;
+    const gainPercent = scores ? season.seasonGainPercent : 0;
 
     if (symbol === "__OPEN__") {
       return {
@@ -115,6 +118,7 @@ export async function buildHistoricalRosterPicks(
         weekDollarGain: 0,
         weekGainPercent: 0,
         seasonDollarGain: 0,
+        seasonOpenValue: 0,
         scores: false,
       };
     }
@@ -129,7 +133,8 @@ export async function buildHistoricalRosterPicks(
       weekOpenValue,
       weekDollarGain,
       weekGainPercent,
-      seasonDollarGain,
+      seasonOpenValue: season.seasonOpenValue,
+      seasonDollarGain: season.seasonDollarGain,
       scores,
     };
   });
