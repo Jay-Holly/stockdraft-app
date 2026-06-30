@@ -19,7 +19,7 @@ export default async function DayTraderJoinPage() {
   }
 
   if (await hasJoinedDayTrader(user.id)) {
-    redirect("/dashboard");
+    redirect("/day-trader");
   }
 
   async function joinDayTrader() {
@@ -36,7 +36,7 @@ export default async function DayTraderJoinPage() {
       throw new Error(result.error);
     }
 
-    redirect("/dashboard");
+    redirect("/day-trader");
   }
 
   return (
