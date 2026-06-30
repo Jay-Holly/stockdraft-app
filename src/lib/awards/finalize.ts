@@ -9,6 +9,7 @@ import {
   autoClaimAwardForUser,
   isLeagueBotUser,
 } from "@/lib/awards/claim";
+import { parseLeagueScoringMode } from "@/lib/league/scoring-mode";
 import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -37,7 +38,7 @@ export async function computeWeeklyAwardsForLeagueWeek(
 
   const { data: league } = await db
     .from("leagues")
-    .select("format_type, sports_league_id, player_count, status")
+    .select("format_type, sports_league_id, player_count, status, scoring_mode")
     .eq("id", leagueId)
     .maybeSingle();
 
@@ -75,7 +76,8 @@ export async function computeWeeklyAwardsForLeagueWeek(
 
   const pool = await ensureLeagueBonusPool(db, leagueId);
   const weeklyPool = weeklyPoolAmount(pool);
-  const awards = computeWeeklyAwards(metrics);
+  const scoringMode = parseLeagueScoringMode(league.scoring_mode);
+  const awards = computeWeeklyAwards(metrics, scoringMode);
   const errors: string[] = [];
   let payoutsCreated = 0;
   let actualPayouts = 0;

@@ -60,7 +60,7 @@ function starter(
 
 const metrics: AwardPickMetric[] = [
   starter(userA, "p1", "NVDA", 1000, 1200),
-  starter(userA, "p2", "AMD", 1000, 900),
+  starter(userA, "p2", "AMD", 1000, 990),
   metric({
     userId: userA,
     pickId: "p3",
@@ -100,17 +100,57 @@ const metrics: AwardPickMetric[] = [
   }),
 ];
 
-const awards = computeWeeklyAwards(metrics);
-const byKey = Object.fromEntries(awards.map((award) => [award.awardKey, award]));
+const percentGainAwards = computeWeeklyAwards(metrics, "percent_gain");
+const percentByKey = Object.fromEntries(
+  percentGainAwards.map((award) => [award.awardKey, award])
+);
 
-assert(byKey.winner_of_week.winner?.userId === userB, "Winner of Week = userB");
-assert(byKey.rookie_of_week.winner?.symbol === "IONQ", "Rookie = IONQ +30%");
+assert(
+  percentByKey.winner_of_week.winner?.userId === userB,
+  "percent_gain league: Winner of Week = team $ leader (userB)"
+);
+assert(
+  percentByKey.rookie_of_week.winner?.symbol === "IONQ",
+  "percent_gain league: Rookie = best starter stock % (IONQ)"
+);
+assert(
+  percentByKey.winner_of_week.winner?.detail.metric === "dollar",
+  "percent_gain league: Winner metric = dollar"
+);
+assert(
+  percentByKey.rookie_of_week.winner?.detail.metric === "percent",
+  "percent_gain league: Rookie metric = percent"
+);
+
+const dollarGainAwards = computeWeeklyAwards(metrics, "dollar_gain");
+const dollarByKey = Object.fromEntries(
+  dollarGainAwards.map((award) => [award.awardKey, award])
+);
+
+assert(
+  dollarByKey.winner_of_week.winner?.userId === userA,
+  "dollar_gain league: Winner of Week = team % leader (userA)"
+);
+assert(
+  dollarByKey.rookie_of_week.winner?.symbol === "IONQ",
+  "dollar_gain league: Rookie = best starter stock $ (IONQ)"
+);
+assert(
+  dollarByKey.winner_of_week.winner?.detail.metric === "percent",
+  "dollar_gain league: Winner metric = percent"
+);
+assert(
+  dollarByKey.rookie_of_week.winner?.detail.metric === "dollar",
+  "dollar_gain league: Rookie metric = dollar"
+);
+
+const byKey = percentByKey;
 assert(byKey.sweep_week.winner?.userId === userB, "Sweep Week = userB");
 assert(byKey.bench_curse.winner?.userId === userA, "Bench Curse = userA");
-assert(byKey.loser_of_week.winner?.userId === userA, "Loser of Week = userA");
+assert(byKey.loser_of_week.winner?.userId === userB, "Loser of Week = userB");
 
 console.log("weekly awards logic checks passed");
-for (const award of awards) {
+for (const award of percentGainAwards) {
   console.log(
     `${award.awardKey}: ${award.winner?.userId ?? "none"} ${
       award.noWinnerReason ?? ""

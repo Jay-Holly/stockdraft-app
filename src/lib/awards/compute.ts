@@ -12,6 +12,7 @@ import {
   sumDollarGain,
   teamScoringWeekGainPercent,
 } from "@/lib/awards/metrics";
+import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
 import type { AwardPickMetric, AwardWinnerCandidate, ComputedAward } from "@/lib/awards/types";
 
 function pickMaxCandidate(
@@ -37,18 +38,35 @@ function pickMinCandidate(
 }
 
 function computeWinnerOfWeek(
-  byUser: Map<string, AwardPickMetric[]>
+  byUser: Map<string, AwardPickMetric[]>,
+  scoringMode: LeagueScoringMode
 ): ComputedAward {
+  const useDollarGain = scoringMode === "percent_gain";
   const candidates: AwardWinnerCandidate[] = [];
 
   for (const [userId, picks] of byUser) {
     const scoring = filterPickType(picks, ["stock", "crypto"]);
-    const total = sumDollarGain(scoring);
-    candidates.push({
-      userId,
-      score: total,
-      detail: { totalWeekDollarGain: total },
-    });
+    if (useDollarGain) {
+      const total = sumDollarGain(scoring);
+      candidates.push({
+        userId,
+        score: total,
+        detail: {
+          metric: "dollar",
+          totalWeekDollarGain: total,
+        },
+      });
+    } else {
+      const teamPct = teamScoringWeekGainPercent(picks);
+      candidates.push({
+        userId,
+        score: teamPct,
+        detail: {
+          metric: "percent",
+          teamWeekGainPct: teamPct,
+        },
+      });
+    }
   }
 
   const winner = pickMaxCandidate(candidates);
@@ -60,17 +78,20 @@ function computeWinnerOfWeek(
   };
 }
 
-function computeRookieOfWeek(metrics: AwardPickMetric[]): ComputedAward {
-  const candidates: AwardWinnerCandidate[] = filterPickType(metrics, [
-    "stock",
-  ])
+function computeRookieOfWeek(
+  metrics: AwardPickMetric[],
+  scoringMode: LeagueScoringMode
+): ComputedAward {
+  const usePercentGain = scoringMode === "percent_gain";
+  const candidates: AwardWinnerCandidate[] = filterPickType(metrics, ["stock"])
     .filter((pick) => pick.valueAtOpen > 0)
     .map((pick) => ({
       userId: pick.userId,
       pickId: pick.pickId,
       symbol: pick.symbol,
-      score: pick.weekGainPct,
+      score: usePercentGain ? pick.weekGainPct : pick.weekDollarGain,
       detail: {
+        metric: usePercentGain ? "percent" : "dollar",
         weekGainPct: pick.weekGainPct,
         weekDollarGain: pick.weekDollarGain,
       },
@@ -243,16 +264,17 @@ function computeBenchCurse(
 }
 
 export function computeWeeklyAwards(
-  metrics: AwardPickMetric[]
+  metrics: AwardPickMetric[],
+  scoringMode: LeagueScoringMode = "percent_gain"
 ): ComputedAward[] {
   const byUser = groupMetricsByUser(metrics);
 
   return AWARD_KEYS.map((awardKey) => {
     switch (awardKey) {
       case "winner_of_week":
-        return computeWinnerOfWeek(byUser);
+        return computeWinnerOfWeek(byUser, scoringMode);
       case "rookie_of_week":
-        return computeRookieOfWeek(metrics);
+        return computeRookieOfWeek(metrics, scoringMode);
       case "diamond_hands":
         return computeDiamondHands(metrics);
       case "lottery_hit":

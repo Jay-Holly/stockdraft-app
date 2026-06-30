@@ -1,4 +1,11 @@
 -- Weekly Bonus Awards: pool ledger, weekly results, and crypto claim payouts
+--
+-- Winner / Rookie awards flip relative to leagues.scoring_mode (added in 032):
+--   percent_gain leagues -> Winner = team $ gain, Rookie = best starter stock %
+--   dollar_gain leagues  -> Winner = team % gain, Rookie = best starter stock $
+
+alter table public.leagues add column if not exists scoring_mode text not null default 'percent_gain'
+  check (scoring_mode in ('percent_gain', 'dollar_gain'));
 
 create table if not exists public.league_bonus_pools (
   league_id uuid primary key references public.leagues(id) on delete cascade,
