@@ -267,13 +267,28 @@ export async function finalizeDueMatchupsForAllLeagues(
         );
       }
 
-      const finalizeAt = isSdpl && settings
-        ? computeWeekFinalizeAt(settings, weekNumber, now).toISOString()
-        : (scheduledWeeks?.find((row) => row.week_number === weekNumber)
-            ?.finalize_at ?? null);
-
-      if (isSdpl && finalizeAt && !isPastFinalizeAt(finalizeAt, now)) {
-        continue;
+  if (isSdpl) {
+        if (!settings) {
+          errors.push(
+            `${league.id} w${weekNumber}: missing season settings for SDPL finalize`
+          );
+          continue;
+        }
+        const finalizeAt = computeWeekFinalizeAt(
+          settings,
+          weekNumber,
+          now
+        ).toISOString();
+        if (!isPastFinalizeAt(finalizeAt, now)) {
+          continue;
+        }
+      } else {
+        const finalizeAt =
+          scheduledWeeks?.find((row) => row.week_number === weekNumber)
+            ?.finalize_at ?? null;
+        if (finalizeAt && !isPastFinalizeAt(finalizeAt, now)) {
+          continue;
+        }
       }
 
       try {

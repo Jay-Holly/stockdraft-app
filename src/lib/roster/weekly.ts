@@ -356,10 +356,18 @@ export async function captureWeekBaselinesForUser(
   userId: string,
   weekNumber: number
 ): Promise<void> {
-  const state = await loadDraftStateDetailed(userId, { leagueId });
-  if (!state.ok) return;
+  let picks = (await loadUserDraftPicks(supabase, userId, leagueId)).filter(
+    (p) => p.pick_type !== "skip"
+  );
 
-  const picks = state.state.picks.filter((p) => p.pick_type !== "skip");
+  if (picks.length === 0) {
+    const state = await loadDraftStateDetailed(userId, { leagueId });
+    if (!state.ok) return;
+    picks = state.state.picks.filter((p) => p.pick_type !== "skip");
+  }
+
+  if (picks.length === 0) return;
+
   const prices = await fetchPricesForPicks(picks);
 
   const rows = picks.map((pick) => ({

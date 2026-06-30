@@ -63,7 +63,7 @@ export function computeWeekFinalizeAt(
 }
 
 export function isPastFinalizeAt(finalizeAt: string | null, now: Date): boolean {
-  if (!finalizeAt) return true;
+  if (!finalizeAt) return false;
   const at = new Date(finalizeAt);
   return !Number.isNaN(at.getTime()) && now.getTime() >= at.getTime();
 }
