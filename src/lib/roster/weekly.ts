@@ -469,12 +469,27 @@ export async function captureWeekCloseSnapshots(
 
       const { data: existing } = await supabase
         .from("roster_week_baselines")
-        .select("value_at_open")
+        .select("value_at_open, value_at_close")
         .eq("league_id", leagueId)
         .eq("user_id", draft.user_id)
         .eq("week_number", weekNumber)
         .eq("pick_id", pick.id)
         .maybeSingle();
+
+      const openValue = existing?.value_at_open ?? closeValue;
+      const existingClose =
+        existing?.value_at_close != null
+          ? Number(existing.value_at_close)
+          : null;
+
+      // Never replace a real close with a flattened fallback (open == close).
+      if (
+        existingClose != null &&
+        existingClose !== Number(openValue) &&
+        closeValue === Number(openValue)
+      ) {
+        continue;
+      }
 
       await supabase.from("roster_week_baselines").upsert(
         {
@@ -482,7 +497,7 @@ export async function captureWeekCloseSnapshots(
           user_id: draft.user_id,
           week_number: weekNumber,
           pick_id: pick.id,
-          value_at_open: existing?.value_at_open ?? closeValue,
+          value_at_open: openValue,
           value_at_close: closeValue,
         },
         { onConflict: "league_id,user_id,week_number,pick_id" }

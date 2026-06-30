@@ -14,6 +14,14 @@ import {
 import { getWeekCalendarEntry } from "@/lib/season/calendar";
 import type { SeasonSettings } from "@/lib/season/types";
 
+/** Beta-daily same-day weeks: capture closes before scoring (not after). */
+export function usesSameDayCloseCapture(
+  settings: SeasonSettings,
+  weekNumber: number
+): boolean {
+  return settings.rulesApply && !weekUsesWeekendExtension(settings, weekNumber);
+}
+
 /** Whether this week uses Fri 4 PM stock freeze → Mon 6 AM finalize. */
 export function weekUsesWeekendExtension(
   settings: SeasonSettings,

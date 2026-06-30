@@ -15,7 +15,10 @@ import {
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
 import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
-import { weekUsesWeekendExtension } from "@/lib/season/finalize-times";
+import {
+  usesSameDayCloseCapture,
+  weekUsesWeekendExtension,
+} from "@/lib/season/finalize-times";
 import { baselinesHaveFridayClose } from "@/lib/season/weekend-scoring";
 import { loadWeekBaselineExtendedMap } from "@/lib/roster/weekly";
 import {
@@ -570,10 +573,9 @@ export async function finalizeMatchupsForLeagueWeek(
   }
 
   const { settings } = await loadSeasonCalendarForLeague(leagueId);
-  if (
-    settings.rulesApply &&
-    !weekUsesWeekendExtension(settings, weekNumber)
-  ) {
+  const sameDayClose = usesSameDayCloseCapture(settings, weekNumber);
+
+  if (sameDayClose) {
     await captureWeekCloseSnapshots(leagueId, weekNumber, supabase);
   }
 
@@ -598,7 +600,9 @@ export async function finalizeMatchupsForLeagueWeek(
     return { error: lastError, finalized: false };
   }
 
-  await captureWeekCloseSnapshots(leagueId, weekNumber, supabase);
+  if (!sameDayClose) {
+    await captureWeekCloseSnapshots(leagueId, weekNumber, supabase);
+  }
   await applyStandingsForCompletedWeek(leagueId, weekNumber, supabase);
   await advanceLeagueCalendar(leagueId, playerCount, weekNumber, supabase);
 
@@ -668,6 +672,12 @@ export async function scoreMatchupForLeague(
     return scoreMatchupForLeague(userId, leagueId);
   }
 
+  const sameDayClose = usesSameDayCloseCapture(settings, currentWeek);
+
+  if (sameDayClose) {
+    await captureWeekCloseSnapshots(leagueId, currentWeek, supabase);
+  }
+
   let lastError: string | undefined;
   const forceHybrid = await shouldForceHybridForWeek(leagueId, currentWeek);
 
@@ -683,7 +693,9 @@ export async function scoreMatchupForLeague(
     return { error: lastError, scored: false };
   }
 
-  await captureWeekCloseSnapshots(leagueId, currentWeek);
+  if (!sameDayClose) {
+    await captureWeekCloseSnapshots(leagueId, currentWeek, supabase);
+  }
   await applyStandingsForCompletedWeek(leagueId, currentWeek);
 
   const cryptoSource = getLastCryptoQuoteSource();

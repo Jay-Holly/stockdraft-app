@@ -5,6 +5,7 @@
 import {
   computeWeekFinalizeAt,
   isPastFinalizeAt,
+  usesSameDayCloseCapture,
   weekUsesWeekendExtension,
 } from "../src/lib/season/finalize-times";
 import { resolveSeasonSettings } from "../src/lib/season/calendar";
@@ -71,6 +72,15 @@ const sdaiWeek1 = computeWeekFinalizeAt(
 assert(
   sdaiWeek1.getTime() === zonedDateTimeFromIso("2026-06-29", 16, 0).getTime(),
   "SDAI-00039 beta week 1 (Mon Jun 29) finalizes same day 4 PM ET"
+);
+
+assert(
+  !usesSameDayCloseCapture(beta, 5),
+  "beta Friday week 5 uses post-score weekend close capture"
+);
+assert(
+  usesSameDayCloseCapture(sdaiBeta, 1),
+  "SDAI week 1 (Mon) uses same-day pre-score close capture"
 );
 
 const standardFinalize = computeWeekFinalizeAt(
