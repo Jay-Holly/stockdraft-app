@@ -78,6 +78,47 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("user_id")
+    .eq("league_id", league.id);
+
+  const rosterDebug: Array<{
+    userId: string;
+    pickCount: number;
+    week1BaselineCount: number;
+  }> = [];
+
+  for (const draft of drafts ?? []) {
+    const { count: pickCount } = await supabase
+      .from("draft_picks")
+      .select("id", { count: "exact", head: true })
+      .eq(
+        "draft_id",
+        (
+          await supabase
+            .from("drafts")
+            .select("id")
+            .eq("league_id", league.id)
+            .eq("user_id", draft.user_id)
+            .maybeSingle()
+        ).data?.id ?? ""
+      );
+
+    const { count: week1BaselineCount } = await supabase
+      .from("roster_week_baselines")
+      .select("pick_id", { count: "exact", head: true })
+      .eq("league_id", league.id)
+      .eq("user_id", draft.user_id)
+      .eq("week_number", 1);
+
+    rosterDebug.push({
+      userId: draft.user_id,
+      pickCount: pickCount ?? 0,
+      week1BaselineCount: week1BaselineCount ?? 0,
+    });
+  }
+
   const now = new Date();
   const weeks = [...new Set((matchups ?? []).map((m) => m.week_number))].map(
     (week) => ({
@@ -104,5 +145,6 @@ export async function GET(request: NextRequest) {
     resolvedSeasonFormat: settings.seasonFormat,
     weeks,
     matchups: matchups ?? [],
+    rosterDebug,
   });
 }
