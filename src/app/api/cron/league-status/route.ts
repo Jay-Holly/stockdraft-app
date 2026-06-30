@@ -4,6 +4,8 @@ import { verifyCronAuth } from "@/lib/cron/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { resolveSeasonSettings } from "@/lib/season/calendar";
 import { computeWeekFinalizeAt } from "@/lib/season/finalize-times";
+import { computeWeeklyScoreForUser } from "@/lib/matchup/league-teams";
+import { parseLeagueScoringMode } from "@/lib/league/scoring-mode";
 import type { SeasonSettingsRow } from "@/lib/season/types";
 
 export const dynamic = "force-dynamic";
@@ -123,6 +125,22 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const scorePreviewWeek = weekNumber ?? 1;
+  const scoringMode = parseLeagueScoringMode(league.scoring_mode);
+  const scorePreview: Record<string, number> = {};
+  for (const draft of drafts ?? []) {
+    try {
+      scorePreview[draft.user_id] = await computeWeeklyScoreForUser(
+        draft.user_id,
+        league.id,
+        scoringMode,
+        { weekNumber: scorePreviewWeek, supabase }
+      );
+    } catch {
+      scorePreview[draft.user_id] = NaN;
+    }
+  }
+
   const now = new Date();
   const weeks = [...new Set((matchups ?? []).map((m) => m.week_number))].map(
     (week) => ({
@@ -151,5 +169,6 @@ export async function GET(request: NextRequest) {
     weeks,
     matchups: matchups ?? [],
     rosterDebug,
+    scorePreview,
   });
 }
