@@ -4,12 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/Button";
 import { DayTraderEnterForm } from "@/components/day-trader/DayTraderEnterForm";
+import { DayTraderTradingPanel } from "@/components/day-trader/DayTraderTradingPanel";
 import {
   DAY_TRADER_STARTING_VALUE,
   DAY_TRADER_STOCK_BUDGET,
 } from "@/lib/day-trader/constants";
 import { getDayTraderContestContext } from "@/lib/day-trader/contest-access";
 import { listDayTraderEligibleLeagues } from "@/lib/day-trader/eligible-leagues";
+import { loadDayTraderPortfolio } from "@/lib/day-trader/portfolio";
 import {
   hasJoinedDayTrader,
   markDayTraderJoined,
@@ -87,22 +89,13 @@ export default async function DayTraderPage() {
     listDayTraderEligibleLeagues(user.id),
   ]);
 
-  let positions: Array<{ symbol: string; shares: number }> = [];
-  if (context.entry) {
-    const { data } = await supabase
-      .from("day_trader_positions")
-      .select("symbol, shares, slot_order")
-      .eq("entry_id", context.entry.id)
-      .order("slot_order", { ascending: true });
-
-    positions =
-      data?.map((row) => ({
-        symbol: row.symbol,
-        shares: Number(row.shares),
-      })) ?? [];
-  }
+  const portfolio = context.entry
+    ? await loadDayTraderPortfolio(context.entry)
+    : null;
 
   const contest = context.contest;
+  const canTrade =
+    context.windowOpen && contest?.status === "open" && Boolean(context.entry);
 
   return (
     <div className="min-h-screen px-4 py-8">
@@ -138,29 +131,18 @@ export default async function DayTraderPage() {
           ) : null}
         </div>
 
-        {context.entry ? (
-          <div className="rounded-xl border border-gold/30 bg-gold/5 p-4 space-y-4">
-            <div>
-              <p className="text-sm font-semibold text-gold">You&apos;re in this week</p>
-              <p className="text-xs text-muted mt-1">
-                Starters copied from {context.entry.source_league_name ?? "your league"}.
-                Starting value ${DAY_TRADER_STARTING_VALUE.toLocaleString()}.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              {positions.map((position) => (
-                <div
-                  key={position.symbol}
-                  className="rounded-lg bg-primary/20 px-2 py-1.5 text-center text-xs font-semibold"
-                >
-                  {position.symbol}
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted">
-              Trading UI arrives in the next step. Your portfolio is locked in for
-              this week.
+        {context.entry && portfolio ? (
+          <div className="space-y-3">
+            <p className="text-xs text-muted text-center">
+              Starters from {context.entry.source_league_name ?? "your league"} ·
+              ${DAY_TRADER_STARTING_VALUE.toLocaleString()} starting value
             </p>
+            <DayTraderTradingPanel
+              initialPortfolio={portfolio}
+              canTrade={canTrade}
+              windowOpen={context.windowOpen}
+              contestOpen={contest?.status === "open"}
+            />
           </div>
         ) : context.canEnter && eligibleLeagues.length > 0 ? (
           <DayTraderEnterForm eligibleLeagues={eligibleLeagues} />
@@ -187,6 +169,10 @@ export default async function DayTraderPage() {
           <p>
             Entry copies 10 stock starters only — no bench or crypto. Each stock
             is reset to ${DAY_TRADER_STOCK_BUDGET.toLocaleString()} at entry price.
+          </p>
+          <p>
+            Sells credit cash at the current market price. Buys spend available
+            cash. Max 10 symbols at once.
           </p>
           <p>One entry per user per week.</p>
         </div>
