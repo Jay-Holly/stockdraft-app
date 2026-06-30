@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
     .select(
-      "id, support_code, current_week, status, format_type, sports_league_id, player_count"
+      "id, support_code, current_week, status, format_type, sports_league_id, player_count, scoring_mode"
     )
     .eq("support_code", supportCode)
     .maybeSingle();
@@ -87,35 +87,39 @@ export async function GET(request: NextRequest) {
     userId: string;
     pickCount: number;
     week1BaselineCount: number;
+    week1OpenTotal: number;
   }> = [];
 
   for (const draft of drafts ?? []) {
+    const { data: draftRow } = await supabase
+      .from("drafts")
+      .select("id")
+      .eq("league_id", league.id)
+      .eq("user_id", draft.user_id)
+      .maybeSingle();
+
     const { count: pickCount } = await supabase
       .from("draft_picks")
       .select("id", { count: "exact", head: true })
-      .eq(
-        "draft_id",
-        (
-          await supabase
-            .from("drafts")
-            .select("id")
-            .eq("league_id", league.id)
-            .eq("user_id", draft.user_id)
-            .maybeSingle()
-        ).data?.id ?? ""
-      );
+      .eq("draft_id", draftRow?.id ?? "");
 
-    const { count: week1BaselineCount } = await supabase
+    const { data: baselines } = await supabase
       .from("roster_week_baselines")
-      .select("pick_id", { count: "exact", head: true })
+      .select("value_at_open")
       .eq("league_id", league.id)
       .eq("user_id", draft.user_id)
       .eq("week_number", 1);
 
+    const week1OpenTotal = (baselines ?? []).reduce(
+      (sum, row) => sum + Number(row.value_at_open ?? 0),
+      0
+    );
+
     rosterDebug.push({
       userId: draft.user_id,
       pickCount: pickCount ?? 0,
-      week1BaselineCount: week1BaselineCount ?? 0,
+      week1BaselineCount: baselines?.length ?? 0,
+      week1OpenTotal,
     });
   }
 
@@ -135,6 +139,7 @@ export async function GET(request: NextRequest) {
       supportCode: league.support_code,
       currentWeek: league.current_week,
       status: league.status,
+      scoringMode: league.scoring_mode,
     },
     seasonSettings: settingsRow
       ? {
