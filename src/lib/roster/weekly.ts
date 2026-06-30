@@ -14,6 +14,7 @@ import {
   resolveHybridScoringValue,
   type WeekBaselineRow,
 } from "@/lib/season/weekend-scoring";
+import { fetchFinnhubQuote } from "@/lib/market/refresh-stock-prices";
 import { isPastFinalizeAt } from "@/lib/season/finalize-times";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import type { SeasonSettings } from "@/lib/season/types";
@@ -439,6 +440,26 @@ export async function captureWeekCloseSnapshots(
     }
 
     const prices = await fetchPricesForPicks(picks);
+
+    const finnhubKey = process.env.NEXT_PUBLIC_FINNHUB_KEY;
+    if (finnhubKey) {
+      const stockSymbols = [
+        ...new Set(
+          picks
+            .filter(
+              (pick) =>
+                pick.pick_type === "stock" || pick.pick_type === "bench"
+            )
+            .map((pick) => pick.symbol.toUpperCase())
+        ),
+      ];
+      for (const symbol of stockSymbols) {
+        const quote = await fetchFinnhubQuote(symbol, finnhubKey);
+        if (quote?.price && quote.price > 0) {
+          prices.set(symbol, quote.price);
+        }
+      }
+    }
 
     for (const pick of picks) {
       const closeValue = pickMarketValue(

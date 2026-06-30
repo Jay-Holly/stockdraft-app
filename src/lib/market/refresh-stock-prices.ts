@@ -1,7 +1,7 @@
 import "server-only";
 
 import { fetchWithTimeout } from "@/lib/finnhub/service";
-import { isUsMarketOpen } from "@/lib/market/hours";
+import { isUsMarketRefreshAllowed } from "@/lib/market/hours";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type FinnhubQuoteResponse = {
@@ -68,7 +68,7 @@ async function loadDraftPoolSymbols(): Promise<string[]> {
     .slice(0, MAX_SYMBOLS_PER_RUN);
 }
 
-async function fetchFinnhubQuote(
+export async function fetchFinnhubQuote(
   symbol: string,
   token: string
 ): Promise<{ price: number; changePercent: number } | null> {
@@ -107,7 +107,7 @@ async function fetchFinnhubQuote(
 export async function refreshStockPricesFromFinnhub(): Promise<StockPriceRefreshResult> {
   const started = Date.now();
 
-  if (!isUsMarketOpen()) {
+  if (!isUsMarketRefreshAllowed()) {
     return {
       skipped: true,
       reason: "US market closed",

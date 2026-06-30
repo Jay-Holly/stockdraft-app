@@ -35,6 +35,19 @@ export function isUsMarketOpen(date = new Date()): boolean {
   return minutes >= open && minutes < close;
 }
 
+/** Includes a short post-close window for EOD price capture (beta_daily 4:05 PM finalize). */
+export function isUsMarketRefreshAllowed(date = new Date()): boolean {
+  if (isUsMarketOpen(date)) return true;
+
+  const { weekday, hour, minute } = getNyParts(date);
+  if (weekday === "Sat" || weekday === "Sun") return false;
+
+  const minutes = hour * 60 + minute;
+  const close = 16 * 60;
+  const postCloseCutoff = 16 * 60 + 30;
+  return minutes >= close && minutes < postCloseCutoff;
+}
+
 export function getMarketSession(date = new Date()): "live" | "static" {
   return isUsMarketOpen(date) ? "live" : "static";
 }
