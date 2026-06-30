@@ -1,3 +1,4 @@
+import { loadLeagueBonusSummary } from "@/lib/awards/page-data";
 import { fetchDraftPool } from "@/lib/draft-pool/server";
 import { isCryptoSymbol, isStockPickEligible } from "@/lib/draft/engine";
 import { loadDraftStateDetailed, fetchBuyerCounts } from "@/lib/draft/server";
@@ -41,6 +42,7 @@ import {
   getSeasonWeekContext,
 } from "@/lib/league/season-weeks";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
 import {
   computeGainPercent,
   fetchStockQuotes,
@@ -52,7 +54,10 @@ import {
   computeTeamSeasonMetrics,
   loadBaselinesThroughWeek,
 } from "@/lib/roster/season-totals";
-import { isActiveCryptoPick, isScoringRosterPick } from "@/lib/roster/crypto-picks";
+import {
+  canonicalActiveCryptoPicks,
+  filterScoringRosterPicks,
+} from "@/lib/roster/crypto-picks";
 import {
   computeScoringSeasonGainPercentForUser,
   computeScoringWeekDollarGainForUser,
@@ -227,14 +232,23 @@ export async function loadRosterView(
       state.state.picks
     );
     const partitioned = partitionHistoricalRosterPicks(historicalPicks);
+    const canonicalCryptoIds = new Set(
+      canonicalActiveCryptoPicks(state.state.picks).map((pick) => pick.id)
+    );
+    const scoringPickIds = new Set(
+      filterScoringRosterPicks(state.state.picks).map((pick) => pick.id)
+    );
+    partitioned.crypto = partitioned.crypto.filter((pick) =>
+      canonicalCryptoIds.has(pick.id)
+    );
     const scoringWeekInputs = historicalPicks
-      .filter(isScoringRosterPick)
+      .filter((pick) => scoringPickIds.has(pick.id))
       .map((pick) => ({
         currentValue: pick.currentValue,
         weekOpenValue: pick.weekOpenValue,
       }));
     const scoringSeasonInputs = historicalPicks
-      .filter(isScoringRosterPick)
+      .filter((pick) => scoringPickIds.has(pick.id))
       .map((pick) => ({
         currentValue: pick.currentValue,
         seasonOpenValue: pick.seasonOpenValue,
@@ -330,15 +344,22 @@ export async function loadRosterView(
     };
   });
 
+  const canonicalCryptoIds = new Set(
+    canonicalActiveCryptoPicks(picks).map((pick) => pick.id)
+  );
+  const scoringPickIds = new Set(
+    filterScoringRosterPicks(picks).map((pick) => pick.id)
+  );
+
   const scoringWeekInputs = withWeekMetrics
-    .filter(isScoringRosterPick)
+    .filter((pick) => scoringPickIds.has(pick.id))
     .map((p) => ({
       currentValue: p.currentValue,
       weekOpenValue: p.weekOpenValue,
     }));
 
   const scoringSeasonInputs = withWeekMetrics
-    .filter(isScoringRosterPick)
+    .filter((pick) => scoringPickIds.has(pick.id))
     .map((p) => ({
       currentValue: p.currentValue,
       seasonOpenValue: p.seasonOpenValue,
@@ -368,9 +389,7 @@ export async function loadRosterView(
       maxViewableWeek: weekContext.maxViewableWeek,
       starters: withWeekMetrics.filter((p) => p.pick_type === "stock"),
       bench: withWeekMetrics.filter((p) => p.pick_type === "bench"),
-      crypto: withWeekMetrics.filter(
-        (p) => p.pick_type === "crypto" && isActiveCryptoPick(p)
-      ),
+      crypto: withWeekMetrics.filter((pick) => canonicalCryptoIds.has(pick.id)),
       cryptoBuyerCounts: buyerCounts,
       cryptoQuotes,
       scoringGainPercent: computeTeamSeasonMetrics(scoringSeasonInputs)
@@ -417,11 +436,23 @@ export async function loadLeaguePageData(
 
   const { data: leagueMeta } = await supabase
     .from("leagues")
-    .select("league_type")
+    .select("league_type, format_type, sports_league_id, player_count")
     .eq("id", league.id)
     .maybeSingle();
 
   const isHumanLeague = leagueMeta?.league_type === "human";
+  const awardsEnabled = leagueMeta
+    ? isSdplSeasonRulesLeague({
+        formatType: leagueMeta.format_type,
+        sportsLeagueId: leagueMeta.sports_league_id,
+        playerCount: leagueMeta.player_count,
+      })
+    : false;
+  const bonusPool = await loadLeagueBonusSummary(
+    userId,
+    league.id,
+    awardsEnabled
+  );
   const bots = await getLeagueBotMembers(league.id);
   const humanMembers = isHumanLeague
     ? await getHumanLeagueMembers(league.id)
@@ -562,6 +593,7 @@ export async function loadLeaguePageData(
       },
       standings,
       currentMatchup,
+      bonusPool,
     },
   };
 }

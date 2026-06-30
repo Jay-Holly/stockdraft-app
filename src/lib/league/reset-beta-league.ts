@@ -10,6 +10,9 @@ import {
   buildSdplRegularSeasonSchedule,
 } from "@/lib/matchup/sdpl-schedule";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
+import { resetLeagueBonusPoolForSeason } from "@/lib/awards/pool";
+import { staleDuplicateCryptoPickIds } from "@/lib/roster/crypto-picks";
+import type { DraftPick } from "@/lib/draft/types";
 import { SDAI_BETA_WEEK_CALENDAR } from "@/lib/season/beta-schedule";
 import { resolveSeasonSettings } from "@/lib/season/calendar";
 import type { WeekCalendarEntry } from "@/lib/season/types";
@@ -63,6 +66,42 @@ export async function cleanupDeadCryptoDraftPicksForLeague(
   return removed;
 }
 
+/** Keep one active crypto row per symbol (latest updated_at); delete stale duplicates. */
+export async function cleanupDuplicateActiveCryptoDraftPicksForLeague(
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
+): Promise<number> {
+  const supabase = supabaseOverride ?? createServiceClient();
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("id")
+    .eq("league_id", leagueId);
+
+  let removed = 0;
+
+  for (const draft of drafts ?? []) {
+    const { data: picks } = await supabase
+      .from("draft_picks")
+      .select("*")
+      .eq("draft_id", draft.id);
+
+    if (!picks?.length) continue;
+
+    const staleIds = staleDuplicateCryptoPickIds(picks as DraftPick[]);
+    if (staleIds.length === 0) continue;
+
+    const { error } = await supabase.from("draft_picks").delete().in("id", staleIds);
+    if (error) {
+      throw new Error(
+        `Failed to delete duplicate active crypto picks: ${error.message}`
+      );
+    }
+    removed += staleIds.length;
+  }
+
+  return removed;
+}
+
 export async function resetSdplBetaLeague(
   options: ResetBetaLeagueOptions
 ): Promise<ResetBetaLeagueResult> {
@@ -89,7 +128,9 @@ export async function resetSdplBetaLeague(
 
   await supabase.from("league_matchups").delete().eq("league_id", leagueId);
   await supabase.from("roster_week_baselines").delete().eq("league_id", leagueId);
+  await resetLeagueBonusPoolForSeason(leagueId, supabase);
   await cleanupDeadCryptoDraftPicksForLeague(leagueId, supabase);
+  await cleanupDuplicateActiveCryptoDraftPicksForLeague(leagueId, supabase);
 
   await supabase
     .from("league_standings")

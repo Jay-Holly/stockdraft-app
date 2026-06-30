@@ -29,6 +29,46 @@ begin
   delete from public.league_matchups where league_id = v_league_id;
   delete from public.roster_week_baselines where league_id = v_league_id;
 
+  delete from public.playoff_bonus_payouts p
+  using public.playoff_bonus_allocations a
+  where p.allocation_id = a.id and a.league_id = v_league_id;
+  delete from public.playoff_bonus_allocations where league_id = v_league_id;
+  delete from public.playoff_pool_ledger where league_id = v_league_id;
+
+  delete from public.weekly_award_payouts p
+  using public.weekly_award_results r
+  where p.award_result_id = r.id and r.league_id = v_league_id;
+  delete from public.weekly_award_results where league_id = v_league_id;
+
+  insert into public.league_bonus_pools (
+    league_id, season_base_total, regular_season_weeks, weekly_base_amount,
+    draft_surcharge_total, rollover_balance, playoff_pool_balance,
+    playoff_pool_seed_amount, regular_season_pool_total, playoff_allocation_status,
+    updated_at
+  ) values (
+    v_league_id, 100000, 11, (95000::numeric / 11), 0, 0, 5000, 5000, 95000,
+    'accumulating', now()
+  )
+  on conflict (league_id) do update set
+    weekly_base_amount = excluded.weekly_base_amount,
+    rollover_balance = 0,
+    playoff_pool_balance = 5000,
+    playoff_pool_seed_amount = 5000,
+    regular_season_pool_total = 95000,
+    playoff_allocation_status = 'accumulating',
+    playoff_allocated_at = null,
+    playoff_allocation_week = null,
+    updated_at = now();
+
+  insert into public.playoff_pool_ledger (
+    league_id, week_number, event_type, amount_usd, balance_after, detail_json
+  )
+  select v_league_id, null, 'seed', 5000, 5000, '{"source":"season_reset"}'::jsonb
+  where not exists (
+    select 1 from public.playoff_pool_ledger pl
+    where pl.league_id = v_league_id and pl.event_type = 'seed'
+  );
+
   -- Remove dead crypto shells (zero budget + shares) left by full swaps
   delete from public.draft_picks dp
   using public.drafts d
@@ -37,6 +77,25 @@ begin
     and dp.pick_type = 'crypto'
     and dp.budget_spent <= 0.01
     and dp.shares <= 0.000001;
+
+  -- Keep one active crypto row per symbol (latest updated_at); remove stale duplicates
+  with ranked as (
+    select
+      dp.id as pick_id,
+      row_number() over (
+        partition by d.user_id, upper(dp.symbol)
+        order by dp.updated_at desc nulls last, dp.budget_spent desc, dp.pick_order desc
+      ) as rn
+    from public.draft_picks dp
+    join public.drafts d on d.id = dp.draft_id
+    where d.league_id = v_league_id
+      and dp.pick_type = 'crypto'
+      and (dp.budget_spent > 0.01 or dp.shares > 0.000001)
+  )
+  delete from public.draft_picks dp
+  using ranked r
+  where dp.id = r.pick_id
+    and r.rn > 1;
 
   update public.league_standings
   set wins = 0, losses = 0, current_week = 1, updated_at = now()

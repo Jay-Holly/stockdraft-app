@@ -35,6 +35,53 @@ export type LeagueBonusPoolRow = {
   draft_surcharge_total: number;
   rollover_balance: number;
   playoff_pool_balance: number;
+  playoff_pool_seed_amount: number;
+  regular_season_pool_total: number;
+  playoff_allocation_status: "accumulating" | "allocated" | "paid_out";
+  playoff_allocated_at: string | null;
+  playoff_allocation_week: number | null;
+};
+
+export type PlayoffPoolLedgerRow = {
+  id: string;
+  league_id: string;
+  week_number: number | null;
+  event_type: "seed" | "weekly_rollover" | "allocation" | "payout";
+  amount_usd: number;
+  balance_after: number;
+  detail_json: Record<string, unknown>;
+  created_at: string;
+};
+
+export type PlayoffBonusAllocationRow = {
+  id: string;
+  league_id: string;
+  allocation_week: number;
+  total_pool_amount: number;
+  seed_amount: number;
+  rollover_amount: number;
+  status: "pending_claims" | "complete";
+  created_at: string;
+};
+
+export type PlayoffBonusPayoutRow = {
+  id: string;
+  allocation_id: string;
+  league_id: string;
+  user_id: string;
+  seed_rank: number;
+  share_pct: number;
+  amount_usd: number;
+  status: "pending" | "claimed" | "auto_claimed";
+  target_pick_id: string | null;
+  target_symbol: string | null;
+  claimed_at: string | null;
+  created_at: string;
+};
+
+export type PendingPlayoffPayout = PlayoffBonusPayoutRow & {
+  allocation_week: number;
+  total_pool_amount: number;
 };
 
 export type WeeklyAwardResultRow = {

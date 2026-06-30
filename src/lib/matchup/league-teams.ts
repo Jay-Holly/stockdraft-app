@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
 import { normalizePlayerCount } from "@/lib/matchup/schedule";
@@ -67,9 +68,10 @@ export async function computeTeamSeasonGainPercent(
 }
 
 export async function loadStandingSeeds(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<TeamStandingSeed[]> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: rows } = await supabase
     .from("league_standings")
     .select("user_id, wins, losses")

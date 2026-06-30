@@ -8,8 +8,11 @@ import {
   AWARD_LABELS,
   type AwardKey,
 } from "@/lib/awards/constants";
-import type { PendingAwardPayout } from "@/lib/awards/types";
-import { computeSharesFromBudget, getCryptoQuote } from "@/lib/roster/quotes";
+import type { PendingAwardPayout, PendingPlayoffPayout } from "@/lib/awards/types";
+import { refreshPlayoffAllocationStatus } from "@/lib/awards/allocate";
+import { appendPlayoffPoolLedger } from "@/lib/awards/pool";
+import { computeSharesFromBudget, getCryptoQuote, getStockQuote } from "@/lib/roster/quotes";
+import { findActiveCryptoPick } from "@/lib/roster/crypto-picks";
 import { adjustPickWeekBaseline, getCurrentWeek } from "@/lib/roster/weekly";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,21 +33,6 @@ async function isLeagueBotUser(
     .maybeSingle();
 
   return Boolean(data?.bot_personality);
-}
-
-function findActiveCryptoPick(
-  picks: DraftPick[],
-  symbol: string,
-  excludePickId?: string
-): DraftPick | undefined {
-  const upper = symbol.toUpperCase();
-  return picks.find(
-    (pick) =>
-      pick.pick_type === "crypto" &&
-      pick.id !== excludePickId &&
-      pick.symbol.toUpperCase() === upper &&
-      pick.budget_spent > 0.01
-  );
 }
 
 async function patchDraftPick(
@@ -172,6 +160,260 @@ export async function applyAwardToCryptoPool(
   );
 
   return { pickId: targetPickId, symbol: upper };
+}
+
+function isEligibleStockOrBenchPick(pick: DraftPick): boolean {
+  if (pick.pick_type !== "stock" && pick.pick_type !== "bench") return false;
+  if (pick.symbol.toUpperCase() === "__OPEN__") return false;
+  return true;
+}
+
+export async function applyPlayoffBonusToStock(
+  supabase: ClaimSupabase,
+  leagueId: string,
+  userId: string,
+  amountUsd: number,
+  targetPickId: string
+): Promise<{ error?: string; pickId?: string; symbol?: string }> {
+  const state = await loadDraftStateDetailed(userId, { leagueId });
+  if (!state.ok) return { error: state.error };
+
+  const pick = state.state.picks.find((row) => row.id === targetPickId);
+  if (!pick || !isEligibleStockOrBenchPick(pick)) {
+    return { error: "Choose one of your starter or bench stocks." };
+  }
+
+  const quote = await getStockQuote(pick.symbol);
+  if (quote.price <= 0) {
+    return { error: "Could not fetch a live price for that stock." };
+  }
+
+  const shares = computeSharesFromBudget(amountUsd, quote.price);
+  const patch = await patchDraftPick(supabase, userId, pick.id, {
+    budget_spent: pick.budget_spent + amountUsd,
+    shares: pick.shares + shares,
+    effective_value: pick.effective_value + amountUsd,
+    price_at_pick: quote.price,
+  });
+  if (patch.error) return { error: patch.error };
+
+  const weekNumber = await getCurrentWeek(supabase, leagueId, userId);
+  await adjustPickWeekBaseline(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber,
+    pick.id,
+    amountUsd
+  );
+
+  return { pickId: pick.id, symbol: pick.symbol.toUpperCase() };
+}
+
+export async function autoClaimPlayoffBonusForUser(
+  supabase: ClaimSupabase,
+  leagueId: string,
+  userId: string,
+  amountUsd: number
+): Promise<{ symbol: string; pickId?: string; error?: string }> {
+  const state = await loadDraftStateDetailed(userId, { leagueId });
+  if (!state.ok) return { symbol: "", error: state.error };
+
+  const stockPicks = state.state.picks
+    .filter(isEligibleStockOrBenchPick)
+    .sort((a, b) => b.budget_spent - a.budget_spent);
+
+  const target = stockPicks[0];
+  if (!target) {
+    return {
+      symbol: "",
+      error: "No eligible stock or bench position to receive bonus.",
+    };
+  }
+
+  const result = await applyPlayoffBonusToStock(
+    supabase,
+    leagueId,
+    userId,
+    amountUsd,
+    target.id
+  );
+
+  return {
+    symbol: result.symbol ?? target.symbol.toUpperCase(),
+    pickId: result.pickId,
+    error: result.error,
+  };
+}
+
+export async function autoClaimPlayoffPayoutsForAllocation(
+  supabase: ClaimSupabase,
+  leagueId: string,
+  allocationId: string
+): Promise<void> {
+  const { data: payouts } = await supabase
+    .from("playoff_bonus_payouts")
+    .select("id, user_id, amount_usd")
+    .eq("allocation_id", allocationId)
+    .eq("status", "pending");
+
+  for (const payout of payouts ?? []) {
+    const isBot = await isLeagueBotUser(
+      supabase,
+      leagueId,
+      payout.user_id
+    );
+    if (!isBot) continue;
+
+    const auto = await autoClaimPlayoffBonusForUser(
+      supabase,
+      leagueId,
+      payout.user_id,
+      Number(payout.amount_usd)
+    );
+    if (auto.error) continue;
+
+    await supabase
+      .from("playoff_bonus_payouts")
+      .update({
+        status: "auto_claimed",
+        target_pick_id: auto.pickId ?? null,
+        target_symbol: auto.symbol ?? null,
+        claimed_at: new Date().toISOString(),
+      })
+      .eq("id", payout.id);
+  }
+
+  await refreshPlayoffAllocationStatus(supabase, allocationId);
+}
+
+export async function claimPlayoffPayout(
+  userId: string,
+  payoutId: string,
+  targetPickId: string
+): Promise<{ error?: string; symbol?: string; amountUsd?: number }> {
+  const supabase = await createClient();
+
+  const { data: payout, error } = await supabase
+    .from("playoff_bonus_payouts")
+    .select("*")
+    .eq("id", payoutId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !payout) {
+    return { error: "Playoff bonus payout not found." };
+  }
+
+  if (payout.status !== "pending") {
+    return { error: "This playoff bonus has already been claimed." };
+  }
+
+  const deposit = await applyPlayoffBonusToStock(
+    supabase,
+    payout.league_id,
+    userId,
+    Number(payout.amount_usd),
+    targetPickId
+  );
+
+  if (deposit.error) return { error: deposit.error };
+
+  const { error: updateError } = await supabase
+    .from("playoff_bonus_payouts")
+    .update({
+      status: "claimed",
+      target_pick_id: deposit.pickId ?? null,
+      target_symbol: deposit.symbol ?? null,
+      claimed_at: new Date().toISOString(),
+    })
+    .eq("id", payoutId)
+    .eq("user_id", userId)
+    .eq("status", "pending");
+
+  if (updateError) return { error: updateError.message };
+
+  await appendPlayoffPoolLedger(supabase, payout.league_id, {
+    eventType: "payout",
+    amountUsd: -Number(payout.amount_usd),
+    balanceAfter: 0,
+    detail: {
+      payoutId,
+      userId,
+      targetSymbol: deposit.symbol,
+    },
+  });
+
+  await refreshPlayoffAllocationStatus(supabase, payout.allocation_id);
+
+  return {
+    symbol: deposit.symbol,
+    amountUsd: Number(payout.amount_usd),
+  };
+}
+
+export async function listPendingPlayoffPayouts(
+  userId: string,
+  leagueId?: string
+): Promise<PendingPlayoffPayout[]> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("playoff_bonus_payouts")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "pending")
+    .order("seed_rank", { ascending: true });
+
+  if (leagueId) {
+    query = query.eq("league_id", leagueId);
+  }
+
+  const { data: payouts, error } = await query;
+  if (error || !payouts?.length) return [];
+
+  const allocationIds = [...new Set(payouts.map((row) => row.allocation_id))];
+  const { data: allocations } = await supabase
+    .from("playoff_bonus_allocations")
+    .select("id, allocation_week, total_pool_amount")
+    .in("id", allocationIds);
+
+  const allocationById = new Map(
+    (allocations ?? []).map((row) => [row.id, row] as const)
+  );
+
+  return payouts.flatMap((row) => {
+    const allocation = allocationById.get(row.allocation_id);
+    if (!allocation) return [];
+    return [
+      {
+        ...(row as PendingPlayoffPayout),
+        allocation_week: allocation.allocation_week,
+        total_pool_amount: Number(allocation.total_pool_amount),
+      },
+    ];
+  });
+}
+
+export async function sumPendingClaimAmountForLeague(
+  userId: string,
+  leagueId: string
+): Promise<{ totalUsd: number; weeklyCount: number; playoffCount: number }> {
+  const [weekly, playoff] = await Promise.all([
+    listPendingAwardPayouts(userId),
+    listPendingPlayoffPayouts(userId, leagueId),
+  ]);
+
+  const weeklyForLeague = weekly.filter((row) => row.league_id === leagueId);
+  const totalUsd =
+    weeklyForLeague.reduce((sum, row) => sum + Number(row.amount_usd), 0) +
+    playoff.reduce((sum, row) => sum + Number(row.amount_usd), 0);
+
+  return {
+    totalUsd,
+    weeklyCount: weeklyForLeague.length,
+    playoffCount: playoff.length,
+  };
 }
 
 export async function autoClaimAwardForUser(

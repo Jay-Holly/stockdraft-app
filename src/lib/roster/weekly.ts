@@ -39,9 +39,10 @@ import {
   scaleBaselineValuesForPartialSell,
 } from "@/lib/roster/baseline-rebalance";
 import {
-  isScoringRosterPick,
+  filterScoringRosterPicks,
   picksEligibleForWeekBaselines,
   isActiveCryptoPick,
+  staleDuplicateCryptoPickIds,
 } from "@/lib/roster/crypto-picks";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -252,6 +253,8 @@ async function computeScoringWeekInputs(
 
   await ensureWeekBaselines(supabase, leagueId, userId, weekNumber, picks);
 
+  const scoringPicks = filterScoringRosterPicks(picks);
+
   const refreshedBaselines = await loadWeekBaselineExtendedMap(
     supabase,
     leagueId,
@@ -271,11 +274,9 @@ async function computeScoringWeekInputs(
     options?.forceHybrid
   );
 
-  const livePrices = await fetchLivePricesForPicks(picks);
+  const livePrices = await fetchLivePricesForPicks(scoringPicks);
 
-  return picks
-    .filter(isScoringRosterPick)
-    .map((pick) => {
+  return scoringPicks.map((pick) => {
       const baseline = refreshedBaselines.get(pick.id);
       const weekOpenValue =
         baseline?.valueAtOpen ??
@@ -539,7 +540,8 @@ async function pruneOrphanCryptoBaselinesForUser(
   supabase: SupabaseClient,
   leagueId: string,
   userId: string,
-  weekNumber: number
+  weekNumber: number,
+  draftPicks: DraftPick[]
 ): Promise<void> {
   const { data: baselines } = await supabase
     .from("roster_week_baselines")
@@ -553,16 +555,22 @@ async function pruneOrphanCryptoBaselinesForUser(
   const pickIds = baselines.map((row) => row.pick_id);
   const { data: picks } = await supabase
     .from("draft_picks")
-    .select("id, pick_type, budget_spent, shares")
+    .select("id, pick_type, budget_spent, shares, symbol, updated_at, pick_order")
     .in("id", pickIds);
 
-  const orphanPickIds = (picks ?? [])
+  const loadedPicks = (picks ?? []) as DraftPick[];
+  const orphanPickIds = loadedPicks
     .filter(
       (pick) => pick.pick_type === "crypto" && !isActiveCryptoPick(pick)
     )
     .map((pick) => pick.id);
 
-  if (orphanPickIds.length === 0) return;
+  const duplicatePickIds = staleDuplicateCryptoPickIds(
+    draftPicks.length > 0 ? draftPicks : loadedPicks
+  );
+
+  const prunePickIds = [...new Set([...orphanPickIds, ...duplicatePickIds])];
+  if (prunePickIds.length === 0) return;
 
   await supabase
     .from("roster_week_baselines")
@@ -570,7 +578,7 @@ async function pruneOrphanCryptoBaselinesForUser(
     .eq("league_id", leagueId)
     .eq("user_id", userId)
     .eq("week_number", weekNumber)
-    .in("pick_id", orphanPickIds);
+    .in("pick_id", prunePickIds);
 }
 
 export async function ensureWeekBaselines(
@@ -610,7 +618,8 @@ export async function ensureWeekBaselines(
     supabase,
     leagueId,
     userId,
-    weekNumber
+    weekNumber,
+    picks
   );
 
   for (const pickId of [...baselineMap.keys()]) {

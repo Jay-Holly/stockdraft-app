@@ -157,7 +157,13 @@ export async function computeWeeklyAwardsForLeagueWeek(
       .eq("id", payoutRow.id);
   }
 
-  await applyWeeklyPoolRollover(db, leagueId, weeklyPool, actualPayouts);
+  await applyWeeklyPoolRollover(
+    db,
+    leagueId,
+    weekNumber,
+    weeklyPool,
+    actualPayouts
+  );
 
   return {
     awardsComputed: awards.length,

@@ -114,6 +114,34 @@ async function getTeamIds(leagueId, ownerUserId) {
   return [ownerUserId, ...(bots ?? []).map((b) => b.user_id)];
 }
 
+function isActiveCryptoPick(pick) {
+  return pick.budget_spent > 0.01 || pick.shares > 0.000001;
+}
+
+function isPreferredCryptoPick(a, b) {
+  const aTime = Date.parse(a.updated_at ?? "") || 0;
+  const bTime = Date.parse(b.updated_at ?? "") || 0;
+  if (aTime !== bTime) return aTime > bTime;
+  if (a.budget_spent !== b.budget_spent) return a.budget_spent > b.budget_spent;
+  return a.pick_order > b.pick_order;
+}
+
+function staleDuplicateCryptoPickIds(picks) {
+  const crypto = picks.filter(
+    (pick) => pick.pick_type === "crypto" && isActiveCryptoPick(pick)
+  );
+  const bestBySymbol = new Map();
+  for (const pick of crypto) {
+    const symbol = pick.symbol.toUpperCase();
+    const existing = bestBySymbol.get(symbol);
+    if (!existing || isPreferredCryptoPick(pick, existing)) {
+      bestBySymbol.set(symbol, pick);
+    }
+  }
+  const keepers = new Set([...bestBySymbol.values()].map((pick) => pick.id));
+  return crypto.filter((pick) => !keepers.has(pick.id)).map((pick) => pick.id);
+}
+
 async function main() {
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
@@ -133,12 +161,71 @@ async function main() {
   await supabase.from("league_matchups").delete().eq("league_id", leagueId);
   await supabase.from("roster_week_baselines").delete().eq("league_id", leagueId);
 
+  const { data: allocations } = await supabase
+    .from("playoff_bonus_allocations")
+    .select("id")
+    .eq("league_id", leagueId);
+  const allocationIds = (allocations ?? []).map((row) => row.id);
+  if (allocationIds.length > 0) {
+    await supabase
+      .from("playoff_bonus_payouts")
+      .delete()
+      .in("allocation_id", allocationIds);
+  }
+  await supabase
+    .from("playoff_bonus_allocations")
+    .delete()
+    .eq("league_id", leagueId);
+  await supabase.from("playoff_pool_ledger").delete().eq("league_id", leagueId);
+
+  const { data: awardResults } = await supabase
+    .from("weekly_award_results")
+    .select("id")
+    .eq("league_id", leagueId);
+  const awardResultIds = (awardResults ?? []).map((row) => row.id);
+  if (awardResultIds.length > 0) {
+    await supabase
+      .from("weekly_award_payouts")
+      .delete()
+      .in("award_result_id", awardResultIds);
+  }
+  await supabase.from("weekly_award_results").delete().eq("league_id", leagueId);
+
+  const weeklyBase = (100000 - 5000) / 11;
+  await supabase.from("league_bonus_pools").upsert(
+    {
+      league_id: leagueId,
+      season_base_total: 100000,
+      regular_season_weeks: 11,
+      weekly_base_amount: weeklyBase,
+      draft_surcharge_total: 0,
+      rollover_balance: 0,
+      playoff_pool_balance: 5000,
+      playoff_pool_seed_amount: 5000,
+      regular_season_pool_total: 95000,
+      playoff_allocation_status: "accumulating",
+      playoff_allocated_at: null,
+      playoff_allocation_week: null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "league_id" }
+  );
+  await supabase.from("playoff_pool_ledger").insert({
+    league_id: leagueId,
+    week_number: null,
+    event_type: "seed",
+    amount_usd: 5000,
+    balance_after: 5000,
+    detail_json: { source: "season_reset" },
+  });
+
   const { data: drafts } = await supabase
     .from("drafts")
     .select("id")
     .eq("league_id", leagueId);
 
   let deadCryptoRemoved = 0;
+  let duplicateCryptoRemoved = 0;
   for (const draft of drafts ?? []) {
     const { data: deadPicks } = await supabase
       .from("draft_picks")
@@ -147,14 +234,29 @@ async function main() {
       .eq("pick_type", "crypto")
       .lte("budget_spent", 0.01)
       .lte("shares", 0.000001);
-    if (!deadPicks?.length) continue;
-    const ids = deadPicks.map((pick) => pick.id);
-    const { error: deleteError } = await supabase
+    if (deadPicks?.length) {
+      const ids = deadPicks.map((pick) => pick.id);
+      const { error: deleteError } = await supabase
+        .from("draft_picks")
+        .delete()
+        .in("id", ids);
+      if (deleteError) throw new Error(deleteError.message);
+      deadCryptoRemoved += ids.length;
+    }
+
+    const { data: allPicks } = await supabase
       .from("draft_picks")
-      .delete()
-      .in("id", ids);
-    if (deleteError) throw new Error(deleteError.message);
-    deadCryptoRemoved += ids.length;
+      .select("*")
+      .eq("draft_id", draft.id);
+    const staleIds = staleDuplicateCryptoPickIds(allPicks ?? []);
+    if (staleIds.length > 0) {
+      const { error: dupError } = await supabase
+        .from("draft_picks")
+        .delete()
+        .in("id", staleIds);
+      if (dupError) throw new Error(dupError.message);
+      duplicateCryptoRemoved += staleIds.length;
+    }
   }
 
   await supabase
@@ -224,6 +326,7 @@ async function main() {
         teams: teamIds.length,
         matchupsInserted: rows.length,
         deadCryptoPicksRemoved: deadCryptoRemoved,
+        duplicateActiveCryptoPicksRemoved: duplicateCryptoRemoved,
         status: "active",
         currentWeek: 1,
         seasonFormat: "beta_daily",

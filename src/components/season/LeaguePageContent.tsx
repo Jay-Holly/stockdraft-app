@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { formatPct, formatSignedMoney } from "@/lib/format";
+import { formatMoney, formatPct } from "@/lib/format";
 import {
   formatMatchupScore,
   scoringModeShortLabel,
@@ -95,6 +96,47 @@ export function LeaguePageContent() {
           <span className="text-sm font-semibold text-muted ml-2">Your record</span>
         </p>
       </section>
+
+      {data.bonusPool.awardsEnabled && (
+        <section className="season-card border-gold/30 bg-gold/5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <h2 className="season-card-title">Bonus pool</h2>
+              <p className="text-2xl font-black text-gold">
+                {formatMoney(data.bonusPool.totalBonusPool)}
+              </p>
+              <p className="text-xs text-muted">
+                Playoff pool · {formatMoney(data.bonusPool.playoffPoolBalance)}
+                {data.bonusPool.rolloverBalance > 0 && (
+                  <>
+                    {" "}
+                    · {formatMoney(data.bonusPool.rolloverBalance)} unclaimed
+                    rollover
+                  </>
+                )}
+              </p>
+              <p className="text-xs text-muted">
+                This week&apos;s award pool:{" "}
+                {formatMoney(data.bonusPool.weeklyPoolAmount)}
+              </p>
+            </div>
+            <Link
+              href="/awards"
+              className="landing-btn landing-btn--primary !w-auto !px-4 !py-2 text-sm shrink-0"
+            >
+              {data.bonusPool.pendingClaimCount > 0
+                ? `Claim ${formatMoney(data.bonusPool.pendingClaimTotalUsd)}`
+                : "View awards"}
+            </Link>
+          </div>
+          {data.bonusPool.pendingClaimCount > 0 && (
+            <p className="text-sm mt-3 text-gold font-semibold">
+              You won {formatMoney(data.bonusPool.pendingClaimTotalUsd)} — claim
+              it on the Awards page.
+            </p>
+          )}
+        </section>
+      )}
 
       {data.currentMatchup && (
         <section className="season-card">

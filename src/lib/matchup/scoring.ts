@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { allocatePlayoffBonusPoolIfNeeded } from "@/lib/awards/allocate";
+import { autoClaimPlayoffPayoutsForAllocation } from "@/lib/awards/claim";
 import { activateAiLeagueSchedule } from "@/lib/league/ai-league";
 import {
   captureWeekBaselinesForLeague,
@@ -464,6 +466,19 @@ async function advanceLeagueCalendar(
         sdpl: true,
         semifinalWeek,
       });
+
+      const allocation = await allocatePlayoffBonusPoolIfNeeded(
+        leagueId,
+        semifinalWeek,
+        supabase
+      );
+      if (allocation.allocationId) {
+        await autoClaimPlayoffPayoutsForAllocation(
+          supabase,
+          leagueId,
+          allocation.allocationId
+        );
+      }
     }
 
     if (currentWeek === semifinalWeek) {

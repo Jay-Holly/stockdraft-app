@@ -77,6 +77,15 @@ export type LeaguePageData = {
   humanRecord: { wins: number; losses: number };
   standings: LeagueTeamStanding[];
   currentMatchup: MatchupLiveView | null;
+  bonusPool: {
+    awardsEnabled: boolean;
+    weeklyPoolAmount: number;
+    rolloverBalance: number;
+    playoffPoolBalance: number;
+    totalBonusPool: number;
+    pendingClaimTotalUsd: number;
+    pendingClaimCount: number;
+  };
 };
 
 export type FreeAgentStock = {

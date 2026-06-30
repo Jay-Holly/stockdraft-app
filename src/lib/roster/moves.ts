@@ -12,6 +12,7 @@ import {
   getLeagueOffBoardSymbols,
 } from "@/lib/league/server";
 import { createClient } from "@/lib/supabase/server";
+import { findActiveCryptoPick } from "@/lib/roster/crypto-picks";
 import {
   computeSharesFromBudget,
   getCryptoQuote,
@@ -40,21 +41,6 @@ type PickPatch = {
   surcharge_percent?: number;
   acquired_via?: string;
 };
-
-function findActiveCryptoPick(
-  picks: DraftPick[],
-  symbol: string,
-  excludePickId?: string
-): DraftPick | undefined {
-  const upper = symbol.toUpperCase();
-  return picks.find(
-    (p) =>
-      p.pick_type === "crypto" &&
-      p.id !== excludePickId &&
-      p.symbol.toUpperCase() === upper &&
-      p.budget_spent > 0.01
-  );
-}
 
 async function patchDraftPick(
   supabase: SupabaseClient,

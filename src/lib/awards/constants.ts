@@ -2,8 +2,20 @@ import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 
 export const AWARD_SEASON_BASE_TOTAL = 100_000;
 export const AWARD_REGULAR_SEASON_WEEKS = SDPL_REGULAR_SEASON_WEEKS;
+export const PLAYOFF_POOL_SEED = 5_000;
+export const AWARD_REGULAR_SEASON_POOL =
+  AWARD_SEASON_BASE_TOTAL - PLAYOFF_POOL_SEED;
 export const AWARD_WEEKLY_BASE_AMOUNT =
-  AWARD_SEASON_BASE_TOTAL / AWARD_REGULAR_SEASON_WEEKS;
+  AWARD_REGULAR_SEASON_POOL / AWARD_REGULAR_SEASON_WEEKS;
+
+export const PLAYOFF_BONUS_SHARES = [
+  { seedRank: 1, sharePct: 40 },
+  { seedRank: 2, sharePct: 25 },
+  { seedRank: 3, sharePct: 20 },
+  { seedRank: 4, sharePct: 15 },
+] as const;
+
+export const PLAYOFF_TOP_SEED_COUNT = 4;
 
 export const AWARD_KEYS = [
   "winner_of_week",
