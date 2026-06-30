@@ -60,6 +60,54 @@ function TeamGainStatsBlock({
   );
 }
 
+function PickStatHeaders({ scoringMode }: { scoringMode: LeagueScoringMode }) {
+  const headers = getOrderedGainStats(
+    {
+      weekDollarGain: 0,
+      weekGainPercent: 0,
+      seasonDollarGain: 0,
+      seasonGainPercent: 0,
+    },
+    scoringMode
+  );
+
+  return (
+    <div className="matchup-pick-table__row matchup-pick-table__row--head">
+      <span className="matchup-pick-table__pick-head">Pick</span>
+      {headers.map((stat) => (
+        <span key={stat.key} className="matchup-pick-table__stat-head">
+          {stat.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PickGainCells({
+  pick,
+  scoringMode,
+}: {
+  pick: RosterPickView;
+  scoringMode: LeagueScoringMode;
+}) {
+  const stats = getOrderedPickGainStats(pick, scoringMode);
+
+  return (
+    <>
+      {stats.map((stat, index) => (
+        <span
+          key={stat.key}
+          className={`matchup-pick-table__cell ${gainToneClass(stat.value)} ${
+            index === 0 ? "matchup-pick-table__cell--primary" : ""
+          }`}
+        >
+          {formatGainStat(stat)}
+        </span>
+      ))}
+    </>
+  );
+}
+
 function PickGainLine({
   pick,
   scoringMode,
@@ -70,7 +118,7 @@ function PickGainLine({
   const stats = getOrderedPickGainStats(pick, scoringMode);
 
   return (
-    <div className="matchup-pick-stats">
+    <div className="matchup-pick-stats matchup-pick-stats--compact">
       {stats.map((stat, index) => (
         <div
           key={stat.key}
@@ -82,6 +130,65 @@ function PickGainLine({
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function RosterPickSection({
+  title,
+  variant,
+  picks,
+  scoringMode,
+  bench = false,
+}: {
+  title: string;
+  variant: "starters" | "crypto" | "bench";
+  picks: RosterPickView[];
+  scoringMode: LeagueScoringMode;
+  bench?: boolean;
+}) {
+  const visiblePicks = bench
+    ? picks.filter((pick) => pick.symbol.toUpperCase() !== "__OPEN__")
+    : picks;
+
+  if (visiblePicks.length === 0) {
+    return (
+      <div className={`matchup-roster-section matchup-roster-section--${variant}`}>
+        <p className="matchup-roster-section__title">{title}</p>
+        <p className="text-xs text-muted">
+          {bench ? "No bench" : variant === "crypto" ? "No crypto" : "No starters"}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`matchup-roster-section matchup-roster-section--${variant}`}>
+      <p className="matchup-roster-section__title">{title}</p>
+      <div className="matchup-pick-table">
+        <PickStatHeaders scoringMode={scoringMode} />
+        {visiblePicks.map((pick) => (
+          <div
+            key={pick.id}
+            className={`matchup-pick-table__row ${bench ? "matchup-pick-table__row--bench" : ""}`}
+          >
+            <div className="matchup-pick-table__pick">
+              <p className="matchup-pick-symbol">{pick.symbol}</p>
+              <p className="matchup-pick-table__pick-meta">
+                {bench
+                  ? "Does not score"
+                  : `${formatMoney(pick.currentValue)} value`}
+              </p>
+            </div>
+            <div className="matchup-pick-table__stats matchup-pick-table__stats--wide">
+              <PickGainCells pick={pick} scoringMode={scoringMode} />
+            </div>
+            <div className="matchup-pick-table__stats matchup-pick-table__stats--compact">
+              <PickGainLine pick={pick} scoringMode={scoringMode} />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -121,59 +228,28 @@ function RosterColumn({
         isLeading={isLeading}
       />
 
-      <div className="matchup-roster-section matchup-roster-section--starters">
-        <p className="matchup-roster-section__title">Starters</p>
-        {side.starters.length === 0 ? (
-          <p className="text-xs text-muted">No starters</p>
-        ) : (
-          side.starters.map((pick) => (
-            <div key={pick.id} className="matchup-pick-row">
-              <div className="min-w-0">
-                <p className="matchup-pick-symbol">{pick.symbol}</p>
-                <p className="text-[11px] text-muted">
-                  {formatMoney(pick.currentValue)} value
-                </p>
-              </div>
-              <PickGainLine pick={pick} scoringMode={scoringMode} />
-            </div>
-          ))
-        )}
-      </div>
+      <RosterPickSection
+        title="Starters"
+        variant="starters"
+        picks={side.starters}
+        scoringMode={scoringMode}
+      />
 
-      <div className="matchup-roster-section matchup-roster-section--crypto">
-        <p className="matchup-roster-section__title">Crypto</p>
-        {side.crypto.length === 0 ? (
-          <p className="text-xs text-muted">No crypto</p>
-        ) : (
-          side.crypto.map((pick) => (
-            <div key={pick.id} className="matchup-pick-row">
-              <div className="min-w-0">
-                <p className="matchup-pick-symbol">{pick.symbol}</p>
-                <p className="text-[11px] text-muted">
-                  {formatMoney(pick.currentValue)} value
-                </p>
-              </div>
-              <PickGainLine pick={pick} scoringMode={scoringMode} />
-            </div>
-          ))
-        )}
-      </div>
+      <RosterPickSection
+        title="Crypto"
+        variant="crypto"
+        picks={side.crypto}
+        scoringMode={scoringMode}
+      />
 
       {side.bench.some((pick) => pick.symbol.toUpperCase() !== "__OPEN__") && (
-        <div className="matchup-roster-section matchup-roster-section--bench">
-          <p className="matchup-roster-section__title">Bench</p>
-          {side.bench
-            .filter((pick) => pick.symbol.toUpperCase() !== "__OPEN__")
-            .map((pick) => (
-              <div key={pick.id} className="matchup-pick-row matchup-pick-row--bench">
-                <div className="min-w-0">
-                  <p className="matchup-pick-symbol">{pick.symbol}</p>
-                  <p className="text-[11px] text-muted">Does not score</p>
-                </div>
-                <PickGainLine pick={pick} scoringMode={scoringMode} />
-              </div>
-            ))}
-        </div>
+        <RosterPickSection
+          title="Bench"
+          variant="bench"
+          picks={side.bench}
+          scoringMode={scoringMode}
+          bench
+        />
       )}
     </div>
   );
