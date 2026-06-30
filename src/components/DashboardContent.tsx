@@ -17,6 +17,7 @@ import type {
 import type { HumanLeagueListItem, PendingHumanLeagueInvite } from "@/lib/league/human-league";
 import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
 import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInviteBanner";
+import { DayTraderDashboardCard } from "@/components/day-trader/DayTraderDashboardCard";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import type { BotPersonality } from "@/lib/league/bots";
@@ -29,6 +30,7 @@ import {
   parseLeagueScoringMode,
   type LeagueScoringMode,
 } from "@/lib/league/scoring-mode";
+import type { DayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
 
 function leagueStatusLabel(status: string): string {
   if (status === "waiting") return "Waiting for players";
@@ -138,6 +140,7 @@ export function DashboardContent({
   activeSummary = null,
   scoringNotice = null,
   pendingInvites = [],
+  dayTrader,
 }: {
   profile: Profile;
   email: string;
@@ -150,6 +153,7 @@ export function DashboardContent({
   activeSummary?: AiLeagueSummary | null;
   scoringNotice?: string | null;
   pendingInvites?: PendingHumanLeagueInvite[];
+  dayTrader?: DayTraderDashboardSummary;
 }) {
   const router = useRouter();
   const [username, setUsername] = useState(profile.username);
@@ -320,6 +324,8 @@ export function DashboardContent({
       </section>
 
       <LiveTickerTape />
+
+      {dayTrader ? <DayTraderDashboardCard summary={dayTrader} /> : null}
 
       <section className="bg-dark-card border border-gold/30 rounded-2xl p-6 space-y-4">
         <div>

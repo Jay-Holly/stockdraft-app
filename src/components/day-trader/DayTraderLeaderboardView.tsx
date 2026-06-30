@@ -6,7 +6,7 @@ import type {
   DayTraderLeaderboardMetric,
   DayTraderLeaderboardRow,
 } from "@/lib/day-trader/leaderboard";
-import { formatDayTraderContestRange } from "@/lib/day-trader/resolve-contest";
+import { formatDayTraderContestRange } from "@/lib/day-trader/format-contest";
 
 type DayTraderLeaderboardViewProps = {
   metric: DayTraderLeaderboardMetric;
