@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/finalize-matchups",
       "schedule": "5 20 * * 1-5"
+    },
+    {
+      "path": "/api/cron/refresh-crypto-prices",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/refresh-stock-prices",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -133,6 +133,30 @@ async function main() {
   await supabase.from("league_matchups").delete().eq("league_id", leagueId);
   await supabase.from("roster_week_baselines").delete().eq("league_id", leagueId);
 
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("id")
+    .eq("league_id", leagueId);
+
+  let deadCryptoRemoved = 0;
+  for (const draft of drafts ?? []) {
+    const { data: deadPicks } = await supabase
+      .from("draft_picks")
+      .select("id")
+      .eq("draft_id", draft.id)
+      .eq("pick_type", "crypto")
+      .lte("budget_spent", 0.01)
+      .lte("shares", 0.000001);
+    if (!deadPicks?.length) continue;
+    const ids = deadPicks.map((pick) => pick.id);
+    const { error: deleteError } = await supabase
+      .from("draft_picks")
+      .delete()
+      .in("id", ids);
+    if (deleteError) throw new Error(deleteError.message);
+    deadCryptoRemoved += ids.length;
+  }
+
   await supabase
     .from("league_standings")
     .update({ wins: 0, losses: 0, current_week: 1 })
@@ -199,6 +223,7 @@ async function main() {
         leagueId,
         teams: teamIds.length,
         matchupsInserted: rows.length,
+        deadCryptoPicksRemoved: deadCryptoRemoved,
         status: "active",
         currentWeek: 1,
         seasonFormat: "beta_daily",

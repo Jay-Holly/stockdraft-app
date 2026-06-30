@@ -55,9 +55,7 @@ function resolveWeekCloseValue(
   return weekDetail?.open ?? 0;
 }
 
-function isActiveCryptoPick(pick: DraftPick): boolean {
-  return pick.budget_spent > 0.01 || pick.shares > 0.000001;
-}
+import { isActiveCryptoPick } from "@/lib/roster/crypto-picks";
 
 export async function buildHistoricalRosterPicks(
   leagueId: string,

@@ -1,5 +1,6 @@
 import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
 import type { RosterPickView } from "@/lib/roster/types";
+import { isScoringRosterPick } from "@/lib/roster/crypto-picks";
 import { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
 
 export type TeamGainStats = {
@@ -17,9 +18,7 @@ export type OrderedGainStat = {
 };
 
 export function computeTeamGainStats(picks: RosterPickView[]): TeamGainStats {
-  const scoring = picks.filter(
-    (pick) => pick.pick_type === "stock" || pick.pick_type === "crypto"
-  );
+  const scoring = picks.filter(isScoringRosterPick);
 
   const weekInputs = scoring.map((pick) => ({
     currentValue: pick.currentValue,

@@ -29,6 +29,15 @@ begin
   delete from public.league_matchups where league_id = v_league_id;
   delete from public.roster_week_baselines where league_id = v_league_id;
 
+  -- Remove dead crypto shells (zero budget + shares) left by full swaps
+  delete from public.draft_picks dp
+  using public.drafts d
+  where dp.draft_id = d.id
+    and d.league_id = v_league_id
+    and dp.pick_type = 'crypto'
+    and dp.budget_spent <= 0.01
+    and dp.shares <= 0.000001;
+
   update public.league_standings
   set wins = 0, losses = 0, current_week = 1, updated_at = now()
   where league_id = v_league_id;

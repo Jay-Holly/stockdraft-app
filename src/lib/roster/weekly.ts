@@ -7,7 +7,6 @@ import {
 } from "@/lib/roster/quotes";
 import { isCryptoSymbol } from "@/lib/draft/engine";
 import type { CryptoQuote } from "@/lib/coingecko/service";
-import { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
 import {
   computePickSeasonMetrics,
   computeTeamSeasonMetrics,
@@ -24,13 +23,26 @@ import { isPastFinalizeAt } from "@/lib/season/finalize-times";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import type { SeasonSettings } from "@/lib/season/types";
 
+import {
+  computeScoringWeekGainPercent,
+  computeWeekDollarGain,
+  computeWeekGainPercent,
+} from "@/lib/roster/scoring-math";
 export {
   computeScoringWeekGainPercent,
   computeWeekDollarGain,
   computeWeekGainPercent,
 } from "@/lib/roster/scoring-math";
-
-export async function computeScoringWeekGainPercentForUser(
+import {
+  addBudgetToBaselineValues,
+  initialBaselineValues,
+  scaleBaselineValuesForPartialSell,
+} from "@/lib/roster/baseline-rebalance";
+import {
+  isScoringRosterPick,
+  picksEligibleForWeekBaselines,
+  isActiveCryptoPick,
+} from "@/lib/roster/crypto-picks";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -262,7 +274,7 @@ async function computeScoringWeekInputs(
   const livePrices = await fetchLivePricesForPicks(picks);
 
   return picks
-    .filter((p) => p.pick_type === "stock" || p.pick_type === "crypto")
+    .filter(isScoringRosterPick)
     .map((pick) => {
       const baseline = refreshedBaselines.get(pick.id);
       const weekOpenValue =
@@ -387,6 +399,10 @@ export async function captureWeekBaselinesForUser(
 
   if (picks.length === 0) return;
 
+  picks = picksEligibleForWeekBaselines(picks);
+
+  if (picks.length === 0) return;
+
   const prices = await fetchPricesForPicks(picks);
 
   const rows = picks.map((pick) => ({
@@ -449,6 +465,8 @@ export async function captureWeekCloseSnapshots(
       if (!state.ok) continue;
       picks = state.state.picks.filter((pick) => pick.pick_type !== "skip");
     }
+
+    picks = picksEligibleForWeekBaselines(picks);
 
     const prices = await fetchPricesForPicks(picks);
 
@@ -517,6 +535,44 @@ export async function captureWeekCloseSnapshots(
   }
 }
 
+async function pruneOrphanCryptoBaselinesForUser(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  weekNumber: number
+): Promise<void> {
+  const { data: baselines } = await supabase
+    .from("roster_week_baselines")
+    .select("pick_id")
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .eq("week_number", weekNumber);
+
+  if (!baselines?.length) return;
+
+  const pickIds = baselines.map((row) => row.pick_id);
+  const { data: picks } = await supabase
+    .from("draft_picks")
+    .select("id, pick_type, budget_spent, shares")
+    .in("id", pickIds);
+
+  const orphanPickIds = (picks ?? [])
+    .filter(
+      (pick) => pick.pick_type === "crypto" && !isActiveCryptoPick(pick)
+    )
+    .map((pick) => pick.id);
+
+  if (orphanPickIds.length === 0) return;
+
+  await supabase
+    .from("roster_week_baselines")
+    .delete()
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .eq("week_number", weekNumber)
+    .in("pick_id", orphanPickIds);
+}
+
 export async function ensureWeekBaselines(
   supabase: SupabaseClient,
   leagueId: string,
@@ -524,6 +580,10 @@ export async function ensureWeekBaselines(
   weekNumber: number,
   picks: DraftPick[]
 ): Promise<Map<string, number>> {
+  const eligiblePicks = picksEligibleForWeekBaselines(
+    picks.filter((p) => p.pick_type !== "skip")
+  );
+
   let baselineMap = await loadWeekBaselineMap(
     supabase,
     leagueId,
@@ -531,9 +591,10 @@ export async function ensureWeekBaselines(
     weekNumber
   );
 
-  const activePickIds = new Set(picks.map((p) => p.id));
+  const activePickIds = new Set(eligiblePicks.map((p) => p.id));
   const hasAllBaselines =
-    picks.length > 0 && picks.every((pick) => baselineMap.has(pick.id));
+    eligiblePicks.length > 0 &&
+    eligiblePicks.every((pick) => baselineMap.has(pick.id));
 
   if (!hasAllBaselines) {
     await captureWeekBaselinesForUser(supabase, leagueId, userId, weekNumber);
@@ -544,6 +605,13 @@ export async function ensureWeekBaselines(
       weekNumber
     );
   }
+
+  await pruneOrphanCryptoBaselinesForUser(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber
+  );
 
   for (const pickId of [...baselineMap.keys()]) {
     if (!activePickIds.has(pickId)) {
@@ -562,16 +630,47 @@ export async function setPickWeekBaseline(
   pickId: string,
   valueAtOpen: number
 ): Promise<void> {
-  await supabase.from("roster_week_baselines").upsert(
-    {
-      league_id: leagueId,
-      user_id: userId,
-      week_number: weekNumber,
-      pick_id: pickId,
-      value_at_open: valueAtOpen,
-    },
-    { onConflict: "league_id,user_id,week_number,pick_id" }
+  await setPickWeekBaselineOpenClose(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber,
+    pickId,
+    valueAtOpen
   );
+}
+
+export async function setPickWeekBaselineOpenClose(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  weekNumber: number,
+  pickId: string,
+  valueAtOpen: number,
+  valueAtClose?: number | null
+): Promise<void> {
+  const row: {
+    league_id: string;
+    user_id: string;
+    week_number: number;
+    pick_id: string;
+    value_at_open: number;
+    value_at_close?: number | null;
+  } = {
+    league_id: leagueId,
+    user_id: userId,
+    week_number: weekNumber,
+    pick_id: pickId,
+    value_at_open: valueAtOpen,
+  };
+
+  if (valueAtClose !== undefined) {
+    row.value_at_close = valueAtClose;
+  }
+
+  await supabase.from("roster_week_baselines").upsert(row, {
+    onConflict: "league_id,user_id,week_number,pick_id",
+  });
 }
 
 export async function adjustPickWeekBaseline(
@@ -629,46 +728,65 @@ export async function applyCryptoRebalanceWeekBaselines(
   isNewTarget: boolean
 ): Promise<void> {
   const weekNumber = await getCurrentWeek(supabase, leagueId, userId);
-  const baselineMap = await loadWeekBaselineMap(
+  const baselineMap = await loadWeekBaselineExtendedMap(
     supabase,
     leagueId,
     userId,
     weekNumber
   );
 
-  const sourceOpen = baselineMap.get(sourcePickId) ?? soldBudget / sellFraction;
-  const remainingSourceOpen = Math.max(0, sourceOpen * (1 - sellFraction));
-  await setPickWeekBaseline(
+  const sourceRow = baselineMap.get(sourcePickId);
+  const sourceOpen = sourceRow?.valueAtOpen ?? soldBudget / sellFraction;
+  const sourceClose = sourceRow?.valueAtClose ?? null;
+  const scaledSource = scaleBaselineValuesForPartialSell(
+    sourceOpen,
+    sourceClose,
+    sellFraction
+  );
+
+  await setPickWeekBaselineOpenClose(
     supabase,
     leagueId,
     userId,
     weekNumber,
     sourcePickId,
-    remainingSourceOpen
+    scaledSource.valueAtOpen,
+    scaledSource.valueAtClose ?? scaledSource.valueAtOpen
   );
 
   if (!targetPickId) return;
 
   if (isNewTarget) {
-    await setPickWeekBaseline(
+    const initial = initialBaselineValues(buyBudget);
+    await setPickWeekBaselineOpenClose(
       supabase,
       leagueId,
       userId,
       weekNumber,
       targetPickId,
-      buyBudget
+      initial.valueAtOpen,
+      initial.valueAtClose
     );
     return;
   }
 
-  const targetOpen = baselineMap.get(targetPickId) ?? 0;
-  await setPickWeekBaseline(
+  const targetRow = baselineMap.get(targetPickId);
+  const targetOpen = targetRow?.valueAtOpen ?? 0;
+  const targetClose = targetRow?.valueAtClose ?? null;
+  const adjustedTarget = addBudgetToBaselineValues(
+    targetOpen,
+    targetClose,
+    soldBudget
+  );
+
+  await setPickWeekBaselineOpenClose(
     supabase,
     leagueId,
     userId,
     weekNumber,
     targetPickId,
-    targetOpen + soldBudget
+    adjustedTarget.valueAtOpen,
+    adjustedTarget.valueAtClose ?? adjustedTarget.valueAtOpen
   );
 }
 

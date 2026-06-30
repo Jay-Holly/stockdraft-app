@@ -28,6 +28,41 @@ export type ResetBetaLeagueResult = {
   teams: number;
 };
 
+/** Remove zero-budget crypto shells left behind by full swaps/rebalances. */
+export async function cleanupDeadCryptoDraftPicksForLeague(
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
+): Promise<number> {
+  const supabase = supabaseOverride ?? createServiceClient();
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("id")
+    .eq("league_id", leagueId);
+
+  let removed = 0;
+
+  for (const draft of drafts ?? []) {
+    const { data: deadPicks } = await supabase
+      .from("draft_picks")
+      .select("id")
+      .eq("draft_id", draft.id)
+      .eq("pick_type", "crypto")
+      .lte("budget_spent", 0.01)
+      .lte("shares", 0.000001);
+
+    if (!deadPicks?.length) continue;
+
+    const ids = deadPicks.map((pick) => pick.id);
+    const { error } = await supabase.from("draft_picks").delete().in("id", ids);
+    if (error) {
+      throw new Error(`Failed to delete dead crypto picks: ${error.message}`);
+    }
+    removed += ids.length;
+  }
+
+  return removed;
+}
+
 export async function resetSdplBetaLeague(
   options: ResetBetaLeagueOptions
 ): Promise<ResetBetaLeagueResult> {
@@ -54,6 +89,7 @@ export async function resetSdplBetaLeague(
 
   await supabase.from("league_matchups").delete().eq("league_id", leagueId);
   await supabase.from("roster_week_baselines").delete().eq("league_id", leagueId);
+  await cleanupDeadCryptoDraftPicksForLeague(leagueId, supabase);
 
   await supabase
     .from("league_standings")

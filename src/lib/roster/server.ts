@@ -52,6 +52,7 @@ import {
   computeTeamSeasonMetrics,
   loadBaselinesThroughWeek,
 } from "@/lib/roster/season-totals";
+import { isActiveCryptoPick, isScoringRosterPick } from "@/lib/roster/crypto-picks";
 import {
   computeScoringSeasonGainPercentForUser,
   computeScoringWeekDollarGainForUser,
@@ -193,10 +194,6 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
   });
 }
 
-function isActiveCryptoPick(pick: RosterPickView): boolean {
-  return pick.budget_spent > 0.01 || pick.shares > 0.000001;
-}
-
 export async function loadRosterView(
   userId: string,
   leagueId: string,
@@ -231,13 +228,13 @@ export async function loadRosterView(
     );
     const partitioned = partitionHistoricalRosterPicks(historicalPicks);
     const scoringWeekInputs = historicalPicks
-      .filter((pick) => pick.pick_type === "stock" || pick.pick_type === "crypto")
+      .filter(isScoringRosterPick)
       .map((pick) => ({
         currentValue: pick.currentValue,
         weekOpenValue: pick.weekOpenValue,
       }));
     const scoringSeasonInputs = historicalPicks
-      .filter((pick) => pick.pick_type === "stock" || pick.pick_type === "crypto")
+      .filter(isScoringRosterPick)
       .map((pick) => ({
         currentValue: pick.currentValue,
         seasonOpenValue: pick.seasonOpenValue,
@@ -334,14 +331,14 @@ export async function loadRosterView(
   });
 
   const scoringWeekInputs = withWeekMetrics
-    .filter((p) => p.pick_type === "stock" || p.pick_type === "crypto")
+    .filter(isScoringRosterPick)
     .map((p) => ({
       currentValue: p.currentValue,
       weekOpenValue: p.weekOpenValue,
     }));
 
   const scoringSeasonInputs = withWeekMetrics
-    .filter((p) => p.pick_type === "stock" || p.pick_type === "crypto")
+    .filter(isScoringRosterPick)
     .map((p) => ({
       currentValue: p.currentValue,
       seasonOpenValue: p.seasonOpenValue,

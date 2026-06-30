@@ -23,6 +23,7 @@ import {
   getCryptoQuote,
   getStockQuote,
 } from "@/lib/roster/quotes";
+import { filterScoringRosterPicks } from "@/lib/roster/crypto-picks";
 
 export type AiPickDecision = {
   symbol: string;
@@ -510,9 +511,7 @@ export function isDraftStateComplete(state: DraftState): boolean {
 }
 
 export function getScoringPicks(picks: DraftPick[]): DraftPick[] {
-  return picks.filter(
-    (p) => p.pick_type === "stock" || p.pick_type === "crypto"
-  );
+  return filterScoringRosterPicks(picks);
 }
 
 export async function getQuoteMapForPicks(
