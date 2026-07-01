@@ -27,6 +27,7 @@ import {
 import {
   applyCryptoRebalanceWeekBaselines,
   applyIrSwapWeekBaselines,
+  syncCryptoBaselinesAfterRebalance,
 } from "@/lib/roster/weekly";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -429,6 +430,8 @@ export async function applyCryptoRebalance(
       true
     );
   }
+
+  await syncCryptoBaselinesAfterRebalance(supabase, league.id, userId);
 
   const moveType =
     sellPercent === 100 && !existingTarget ? "crypto_swap" : "crypto_rebalance";

@@ -39,6 +39,7 @@ import {
   scaleBaselineValuesForPartialSell,
 } from "@/lib/roster/baseline-rebalance";
 import {
+  canonicalActiveCryptoPicks,
   filterScoringRosterPicks,
   picksEligibleForWeekBaselines,
   isActiveCryptoPick,
@@ -799,6 +800,43 @@ export async function applyCryptoRebalanceWeekBaselines(
   );
 }
 
+/** Persist merged crypto baseline history onto canonical pick rows after rebalance. */
+export async function syncCryptoBaselinesAfterRebalance(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string
+): Promise<void> {
+  const state = await loadDraftStateDetailed(userId, { leagueId });
+  if (!state.ok) return;
+
+  const picks = state.state.picks.filter((pick) => pick.pick_type !== "skip");
+  const weekNumber = await getCurrentWeek(supabase, leagueId, userId);
+  const byPick = await loadBaselinesThroughWeek(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber,
+    { picks }
+  );
+
+  for (const canon of canonicalActiveCryptoPicks(picks)) {
+    const merged = byPick.get(canon.id);
+    if (!merged) continue;
+
+    for (const [week, row] of merged) {
+      await setPickWeekBaselineOpenClose(
+        supabase,
+        leagueId,
+        userId,
+        week,
+        canon.id,
+        row.valueAtOpen,
+        row.valueAtClose
+      );
+    }
+  }
+}
+
 export async function computeScoringWeekGainPercentForUser(
   userId: string,
   leagueId: string,
@@ -846,11 +884,16 @@ async function computeScoringSeasonPickMetricsForUser(
     options?.weekNumber ??
     (await getCurrentWeek(supabase, leagueId, userId));
   const weekInputs = await computeScoringWeekInputs(userId, leagueId, options);
+  const state = await loadDraftStateDetailed(userId, { leagueId });
+  const picks = state.ok
+    ? state.state.picks.filter((pick) => pick.pick_type !== "skip")
+    : [];
   const baselineByPick = await loadBaselinesThroughWeek(
     supabase,
     leagueId,
     userId,
-    weekNumber
+    weekNumber,
+    picks.length > 0 ? { picks } : undefined
   );
 
   return weekInputs.map((input) => {

@@ -1,4 +1,6 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import "server-only";
+
+import { createServiceClient } from "@/lib/supabase/service";
 
 export type CachedQuote = {
   price: number;
@@ -35,13 +37,6 @@ function mapRow(row: {
   };
 }
 
-function createPriceReaderClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-}
-
 export function toApiQuote(quote: CachedQuote): ApiQuote {
   return {
     price: quote.price,
@@ -57,7 +52,7 @@ export async function fetchCachedStockQuotes(
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
   if (unique.length === 0) return {};
 
-  const supabase = createPriceReaderClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("stock_prices")
     .select("symbol, price, change_percent, updated_at")
@@ -78,7 +73,7 @@ export async function fetchCachedCryptoQuotes(
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
   if (unique.length === 0) return {};
 
-  const supabase = createPriceReaderClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("crypto_prices")
     .select("symbol, price, change_percent, updated_at")
@@ -96,7 +91,7 @@ export async function fetchCachedCryptoQuotes(
 export async function fetchAllCachedCryptoQuotes(): Promise<
   Record<string, CachedQuote>
 > {
-  const supabase = createPriceReaderClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("crypto_prices")
     .select("symbol, price, change_percent, updated_at");

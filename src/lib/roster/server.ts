@@ -311,7 +311,8 @@ export async function loadRosterView(
     supabase,
     leagueId,
     userId,
-    viewWeek
+    viewWeek,
+    { picks }
   );
 
   const withWeekMetrics: RosterPickView[] = enriched.map((pick) => {

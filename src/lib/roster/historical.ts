@@ -67,7 +67,7 @@ export async function buildHistoricalRosterPicks(
   const [weekBaselines, nextWeekBaselines, baselineByPick] = await Promise.all([
     loadWeekBaselineDetailMap(supabase, leagueId, userId, weekNumber),
     loadWeekBaselineMap(supabase, leagueId, userId, weekNumber + 1),
-    loadBaselinesThroughWeek(supabase, leagueId, userId, weekNumber),
+    loadBaselinesThroughWeek(supabase, leagueId, userId, weekNumber, { picks }),
   ]);
 
   const relevantPickIds = new Set<string>([

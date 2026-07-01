@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DraftPick } from "@/lib/draft/types";
+import { canonicalActiveCryptoPicks } from "@/lib/roster/crypto-picks";
 import type { WeekBaselineRow } from "@/lib/season/weekend-scoring";
 import {
   computeWeekDollarGain,
@@ -7,6 +9,59 @@ import {
 } from "@/lib/roster/scoring-math";
 
 type BaselineWeekMap = Map<number, WeekBaselineRow>;
+
+function mergeCryptoBaselineWeekMaps(
+  pickIds: string[],
+  byPick: Map<string, BaselineWeekMap>,
+  throughWeek: number
+): BaselineWeekMap {
+  const merged = new Map<number, WeekBaselineRow>();
+
+  for (let week = 1; week <= throughWeek; week++) {
+    for (const pickId of pickIds) {
+      const row = byPick.get(pickId)?.get(week);
+      if (row) {
+        merged.set(week, row);
+        break;
+      }
+    }
+  }
+
+  return merged;
+}
+
+function applyCryptoBaselineMerges(
+  byPick: Map<string, BaselineWeekMap>,
+  picks: DraftPick[],
+  throughWeek: number
+): void {
+  const canonical = canonicalActiveCryptoPicks(picks);
+  const symbolToPickIds = new Map<string, string[]>();
+  const pickOrder = new Map(picks.map((pick) => [pick.id, pick.pick_order]));
+
+  for (const pick of picks) {
+    if (pick.pick_type !== "crypto") continue;
+    const symbol = pick.symbol.toUpperCase();
+    const ids = symbolToPickIds.get(symbol) ?? [];
+    ids.push(pick.id);
+    symbolToPickIds.set(symbol, ids);
+  }
+
+  for (const canon of canonical) {
+    const symbol = canon.symbol.toUpperCase();
+    const siblingIds = [...(symbolToPickIds.get(symbol) ?? [canon.id])].sort(
+      (a, b) => (pickOrder.get(a) ?? 0) - (pickOrder.get(b) ?? 0)
+    );
+    const orderedIds = [
+      canon.id,
+      ...siblingIds.filter((id) => id !== canon.id),
+    ];
+    const merged = mergeCryptoBaselineWeekMaps(orderedIds, byPick, throughWeek);
+    if (merged.size > 0) {
+      byPick.set(canon.id, merged);
+    }
+  }
+}
 
 export type PickSeasonMetrics = {
   seasonOpenValue: number;
@@ -23,7 +78,8 @@ export async function loadBaselinesThroughWeek(
   supabase: SupabaseClient,
   leagueId: string,
   userId: string,
-  throughWeek: number
+  throughWeek: number,
+  options?: { picks?: DraftPick[] }
 ): Promise<Map<string, BaselineWeekMap>> {
   const { data, error } = await supabase
     .from("roster_week_baselines")
@@ -52,6 +108,10 @@ export async function loadBaselinesThroughWeek(
           : null,
     });
     byPick.set(row.pick_id, weekMap);
+  }
+
+  if (options?.picks?.length) {
+    applyCryptoBaselineMerges(byPick, options.picks, throughWeek);
   }
 
   return byPick;
