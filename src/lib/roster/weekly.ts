@@ -23,16 +23,12 @@ import { isPastFinalizeAt } from "@/lib/season/finalize-times";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import type { SeasonSettings } from "@/lib/season/types";
 
-import {
-  computeScoringWeekGainPercent,
-  computeWeekDollarGain,
-  computeWeekGainPercent,
-} from "@/lib/roster/scoring-math";
 export {
   computeScoringWeekGainPercent,
   computeWeekDollarGain,
   computeWeekGainPercent,
 } from "@/lib/roster/scoring-math";
+import { computeScoringWeekGainPercent, computeWeekDollarGain } from "@/lib/roster/scoring-math";
 import {
   addBudgetToBaselineValues,
   initialBaselineValues,
