@@ -10,11 +10,11 @@
     },
     {
       "path": "/api/cron/refresh-crypto-prices",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 14 * * *"
     },
     {
       "path": "/api/cron/refresh-stock-prices",
-      "schedule": "*/5 * * * *"
+      "schedule": "30 14 * * *"
     }
   ]
 }
