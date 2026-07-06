@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { setActiveLeagueCookie } from "@/lib/league/active-league";
+import { resolveRequestBaseUrl } from "@/lib/app-url";
 import { createHumanLeague } from "@/lib/league/human-league";
 import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import {
@@ -66,7 +67,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await createHumanLeague(user.id, config);
+  const result = await createHumanLeague(user.id, config, {
+    inviteBaseUrl: resolveRequestBaseUrl(request),
+  });
   if (result.error || !result.league) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -75,6 +78,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     league: result.league,
+    inviteToken: result.inviteToken,
     inviteLink: result.inviteLink,
     activeLeagueId: result.league.id,
   });

@@ -45,3 +45,5 @@ as $$
     and l.league_type = 'human'
   limit 1;
 $$;
+
+grant execute on function public.get_league_invite_preview(uuid) to anon, authenticated;

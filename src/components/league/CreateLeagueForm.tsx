@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
+import { buildInviteLinkPath } from "@/lib/app-url";
 import {
   isHumanLeagueSupported,
   playerCountsForFormat,
@@ -96,7 +97,17 @@ export function CreateLeagueForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
   const [createdLeagueName, setCreatedLeagueName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inviteToken && typeof window !== "undefined") {
+      setShareLink(`${window.location.origin}${buildInviteLinkPath(inviteToken)}`);
+      return;
+    }
+    setShareLink(inviteLink);
+  }, [inviteToken, inviteLink]);
 
   const config = useMemo<CreateLeagueConfig>(
     () => ({
@@ -166,6 +177,9 @@ export function CreateLeagueForm({
         return;
       }
 
+      setInviteToken(
+        typeof data.inviteToken === "string" ? data.inviteToken : null
+      );
       setInviteLink(data.inviteLink ?? null);
       setCreatedLeagueName(leagueName.trim());
     } catch {
@@ -176,11 +190,11 @@ export function CreateLeagueForm({
   }
 
   function copyInviteLink() {
-    if (!inviteLink) return;
-    void navigator.clipboard.writeText(inviteLink);
+    if (!shareLink) return;
+    void navigator.clipboard.writeText(shareLink);
   }
 
-  if (inviteLink || createdLeagueName) {
+  if (shareLink || createdLeagueName) {
     return (
       <div className="space-y-5">
         <div className="rounded-2xl border border-gold/40 bg-gold/5 p-5 space-y-3">
@@ -188,7 +202,7 @@ export function CreateLeagueForm({
             {createdLeagueName} is ready
           </h2>
           <p className="text-sm text-muted">
-            {inviteLink ? (
+            {shareLink ? (
               <>
                 Share this invite link with up to {inviteSlotsRemaining} friend
                 {inviteSlotsRemaining === 1 ? "" : "s"}. Anyone with the link can
@@ -208,10 +222,10 @@ export function CreateLeagueForm({
               </>
             )}
           </p>
-          {inviteLink && (
+          {shareLink && (
             <>
               <div className="rounded-xl border border-dark-border bg-dark p-3 break-all text-xs text-gold font-mono">
-                {inviteLink}
+                {shareLink}
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button variant="secondary" className="flex-1" onClick={copyInviteLink}>
@@ -227,7 +241,7 @@ export function CreateLeagueForm({
               </div>
             </>
           )}
-          {!inviteLink && (
+          {!shareLink && (
             <Button variant="primary" onClick={() => router.push("/dashboard")}>
               Back to dashboard
             </Button>

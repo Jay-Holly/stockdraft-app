@@ -12,7 +12,7 @@ import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import { isHumanLeagueSupported } from "@/lib/league/league-config";
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
 import { maybeStartHumanLeagueDraft } from "@/lib/league/draft-scheduler";
-import { resolveAppBaseUrl } from "@/lib/app-url";
+import { buildInviteLink } from "@/lib/app-url";
 import {
   DEFAULT_LEAGUE_SCORING_MODE,
   parseLeagueScoringMode,
@@ -60,6 +60,7 @@ export type HumanLeagueListItem = {
   humanTeamName: string;
   memberCount: number;
   humanDraftComplete: boolean;
+  inviteToken: string | null;
   inviteLink: string | null;
 };
 
@@ -118,15 +119,26 @@ export async function getHumanLeagueMembers(
   }));
 }
 
+const INVITE_TOKEN_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function getLeagueInvitePreview(
   token: string
 ): Promise<HumanLeagueInvitePreview | null> {
+  const normalizedToken = token.trim();
+  if (!INVITE_TOKEN_RE.test(normalizedToken)) {
+    return null;
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_league_invite_preview", {
-    p_token: token,
+    p_token: normalizedToken,
   });
 
   if (error || !data || (Array.isArray(data) && data.length === 0)) {
+    if (error) {
+      console.error("get_league_invite_preview failed:", error.message);
+    }
     return null;
   }
 
@@ -169,10 +181,6 @@ export async function listPendingHumanLeagueInvites(): Promise<
   );
 }
 
-function buildInviteLink(token: string): string {
-  return `${resolveAppBaseUrl()}/leagues/join/${token}`;
-}
-
 function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   return (
@@ -200,8 +208,14 @@ async function loadHumanLeagueById(
 
 export async function createHumanLeague(
   userId: string,
-  config: CreateLeagueConfig
-): Promise<{ league?: HumanLeague; inviteLink?: string | null; error?: string }> {
+  config: CreateLeagueConfig,
+  options?: { inviteBaseUrl?: string }
+): Promise<{
+  league?: HumanLeague;
+  inviteToken?: string | null;
+  inviteLink?: string | null;
+  error?: string;
+}> {
   if (!isHumanLeagueSupported(config)) {
     return { error: "This league configuration is not supported yet." };
   }
@@ -290,7 +304,10 @@ export async function createHumanLeague(
 
   return {
     league: league as HumanLeague,
-    inviteLink: inviteToken ? buildInviteLink(inviteToken) : null,
+    inviteToken,
+    inviteLink: inviteToken
+      ? buildInviteLink(inviteToken, options?.inviteBaseUrl)
+      : null,
   };
 }
 
@@ -361,8 +378,9 @@ export async function deleteHumanLeagueForUser(
 
 export async function regenerateHumanLeagueInvite(
   userId: string,
-  leagueId: string
-): Promise<{ inviteLink?: string; error?: string }> {
+  leagueId: string,
+  options?: { inviteBaseUrl?: string }
+): Promise<{ inviteToken?: string; inviteLink?: string; error?: string }> {
   const guard = await assertWaitingHumanLeagueCommissioner(userId, leagueId);
   if (guard.error) return guard;
 
@@ -379,7 +397,10 @@ export async function regenerateHumanLeagueInvite(
 
   if (error) return { error: error.message };
 
-  return { inviteLink: buildInviteLink(inviteToken) };
+  return {
+    inviteToken,
+    inviteLink: buildInviteLink(inviteToken, options?.inviteBaseUrl),
+  };
 }
 
 export async function joinHumanLeagueByToken(
@@ -517,6 +538,7 @@ export async function listHumanLeaguesForUser(
         humanTeamName: await getLeagueMemberTeamName(league.id, userId),
         memberCount: members.length,
         humanDraftComplete,
+        inviteToken: league.invite_token ?? null,
         inviteLink: league.invite_token
           ? buildInviteLink(league.invite_token)
           : null,

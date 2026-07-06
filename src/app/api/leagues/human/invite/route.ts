@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
+import { resolveRequestBaseUrl } from "@/lib/app-url";
 import {
   cancelHumanLeagueInvite,
   regenerateHumanLeagueInvite,
@@ -34,11 +35,17 @@ export async function POST(request: Request) {
   }
 
   if (action === "regenerate") {
-    const result = await regenerateHumanLeagueInvite(user.id, leagueId);
+    const result = await regenerateHumanLeagueInvite(user.id, leagueId, {
+      inviteBaseUrl: resolveRequestBaseUrl(request),
+    });
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
-    return NextResponse.json({ success: true, inviteLink: result.inviteLink });
+    return NextResponse.json({
+      success: true,
+      inviteToken: result.inviteToken,
+      inviteLink: result.inviteLink,
+    });
   }
 
   return NextResponse.json(

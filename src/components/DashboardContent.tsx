@@ -408,6 +408,7 @@ export function DashboardContent({
                     leagueId={item.league.id}
                     leagueName={item.league.name}
                     inviteLink={item.inviteLink}
+                    inviteToken={item.inviteToken}
                     isCommissioner={item.league.owner_user_id === profile.id}
                     memberCount={item.memberCount}
                     playerCount={item.league.player_count}
@@ -507,6 +508,7 @@ export function DashboardContent({
             leagueId={activeHumanLeague.league.id}
             leagueName={activeHumanLeague.league.name}
             inviteLink={activeHumanLeague.inviteLink}
+            inviteToken={activeHumanLeague.inviteToken}
             memberCount={activeHumanLeague.memberCount}
             playerCount={activeHumanLeague.league.player_count}
             isCommissioner

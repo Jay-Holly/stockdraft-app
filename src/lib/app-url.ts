@@ -48,3 +48,27 @@ export function resolveAppBaseUrl(): string {
 
   return "http://localhost:3000";
 }
+
+/** Relative invite path — safe to combine with any deployed origin in the browser. */
+export function buildInviteLinkPath(token: string): string {
+  return `/leagues/join/${token}`;
+}
+
+export function buildInviteLink(token: string, baseUrl = resolveAppBaseUrl()): string {
+  return `${baseUrl.replace(/\/$/, "")}${buildInviteLinkPath(token)}`;
+}
+
+/** Prefer the incoming request origin for invite links (API routes). */
+export function resolveRequestBaseUrl(request: Request): string {
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = forwardedHost ?? request.headers.get("host");
+  if (!host) {
+    return resolveAppBaseUrl();
+  }
+
+  const proto =
+    request.headers.get("x-forwarded-proto") ??
+    (host.includes("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+
+  return `${proto}://${host.split(",")[0]?.trim()}`;
+}

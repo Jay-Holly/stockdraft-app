@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
+import { buildInviteLinkPath } from "@/lib/app-url";
 
 export function HumanLeagueInvitePanel({
   leagueId,
   leagueName,
   inviteLink,
+  inviteToken,
   isCommissioner,
   memberCount,
   playerCount,
@@ -16,12 +18,30 @@ export function HumanLeagueInvitePanel({
   leagueId: string;
   leagueName?: string;
   inviteLink: string | null;
+  inviteToken?: string | null;
   isCommissioner: boolean;
   memberCount?: number;
   playerCount?: number;
   compact?: boolean;
 }) {
   const router = useRouter();
+  const [shareLink, setShareLink] = useState(inviteLink);
+  const resolvedInviteToken = useMemo(() => {
+    if (inviteToken) return inviteToken;
+    if (!inviteLink) return null;
+    const match = inviteLink.match(
+      /\/leagues\/join\/([0-9a-f-]{36})/i
+    );
+    return match?.[1] ?? null;
+  }, [inviteToken, inviteLink]);
+
+  useEffect(() => {
+    if (!resolvedInviteToken || typeof window === "undefined") {
+      setShareLink(inviteLink);
+      return;
+    }
+    setShareLink(`${window.location.origin}${buildInviteLinkPath(resolvedInviteToken)}`);
+  }, [resolvedInviteToken, inviteLink]);
   const [busy, setBusy] = useState<"cancel" | "regenerate" | "delete" | null>(
     null
   );
@@ -93,8 +113,8 @@ export function HumanLeagueInvitePanel({
   }
 
   function copyLink() {
-    if (!inviteLink) return;
-    void navigator.clipboard.writeText(inviteLink);
+    if (!shareLink) return;
+    void navigator.clipboard.writeText(shareLink);
   }
 
   const spotsOpen =
@@ -102,7 +122,7 @@ export function HumanLeagueInvitePanel({
       ? Math.max(playerCount - memberCount, 0)
       : null;
 
-  if (!isCommissioner && !inviteLink) {
+  if (!isCommissioner && !shareLink) {
     return null;
   }
 
@@ -112,7 +132,7 @@ export function HumanLeagueInvitePanel({
         compact ? "p-3" : "p-4"
       }`}
     >
-      {inviteLink ? (
+      {shareLink ? (
         <>
           <p className="text-xs text-muted">
             {spotsOpen != null && playerCount != null ? (
@@ -129,7 +149,7 @@ export function HumanLeagueInvitePanel({
             )}
           </p>
           <p className="text-[0.6875rem] text-gold break-all font-mono">
-            {inviteLink}
+            {shareLink}
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
