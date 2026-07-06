@@ -12,6 +12,7 @@ import {
 } from "@/lib/matchup/schedule";
 import { resolveSeasonSettings } from "@/lib/season/calendar";
 import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
+import { backfillFinalizeAtForLeague } from "@/lib/matchup/finalize-week";
 import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
 
 async function createSeedSupabase(): Promise<SupabaseClient> {
@@ -206,6 +207,8 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
   if (activate.error) {
     return { seeded: true, gameCount: schedule.length, error: activate.error };
   }
+
+  await backfillFinalizeAtForLeague(leagueId);
 
   return { seeded: true, gameCount: schedule.length };
 }

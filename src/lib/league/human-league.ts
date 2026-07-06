@@ -45,6 +45,7 @@ export type HumanLeagueInvitePreview = {
   status: string;
   opponentType: string;
   formatType: string;
+  scheduledDraftAt: string | null;
 };
 
 export type PendingHumanLeagueInvite = {
@@ -139,6 +140,7 @@ export async function getLeagueInvitePreview(
     status: row.status,
     opponentType: row.opponent_type,
     formatType: row.format_type,
+    scheduledDraftAt: row.scheduled_draft_at ?? null,
   };
 }
 
@@ -216,14 +218,6 @@ export async function createHumanLeague(
   if (!teamName) return { error: "Team name is required." };
   if (teamName.length > 40) {
     return { error: "Team name must be 40 characters or fewer." };
-  }
-
-  if (
-    config.visibility === "private" &&
-    config.opponentType === "all_human" &&
-    (!inviteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail))
-  ) {
-    return { error: "A valid invite email is required." };
   }
 
   if (scheduledDraftAt) {

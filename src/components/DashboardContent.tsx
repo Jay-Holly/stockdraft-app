@@ -409,6 +409,8 @@ export function DashboardContent({
                     leagueName={item.league.name}
                     inviteLink={item.inviteLink}
                     isCommissioner={item.league.owner_user_id === profile.id}
+                    memberCount={item.memberCount}
+                    playerCount={item.league.player_count}
                     compact
                   />
                 )}
@@ -478,20 +480,35 @@ export function DashboardContent({
         activeHumanLeague.league.owner_user_id === profile.id && (
         <section className="bg-dark-card border border-amber-500/30 rounded-2xl p-6 space-y-4">
           <div>
-            <h2 className="text-lg font-semibold mb-2">Waiting for opponent</h2>
+            <h2 className="text-lg font-semibold mb-2">Waiting for players</h2>
             <p className="text-sm text-muted">
               Your league{" "}
               <span className="text-white font-medium">
                 {activeHumanLeague.league.name}
               </span>{" "}
-              will start the live draft as soon as player 2 joins via your invite
-              link.
+              needs all {activeHumanLeague.league.player_count} roster spots
+              filled before the live draft can begin
+              {activeHumanLeague.league.scheduled_draft_at
+                ? ` at ${new Date(
+                    activeHumanLeague.league.scheduled_draft_at
+                  ).toLocaleString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    timeZoneName: "short",
+                  })}`
+                : ""}
+              . Share your invite link below.
             </p>
           </div>
           <HumanLeagueInvitePanel
             leagueId={activeHumanLeague.league.id}
             leagueName={activeHumanLeague.league.name}
             inviteLink={activeHumanLeague.inviteLink}
+            memberCount={activeHumanLeague.memberCount}
+            playerCount={activeHumanLeague.league.player_count}
             isCommissioner
           />
         </section>

@@ -5,6 +5,20 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import type { HumanLeagueInvitePreview } from "@/lib/league/human-league";
 
+function formatScheduledDraftAt(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
 
@@ -102,10 +116,24 @@ export function JoinLeaguePanel({
           <span className="text-white font-medium">{preview.commissionerTeam}</span>
         </p>
         <p className="text-sm text-muted">
+          {spotsLeft > 0
+            ? `${spotsLeft} roster spot${spotsLeft === 1 ? "" : "s"} open — `
+            : ""}
           {preview.memberCount} of {preview.playerCount} players joined ·{" "}
           {preview.formatType === "standard" ? "Standard" : "Sports League"} ·{" "}
           {preview.opponentType === "all_human" ? "All Human" : preview.opponentType}
         </p>
+        {preview.scheduledDraftAt && (
+          <p className="text-sm text-muted">
+            Scheduled draft:{" "}
+            <span className="text-white font-medium">
+              {formatScheduledDraftAt(preview.scheduledDraftAt)}
+            </span>
+            {preview.opponentType === "all_human"
+              ? " — begins once all roster spots are filled."
+              : null}
+          </p>
+        )}
       </div>
 
       {canEnterDraft ? (
@@ -125,7 +153,7 @@ export function JoinLeaguePanel({
         <div className="space-y-3">
           <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-sm text-muted">
             You&apos;re already on the roster. Waiting for the league to fill and
-            start the draft.
+            reach the scheduled draft time.
           </div>
           <Button
             variant="secondary"
@@ -139,7 +167,7 @@ export function JoinLeaguePanel({
         preview.status === "waiting" && !isFull ? (
           <div className="space-y-3">
             <p className="text-sm text-muted">
-              Sign in or create an account to join as player 2.
+              Sign in or create an account to join this league.
             </p>
             <Button
               variant="primary"

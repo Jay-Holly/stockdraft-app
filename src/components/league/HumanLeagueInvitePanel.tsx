@@ -9,12 +9,16 @@ export function HumanLeagueInvitePanel({
   leagueName,
   inviteLink,
   isCommissioner,
+  memberCount,
+  playerCount,
   compact = false,
 }: {
   leagueId: string;
   leagueName?: string;
   inviteLink: string | null;
   isCommissioner: boolean;
+  memberCount?: number;
+  playerCount?: number;
   compact?: boolean;
 }) {
   const router = useRouter();
@@ -93,6 +97,11 @@ export function HumanLeagueInvitePanel({
     void navigator.clipboard.writeText(inviteLink);
   }
 
+  const spotsOpen =
+    memberCount != null && playerCount != null
+      ? Math.max(playerCount - memberCount, 0)
+      : null;
+
   if (!isCommissioner && !inviteLink) {
     return null;
   }
@@ -106,7 +115,18 @@ export function HumanLeagueInvitePanel({
       {inviteLink ? (
         <>
           <p className="text-xs text-muted">
-            Share this invite link with your opponent:
+            {spotsOpen != null && playerCount != null ? (
+              <>
+                Share this invite link — {spotsOpen} of {playerCount} roster spot
+                {spotsOpen === 1 ? "" : "s"} open. Anyone with the link can join
+                until the league is full.
+              </>
+            ) : (
+              <>
+                Share this invite link with friends. Anyone with the link can join
+                until all roster spots are filled.
+              </>
+            )}
           </p>
           <p className="text-[0.6875rem] text-gold break-all font-mono">
             {inviteLink}

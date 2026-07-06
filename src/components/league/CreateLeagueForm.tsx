@@ -83,14 +83,13 @@ export function CreateLeagueForm({
   const router = useRouter();
   const [formatType, setFormatType] = useState<LeagueFormatType>("standard");
   const [sportsLeagueId, setSportsLeagueId] = useState("sdfl");
-  const [playerCount, setPlayerCount] = useState<LeaguePlayerCount>(2);
+  const [playerCount, setPlayerCount] = useState<LeaguePlayerCount>(4);
   const [visibility, setVisibility] = useState<LeagueVisibility>("private");
   const [opponentType, setOpponentType] = useState<LeagueOpponentType>("all_human");
   const [scoringMode, setScoringMode] =
     useState<LeagueScoringMode>("percent_gain");
   const [leagueName, setLeagueName] = useState("");
   const [teamName, setTeamName] = useState(defaultTeamName);
-  const [inviteEmail, setInviteEmail] = useState("");
   const [scheduledDraftAt, setScheduledDraftAt] = useState("");
   const [draftOrderMethod, setDraftOrderMethod] =
     useState<DraftOrderMethodSetting>("random_shuffle");
@@ -109,7 +108,6 @@ export function CreateLeagueForm({
       scoringMode,
       leagueName,
       teamName,
-      inviteEmail,
       scheduledDraftAt: scheduledDraftAt
         ? new Date(scheduledDraftAt).toISOString()
         : null,
@@ -125,7 +123,6 @@ export function CreateLeagueForm({
       scoringMode,
       leagueName,
       teamName,
-      inviteEmail,
       scheduledDraftAt,
       draftOrderMethod,
     ]
@@ -133,8 +130,10 @@ export function CreateLeagueForm({
 
   const supported = isHumanLeagueSupported(config);
   const needsSchedule = requiresScheduledDraft(config);
-  const needsInviteEmail =
+  const usesShareableInvite =
     config.visibility === "private" && config.opponentType === "all_human";
+  const inviteSlotsRemaining = Math.max(playerCount - 1, 0);
+  const allHumanLeague = config.opponentType === "all_human";
   const playerCountOptions = playerCountsForFormat(formatType);
   const draftOrderOptions = (
     Object.keys(DRAFT_ORDER_METHOD_LABELS) as DraftOrderMethodSetting[]
@@ -191,11 +190,14 @@ export function CreateLeagueForm({
           <p className="text-sm text-muted">
             {inviteLink ? (
               <>
-                Share this invite link with{" "}
-                <span className="text-white font-medium">{inviteEmail}</span>.
-                {needsSchedule
-                  ? " The draft starts at your scheduled time — open slots fill with managers automatically."
-                  : " Once they join, the live draft starts automatically."}
+                Share this invite link with up to {inviteSlotsRemaining} friend
+                {inviteSlotsRemaining === 1 ? "" : "s"}. Anyone with the link can
+                join until all {playerCount} roster spots are filled.
+                {needsSchedule && allHumanLeague
+                  ? " The live draft begins at your scheduled time once the roster is full."
+                  : needsSchedule
+                    ? " The draft starts at your scheduled time — open slots fill with managers automatically."
+                    : " The live draft starts automatically once the league is full."}
               </>
             ) : (
               <>
@@ -246,7 +248,7 @@ export function CreateLeagueForm({
           if (value === "sports_league") {
             setPlayerCount(30);
           } else if (playerCount > 12) {
-            setPlayerCount(2);
+            setPlayerCount(4);
           }
         }}
         options={[
@@ -404,30 +406,23 @@ export function CreateLeagueForm({
               required={needsSchedule}
             />
             <p className="text-xs text-muted mt-1.5">
-              At this time, any empty roster spot is filled automatically so the
-              draft can start on schedule.
+              {allHumanLeague
+                ? "The live draft begins at this time once every roster spot is filled."
+                : "At this time, any empty roster spot is filled automatically so the draft can start on schedule."}
             </p>
           </div>
         )}
 
-        {needsInviteEmail && (
-          <div>
-            <label className="block text-sm font-semibold mb-1.5" htmlFor="inviteEmail">
-              Invite player 2 (email)
-            </label>
-            <input
-              id="inviteEmail"
-              type="email"
-              className={inputClass}
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="friend@example.com"
-              required
-            />
-            <p className="text-xs text-muted mt-1.5">
-              We&apos;ll show you a link to send manually — no email is sent automatically yet.
-            </p>
-          </div>
+        {usesShareableInvite && (
+          <p className="text-xs text-muted rounded-xl border border-dark-border bg-dark/40 px-4 py-3">
+            After you create the league, you&apos;ll get a shareable invite link
+            for up to {inviteSlotsRemaining} friend
+            {inviteSlotsRemaining === 1 ? "" : "s"}. Anyone with the link can
+            join until all {playerCount} roster spots are filled.
+            {needsSchedule
+              ? " Set a draft time below — the live draft begins once the roster is full and that time is reached."
+              : ""}
+          </p>
         )}
       </div>
 
@@ -454,7 +449,7 @@ export function CreateLeagueForm({
           className="flex-1"
           disabled={submitting || !supported}
         >
-          {submitting ? "Creating…" : supported ? "Create league" : "Coming soon"}
+          {submitting ? "Creating…" : "Create league"}
         </Button>
       </div>
     </form>

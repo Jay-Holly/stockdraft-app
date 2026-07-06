@@ -40,8 +40,9 @@ export default async function CreateLeaguePage() {
         <div>
           <h1 className="text-2xl font-bold">Create a league</h1>
           <p className="text-muted text-sm mt-1">
-            Configure your league. The 2-player private all-human path is live
-            today — other options are selectable for planning ahead.
+            Configure your league, set a draft time, then share an invite link so
+            friends can fill the roster. The live draft begins at your scheduled
+            time once every spot is taken.
           </p>
         </div>
 

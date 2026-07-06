@@ -45,6 +45,10 @@ export function playerCountsForFormat(
 }
 
 export function requiresScheduledDraft(config: CreateLeagueConfig): boolean {
+  // Multi-player private all-human leagues use a commissioner-set draft time.
+  if (config.visibility === "private" && config.opponentType === "all_human") {
+    return config.playerCount > 2;
+  }
   return (
     config.visibility === "public" ||
     config.opponentType !== "all_human" ||
@@ -71,11 +75,6 @@ export function isHumanLeagueSupported(config: CreateLeagueConfig): boolean {
     return false;
   }
 
-  if (config.visibility === "private" && config.opponentType === "all_human") {
-    if (config.playerCount !== 2) return false;
-    if (!config.inviteEmail?.trim()) return false;
-  }
-
   return true;
 }
 
@@ -100,22 +99,6 @@ export function unsupportedLeagueConfigMessage(config: CreateLeagueConfig): stri
 
   if (requiresScheduledDraft(config) && !config.scheduledDraftAt) {
     return "Set a scheduled draft date and time for this league.";
-  }
-
-  if (
-    config.visibility === "private" &&
-    config.opponentType === "all_human" &&
-    config.playerCount !== 2
-  ) {
-    return "Private all-human leagues currently support 2 players with an email invite.";
-  }
-
-  if (
-    config.visibility === "private" &&
-    config.opponentType === "all_human" &&
-    !config.inviteEmail?.trim()
-  ) {
-    return "A valid invite email is required for private head-to-head leagues.";
   }
 
   return "This league configuration is not available yet.";

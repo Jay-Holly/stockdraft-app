@@ -108,16 +108,16 @@ export async function maybeStartHumanLeagueDraft(
     .eq("league_id", leagueId);
 
   if ((finalCount ?? 0) < playerCount) {
-    if (scheduledAt && scheduledAt > now) {
+    if (scheduledAt && scheduledAt > now && !options?.force) {
+      return { started: false };
+    }
+    // All-human leagues wait quietly until every roster spot is filled.
+    if (!fillBots) {
       return { started: false };
     }
     return {
       error: `Waiting for ${playerCount - (finalCount ?? 0)} more player(s).`,
     };
-  }
-
-  if (!fillBots && (finalCount ?? 0) < playerCount) {
-    return { started: false };
   }
 
   const standingsResult = await ensureStandingsForLeagueMembers(leagueId);
