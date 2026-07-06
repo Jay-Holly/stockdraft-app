@@ -62,7 +62,6 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     body = await request.json();
   } catch {
-    console.error("[POST /api/leagues/join] 400 Invalid request body", { token });
     return NextResponse.json(
       { error: "Invalid request body" },
       { status: 400, headers: NO_STORE_HEADERS }
@@ -73,12 +72,6 @@ export async function POST(request: Request, context: RouteContext) {
   const result = await joinHumanLeagueByToken(user.id, token, teamName);
 
   if (result.error || !result.league) {
-    console.error("[POST /api/leagues/join] 400 join failed", {
-      token,
-      userId: user.id,
-      teamName,
-      error: result.error ?? "missing league in result",
-    });
     return NextResponse.json(
       { error: result.error },
       { status: 400, headers: NO_STORE_HEADERS }
