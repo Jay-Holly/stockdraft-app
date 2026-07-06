@@ -1,5 +1,6 @@
 import { createServerClient, type SetAllCookies } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveSafeRedirectPath } from "@/lib/auth/redirect-path";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -35,6 +36,10 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth";
     url.searchParams.set("mode", "login");
+    url.searchParams.set(
+      "next",
+      resolveSafeRedirectPath(`${pathname}${request.nextUrl.search}`)
+    );
     return NextResponse.redirect(url);
   }
 
@@ -42,12 +47,23 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth";
     url.searchParams.set("mode", "login");
+    url.searchParams.set(
+      "next",
+      resolveSafeRedirectPath(`${pathname}${request.nextUrl.search}`)
+    );
     return NextResponse.redirect(url);
   }
 
   if (pathname.startsWith("/auth") && user) {
+    const next = resolveSafeRedirectPath(
+      request.nextUrl.searchParams.get("next")
+    );
+    if (next !== "/dashboard") {
+      return NextResponse.redirect(new URL(next, request.url));
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

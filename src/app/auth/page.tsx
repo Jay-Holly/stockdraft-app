@@ -1,5 +1,6 @@
 import { AuthForm } from "@/components/AuthForm";
 import { Logo } from "@/components/Logo";
+import { resolveSafeRedirectPath } from "@/lib/auth/redirect-path";
 
 export default async function AuthPage({
   searchParams,
@@ -10,10 +11,7 @@ export default async function AuthPage({
   const isDayTrader = params.mode === "daytrader";
   const mode =
     params.mode === "login" ? "login" : "signup";
-  const redirectTo =
-    typeof params.next === "string" && params.next.startsWith("/")
-      ? params.next
-      : "/dashboard";
+  const redirectTo = resolveSafeRedirectPath(params.next);
 
   return (
     <div className="min-h-screen flex flex-col bg-dark">

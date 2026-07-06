@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { markDayTraderJoined } from "@/lib/profile/day-trader";
+import { resolveSafeRedirectPath } from "@/lib/auth/redirect-path";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = resolveSafeRedirectPath(searchParams.get("next"));
   const dayTrader = searchParams.get("daytrader") === "1";
 
   if (code) {
@@ -20,5 +21,10 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(`${origin}/auth?mode=login`);
+  const loginUrl = new URL("/auth", origin);
+  loginUrl.searchParams.set("mode", "login");
+  if (next !== "/dashboard") {
+    loginUrl.searchParams.set("next", next);
+  }
+  return NextResponse.redirect(loginUrl.toString());
 }
