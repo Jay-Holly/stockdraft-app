@@ -12,6 +12,9 @@ export default async function JoinLeaguePage({ params }: PageProps) {
   const preview = await getLeagueInvitePreview(token);
 
   if (!preview) {
+    console.error("[JoinLeaguePage] notFound — getLeagueInvitePreview returned null:", {
+      token,
+    });
     notFound();
   }
 

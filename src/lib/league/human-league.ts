@@ -127,6 +127,9 @@ export async function getLeagueInvitePreview(
 ): Promise<HumanLeagueInvitePreview | null> {
   const normalizedToken = token.trim();
   if (!INVITE_TOKEN_RE.test(normalizedToken)) {
+    console.error("[getLeagueInvitePreview] token failed UUID regex:", {
+      token: normalizedToken,
+    });
     return null;
   }
 
@@ -135,9 +138,21 @@ export async function getLeagueInvitePreview(
     p_token: normalizedToken,
   });
 
+  console.log("[getLeagueInvitePreview] rpc response:", {
+    token: normalizedToken,
+    error: error
+      ? { message: error.message, code: error.code, details: error.details }
+      : null,
+    dataType: data == null ? "null" : Array.isArray(data) ? "array" : typeof data,
+    dataLength: Array.isArray(data) ? data.length : undefined,
+    data,
+  });
+
   if (error || !data || (Array.isArray(data) && data.length === 0)) {
     if (error) {
-      console.error("get_league_invite_preview failed:", error.message);
+      console.error("[getLeagueInvitePreview] rpc error:", error.message);
+    } else {
+      console.error("[getLeagueInvitePreview] no rows returned for token:", normalizedToken);
     }
     return null;
   }
