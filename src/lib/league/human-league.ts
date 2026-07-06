@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { getLeagueDraftStateRow } from "@/lib/draft/live-draft";
 import { summarizePicks } from "@/lib/draft/engine";
@@ -430,7 +431,10 @@ export async function joinHumanLeagueByToken(
     return loadHumanLeagueById(preview.leagueId);
   }
 
-  const { data: leagueRow, error: leagueRowError } = await supabase
+  // Pre-join league reads use the service client — invitees are not league members yet,
+  // so user-scoped RLS blocks SELECT on leagues/league_members counts.
+  const service = createServiceClient();
+  const { data: leagueRow, error: leagueRowError } = await service
     .from("leagues")
     .select(
       "owner_user_id, status, player_count, visibility, opponent_type, scheduled_draft_at"
@@ -452,7 +456,7 @@ export async function joinHumanLeagueByToken(
     return { error: "This league is no longer accepting players." };
   }
 
-  const { count: memberCount, error: countError } = await supabase
+  const { count: memberCount, error: countError } = await service
     .from("league_members")
     .select("*", { count: "exact", head: true })
     .eq("league_id", preview.leagueId);
