@@ -175,6 +175,33 @@ export async function processDueScheduledDrafts(): Promise<{
   let processed = 0;
 
   for (const league of dueLeagues ?? []) {
+    const { data: leagueRow } = await supabase
+      .from("leagues")
+      .select("player_count, visibility, opponent_type")
+      .eq("id", league.id)
+      .maybeSingle();
+
+    if (leagueRow) {
+      const fillBots = shouldFillEmptySlotsWithBots({
+        visibility: leagueRow.visibility as "private" | "public",
+        opponentType: leagueRow.opponent_type as "all_ai" | "all_human" | "mixed",
+      });
+
+      if (!fillBots) {
+        const { count: memberCount } = await supabase
+          .from("league_members")
+          .select("*", { count: "exact", head: true })
+          .eq("league_id", league.id);
+
+        const playerCount = leagueRow.player_count ?? 2;
+        if ((memberCount ?? 0) < playerCount) {
+          // All-human leagues stay open for joins until every roster spot is filled,
+          // even if the scheduled draft time has passed.
+          continue;
+        }
+      }
+    }
+
     const result = await maybeStartHumanLeagueDraft(league.id, { force: true });
     if (result.error) {
       errors.push(result.error);

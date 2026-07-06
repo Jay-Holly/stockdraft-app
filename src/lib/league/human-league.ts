@@ -461,6 +461,8 @@ export async function joinHumanLeagueByToken(
     return { error: "You are already the commissioner of this league." };
   }
 
+  // Join while status is waiting — a passed scheduled_draft_at does not invalidate
+  // the invite when the roster is still filling (all-human leagues).
   if (leagueRow.status !== "waiting") {
     return { error: "This league is no longer accepting players." };
   }

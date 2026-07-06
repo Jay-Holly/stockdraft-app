@@ -72,8 +72,17 @@ export function JoinLeaguePanel({
   const isFull = spotsLeft <= 0;
   const leagueStarted =
     preview.status === "drafting" || preview.status === "active";
-  const canJoin =
-    preview.status === "waiting" && !isFull && !isMember && isAuthenticated;
+  // Join eligibility depends only on league status and roster capacity — not whether
+  // scheduled_draft_at has passed while the league is still waiting.
+  const acceptsJoins = preview.status === "waiting" && !isFull;
+  const canJoin = acceptsJoins && !isMember && isAuthenticated;
+  const scheduledDraftDate = preview.scheduledDraftAt
+    ? new Date(preview.scheduledDraftAt)
+    : null;
+  const scheduledDraftPassed =
+    scheduledDraftDate != null &&
+    !Number.isNaN(scheduledDraftDate.getTime()) &&
+    scheduledDraftDate.getTime() <= Date.now();
   const canEnterDraft = isMember && leagueStarted;
 
   async function handleJoin(e: React.FormEvent) {
@@ -125,13 +134,26 @@ export function JoinLeaguePanel({
         </p>
         {preview.scheduledDraftAt && (
           <p className="text-sm text-muted">
-            Scheduled draft:{" "}
-            <span className="text-white font-medium">
-              {formatScheduledDraftAt(preview.scheduledDraftAt)}
-            </span>
-            {preview.opponentType === "all_human"
-              ? " — begins once all roster spots are filled."
-              : null}
+            {acceptsJoins && scheduledDraftPassed ? (
+              <>
+                Originally scheduled for{" "}
+                <span className="text-white font-medium">
+                  {formatScheduledDraftAt(preview.scheduledDraftAt)}
+                </span>
+                {" — "}
+                still accepting players until all roster spots are filled.
+              </>
+            ) : (
+              <>
+                Scheduled draft:{" "}
+                <span className="text-white font-medium">
+                  {formatScheduledDraftAt(preview.scheduledDraftAt)}
+                </span>
+                {preview.opponentType === "all_human"
+                  ? " — begins once all roster spots are filled."
+                  : null}
+              </>
+            )}
           </p>
         )}
       </div>
@@ -164,7 +186,7 @@ export function JoinLeaguePanel({
           </Button>
         </div>
       ) : !canJoin && !isAuthenticated ? (
-        preview.status === "waiting" && !isFull ? (
+        acceptsJoins ? (
           <div className="space-y-3">
             <p className="text-sm text-muted">
               Sign in or create an account to join this league.
