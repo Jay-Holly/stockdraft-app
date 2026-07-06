@@ -6,6 +6,8 @@ import { JoinLeaguePanel } from "@/components/league/JoinLeaguePanel";
 import { Logo } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 type PageProps = { params: Promise<{ token: string }> };
 
