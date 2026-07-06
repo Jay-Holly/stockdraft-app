@@ -53,15 +53,36 @@ export function JoinLeaguePanel({
     try {
       const res = await fetch(`/api/leagues/join/${token}`);
       const data = await res.json();
+      console.log("[JoinLeaguePanel] refreshInviteState", {
+        token,
+        ok: res.ok,
+        status: res.status,
+        hasPreview: Boolean(data.preview),
+        data,
+      });
       if (!res.ok || !data.preview) return;
       setInviteState({
         preview: data.preview as HumanLeagueInvitePreview,
         isMember: Boolean(data.isMember),
       });
-    } catch {
+    } catch (error) {
+      console.error("[JoinLeaguePanel] refreshInviteState failed — keeping last snapshot", {
+        token,
+        error,
+      });
       // Keep the last known invite snapshot if refresh fails.
     }
   }, [token]);
+
+  useEffect(() => {
+    console.log("[JoinLeaguePanel] mount", {
+      token,
+      initialPreview,
+      initialIsMember,
+      isAuthenticated,
+      defaultTeamName,
+    });
+  }, [token, initialPreview, initialIsMember, isAuthenticated, defaultTeamName]);
 
   useEffect(() => {
     void refreshInviteState();
