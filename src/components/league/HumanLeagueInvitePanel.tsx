@@ -5,6 +5,20 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { buildInviteLinkPath } from "@/lib/app-url";
 
+function formatScheduledDraftAt(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
 export function HumanLeagueInvitePanel({
   leagueId,
   leagueName,
@@ -13,6 +27,7 @@ export function HumanLeagueInvitePanel({
   isCommissioner,
   memberCount,
   playerCount,
+  scheduledDraftAt,
   compact = false,
 }: {
   leagueId: string;
@@ -22,6 +37,7 @@ export function HumanLeagueInvitePanel({
   isCommissioner: boolean;
   memberCount?: number;
   playerCount?: number;
+  scheduledDraftAt?: string | null;
   compact?: boolean;
 }) {
   const router = useRouter();
@@ -121,6 +137,8 @@ export function HumanLeagueInvitePanel({
     memberCount != null && playerCount != null
       ? Math.max(playerCount - memberCount, 0)
       : null;
+  const isFull = spotsOpen === 0 && playerCount != null;
+  const formattedDraftTime = formatScheduledDraftAt(scheduledDraftAt);
 
   if (!isCommissioner && !shareLink) {
     return null;
@@ -135,7 +153,22 @@ export function HumanLeagueInvitePanel({
       {shareLink ? (
         <>
           <p className="text-xs text-muted">
-            {spotsOpen != null && playerCount != null ? (
+            {isFull ? (
+              <>
+                All {playerCount} players have joined! The live draft begins
+                {formattedDraftTime ? (
+                  <>
+                    {" "}
+                    <span className="text-white font-medium">
+                      {formattedDraftTime}
+                    </span>
+                  </>
+                ) : (
+                  " soon"
+                )}
+                . Make sure everyone is online and ready.
+              </>
+            ) : spotsOpen != null && playerCount != null ? (
               <>
                 Share this invite link — {spotsOpen} of {playerCount} roster spot
                 {spotsOpen === 1 ? "" : "s"} open. Anyone with the link can join

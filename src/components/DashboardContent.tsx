@@ -412,6 +412,7 @@ export function DashboardContent({
                     isCommissioner={item.league.owner_user_id === profile.id}
                     memberCount={item.memberCount}
                     playerCount={item.league.player_count}
+                    scheduledDraftAt={item.league.scheduled_draft_at}
                     compact
                   />
                 )}
@@ -483,25 +484,52 @@ export function DashboardContent({
           <div>
             <h2 className="text-lg font-semibold mb-2">Waiting for players</h2>
             <p className="text-sm text-muted">
-              Your league{" "}
-              <span className="text-white font-medium">
-                {activeHumanLeague.league.name}
-              </span>{" "}
-              needs all {activeHumanLeague.league.player_count} roster spots
-              filled before the live draft can begin
-              {activeHumanLeague.league.scheduled_draft_at
-                ? ` at ${new Date(
-                    activeHumanLeague.league.scheduled_draft_at
-                  ).toLocaleString(undefined, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                    timeZoneName: "short",
-                  })}`
-                : ""}
-              . Share your invite link below.
+              {activeHumanLeague.memberCount >= activeHumanLeague.league.player_count ? (
+                <>
+                  Your league{" "}
+                  <span className="text-white font-medium">
+                    {activeHumanLeague.league.name}
+                  </span>{" "}
+                  is full — all {activeHumanLeague.league.player_count} players have
+                  joined. Share the details below with your league and make sure
+                  everyone is online and ready for the live draft
+                  {activeHumanLeague.league.scheduled_draft_at
+                    ? ` at ${new Date(
+                        activeHumanLeague.league.scheduled_draft_at
+                      ).toLocaleString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                        timeZoneName: "short",
+                      })}`
+                    : ""}
+                  .
+                </>
+              ) : (
+                <>
+                  Your league{" "}
+                  <span className="text-white font-medium">
+                    {activeHumanLeague.league.name}
+                  </span>{" "}
+                  needs all {activeHumanLeague.league.player_count} roster spots
+                  filled before the live draft can begin
+                  {activeHumanLeague.league.scheduled_draft_at
+                    ? ` at ${new Date(
+                        activeHumanLeague.league.scheduled_draft_at
+                      ).toLocaleString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                        timeZoneName: "short",
+                      })}`
+                    : ""}
+                  . Share your invite link below.
+                </>
+              )}
             </p>
           </div>
           <HumanLeagueInvitePanel
@@ -511,6 +539,7 @@ export function DashboardContent({
             inviteToken={activeHumanLeague.inviteToken}
             memberCount={activeHumanLeague.memberCount}
             playerCount={activeHumanLeague.league.player_count}
+            scheduledDraftAt={activeHumanLeague.league.scheduled_draft_at}
             isCommissioner
           />
         </section>
