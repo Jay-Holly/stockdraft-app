@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getLeagueInvitePreview } from "@/lib/league/human-league";
+import { JoinLeaguePanel } from "@/components/league/JoinLeaguePanel";
 import { Logo } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 type PageProps = { params: Promise<{ token: string }> };
 
@@ -33,7 +36,18 @@ export default async function JoinLeaguePage({ params }: PageProps) {
   if (!preview) {
     return (
       <JoinPageShell>
-        <div>preview is null for token: {token}</div>
+        <div className="rounded-2xl border border-dark-border bg-dark-card p-5 space-y-3">
+          <h1 className="text-xl font-bold">Invite not found</h1>
+          <p className="text-sm text-muted">
+            This invite link is invalid or has expired.
+          </p>
+          <Link
+            href="/dashboard"
+            className="inline-block text-sm text-gold hover:text-white transition-colors"
+          >
+            Back to dashboard
+          </Link>
+        </div>
       </JoinPageShell>
     );
   }
@@ -45,7 +59,6 @@ export default async function JoinLeaguePage({ params }: PageProps) {
 
   let defaultTeamName = "My Team";
   let initialIsMember = false;
-  let profileTeamName: string | null = null;
 
   if (user) {
     const { data: profile } = await supabase
@@ -54,7 +67,6 @@ export default async function JoinLeaguePage({ params }: PageProps) {
       .eq("id", user.id)
       .single();
 
-    profileTeamName = profile?.team_name ?? null;
     defaultTeamName = profile?.team_name?.trim() || defaultTeamName;
 
     const { data: membership } = await supabase
@@ -69,19 +81,13 @@ export default async function JoinLeaguePage({ params }: PageProps) {
 
   return (
     <JoinPageShell>
-      <div className="space-y-2">
-        <div>
-          League: {preview.leagueName} — Status: {preview.status}
-        </div>
-        <div>Authenticated: {user ? "yes" : "no"}</div>
-        {user ? <div>User ID: {user.id}</div> : null}
-        <div>Default team name: {defaultTeamName}</div>
-        {profileTeamName ? <div>Profile team name: {profileTeamName}</div> : null}
-        <div>Is member: {initialIsMember ? "yes" : "no"}</div>
-        <div>
-          Roster: {preview.memberCount} / {preview.playerCount}
-        </div>
-      </div>
+      <JoinLeaguePanel
+        token={token}
+        preview={preview}
+        defaultTeamName={defaultTeamName}
+        isAuthenticated={Boolean(user)}
+        initialIsMember={initialIsMember}
+      />
     </JoinPageShell>
   );
 }
