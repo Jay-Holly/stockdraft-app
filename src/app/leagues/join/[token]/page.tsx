@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getLeagueInvitePreview } from "@/lib/league/human-league";
@@ -13,12 +12,22 @@ type PageProps = { params: Promise<{ token: string }> };
 
 const LOG = "[JoinLeaguePage]";
 
-function isNextNotFoundError(error: unknown): boolean {
+function JoinPageShell({ children }: { children: React.ReactNode }) {
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "digest" in error &&
-    (error as { digest?: string }).digest === "NEXT_NOT_FOUND"
+    <div className="min-h-screen flex flex-col">
+      <header className="px-4 py-4 border-b border-dark-border">
+        <div className="max-w-lg mx-auto flex items-center justify-between">
+          <Logo size="sm" />
+          <Link
+            href="/dashboard"
+            className="text-xs text-muted hover:text-gold transition-colors"
+          >
+            Dashboard
+          </Link>
+        </div>
+      </header>
+      <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">{children}</main>
+    </div>
   );
 }
 
@@ -46,12 +55,28 @@ export default async function JoinLeaguePage({ params }: PageProps) {
     });
 
     if (!preview) {
-      console.error(`${LOG} PATH → notFound()`, {
+      console.error(`${LOG} PATH → invite-not-found UI`, {
         reason: "getLeagueInvitePreview returned falsy",
         token,
         preview,
       });
-      notFound();
+
+      return (
+        <JoinPageShell>
+          <div className="rounded-2xl border border-dark-border bg-dark-card p-5 space-y-3">
+            <h1 className="text-xl font-bold">Invite not found</h1>
+            <p className="text-sm text-muted">
+              This invite link is invalid or has expired.
+            </p>
+            <Link
+              href="/dashboard"
+              className="inline-block text-sm text-gold hover:text-white transition-colors"
+            >
+              Back to dashboard
+            </Link>
+          </div>
+        </JoinPageShell>
+      );
     }
 
     console.log(`${LOG} preview accepted`, {
@@ -134,39 +159,18 @@ export default async function JoinLeaguePage({ params }: PageProps) {
     console.log(`${LOG} PATH → return JSX`, renderProps);
 
     return (
-      <div className="min-h-screen flex flex-col">
-        <header className="px-4 py-4 border-b border-dark-border">
-          <div className="max-w-lg mx-auto flex items-center justify-between">
-            <Logo size="sm" />
-            <Link
-              href="/dashboard"
-              className="text-xs text-muted hover:text-gold transition-colors"
-            >
-              Dashboard
-            </Link>
-          </div>
-        </header>
-
-        <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
-          <JoinLeaguePanel
-            token={token}
-            preview={preview}
-            defaultTeamName={defaultTeamName}
-            isAuthenticated={Boolean(user)}
-            initialIsMember={initialIsMember}
-          />
-        </main>
-      </div>
+      <JoinPageShell>
+        <JoinLeaguePanel
+          token={token}
+          preview={preview}
+          defaultTeamName={defaultTeamName}
+          isAuthenticated={Boolean(user)}
+          initialIsMember={initialIsMember}
+        />
+      </JoinPageShell>
     );
   } catch (error) {
-    if (isNextNotFoundError(error)) {
-      console.error(`${LOG} catch — rethrowing NEXT_NOT_FOUND from notFound()`, {
-        error,
-      });
-      throw error;
-    }
-
-    console.error(`${LOG} catch — unexpected error (NOT notFound path)`, {
+    console.error(`${LOG} catch — unexpected error`, {
       error,
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,

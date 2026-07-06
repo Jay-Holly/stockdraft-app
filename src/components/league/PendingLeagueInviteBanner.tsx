@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { PendingHumanLeagueInvite } from "@/lib/league/human-league";
 
 export function PendingLeagueInviteBanner({
@@ -24,12 +23,12 @@ export function PendingLeagueInviteBanner({
             </>
           ) : null}
           .{" "}
-          <Link
+          <a
             href={`/leagues/join/${invite.inviteToken}`}
             className="font-semibold underline underline-offset-2 hover:text-white transition-colors"
           >
             Join league
-          </Link>
+          </a>
         </p>
       ))}
     </div>
