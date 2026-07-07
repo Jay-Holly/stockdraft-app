@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
@@ -131,20 +132,22 @@ export default async function DashboardPage() {
       </header>
 
       <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
-        <DashboardContent
-          profile={profile as Profile}
-          email={user.email ?? ""}
-          draftComplete={draftComplete}
-          draftPicks={draftPicks}
-          leagues={aiLeagues}
-          humanLeagues={humanLeagues}
-          activeHumanLeague={activeHumanLeague ?? null}
-          activeLeagueId={activeLeagueId}
-          activeSummary={activeSummary}
-          scoringNotice={scoringNotice}
-          pendingInvites={pendingInvites}
-          dayTrader={dayTrader}
-        />
+        <Suspense fallback={<p className="text-muted text-sm py-12 text-center">Loading dashboard…</p>}>
+          <DashboardContent
+            profile={profile as Profile}
+            email={user.email ?? ""}
+            draftComplete={draftComplete}
+            draftPicks={draftPicks}
+            leagues={aiLeagues}
+            humanLeagues={humanLeagues}
+            activeHumanLeague={activeHumanLeague ?? null}
+            activeLeagueId={activeLeagueId}
+            activeSummary={activeSummary}
+            scoringNotice={scoringNotice}
+            pendingInvites={pendingInvites}
+            dayTrader={dayTrader}
+          />
+        </Suspense>
       </main>
     </div>
   );

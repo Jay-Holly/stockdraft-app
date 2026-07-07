@@ -1,8 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   AVATAR_COLORS,
@@ -26,6 +26,7 @@ import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInvi
 import { DayTraderDashboardCard } from "@/components/day-trader/DayTraderDashboardCard";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
+import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import type { BotPersonality } from "@/lib/league/bots";
 import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
@@ -162,6 +163,7 @@ export function DashboardContent({
   dayTrader?: DayTraderDashboardSummary;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [username, setUsername] = useState(profile.username);
   const [teamName, setTeamName] = useState(profile.team_name);
   const [avatarColor, setAvatarColor] = useState<AvatarColorId>(
@@ -172,12 +174,22 @@ export function DashboardContent({
   const [switchingLeagueId, setSwitchingLeagueId] = useState<string | null>(
     null
   );
-  const [deletingLeagueId, setDeletingLeagueId] = useState<string | null>(
-    null
-  );
+  const [deleteTarget, setDeleteTarget] = useState<{
+    leagueId: string;
+    leagueName: string;
+    supportCode: string;
+  } | null>(null);
   const [showBotSelection, setShowBotSelection] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [leagueError, setLeagueError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("deleted") !== "1") return;
+    setMessage("League deleted.");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("deleted");
+    router.replace(url.pathname + url.search);
+  }, [router, searchParams]);
 
   const supabase = createClient();
   const avatarHex = getAvatarHex(avatarColor);
@@ -235,34 +247,6 @@ export function DashboardContent({
     }
   }
 
-  async function handleDeleteLeague(leagueId: string) {
-    const confirmed = window.confirm(
-      "Are you sure? This will permanently delete this league and all associated draft picks, matchups, and standings."
-    );
-    if (!confirmed) return;
-
-    setDeletingLeagueId(leagueId);
-    setLeagueError(null);
-
-    try {
-      const res = await fetch("/api/leagues", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leagueId }),
-      });
-      const data = (await res.json()) as { error?: string };
-
-      if (!res.ok) {
-        setLeagueError(data.error ?? "Could not delete league");
-        return;
-      }
-
-      router.refresh();
-    } finally {
-      setDeletingLeagueId(null);
-    }
-  }
-
   async function handleCreateLeague(
     botPersonalities: BotPersonality[],
     leagueTeamName: string
@@ -297,12 +281,56 @@ export function DashboardContent({
     year: "numeric",
   });
 
+  function openDeleteLeagueModal(league: {
+    id: string;
+    name: string;
+    support_code: string;
+  }) {
+    setDeleteTarget({
+      leagueId: league.id,
+      leagueName: league.name,
+      supportCode: league.support_code,
+    });
+  }
+
+  function renderOwnerDeleteButton(
+    league: { id: string; name: string; support_code: string; owner_user_id: string | null },
+    busy: boolean
+  ) {
+    if (league.owner_user_id !== profile.id) return null;
+
+    return (
+      <Button
+        variant="ghost"
+        className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 ml-auto"
+        disabled={busy}
+        onClick={() => openDeleteLeagueModal(league)}
+      >
+        Delete League
+      </Button>
+    );
+  }
+
   const activeLeagueItem = leagues.find(
     (item) => item.league.id === activeLeagueId
   );
 
   return (
     <div className="space-y-6">
+      <DeleteLeagueModal
+        open={deleteTarget != null}
+        leagueId={deleteTarget?.leagueId ?? null}
+        leagueName={deleteTarget?.leagueName ?? ""}
+        supportCode={deleteTarget?.supportCode ?? ""}
+        onClose={() => setDeleteTarget(null)}
+      />
+
+      {message && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          {message}
+        </div>
+      )}
+
       {scoringNotice && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           {scoringNotice}
@@ -389,6 +417,8 @@ export function DashboardContent({
             const isActive = item.league.id === activeLeagueId;
             const waiting = item.league.status === "waiting";
             const enterDraft = !item.humanDraftComplete;
+            const busy = switchingLeagueId === item.league.id;
+            const isOwner = item.league.owner_user_id === profile.id;
 
             return (
               <div
@@ -400,6 +430,9 @@ export function DashboardContent({
                 }`}
               >
                 <div>
+                  <div className="mb-2">
+                    <LeagueSupportId code={item.league.support_code} />
+                  </div>
                   <p className="font-semibold truncate">{item.humanTeamName}</p>
                   <p className="text-xs text-muted truncate">{item.league.name}</p>
                   <p className="text-xs text-muted capitalize mt-1">
@@ -415,7 +448,7 @@ export function DashboardContent({
                     leagueName={item.league.name}
                     inviteLink={item.inviteLink}
                     inviteToken={item.inviteToken}
-                    isCommissioner={item.league.owner_user_id === profile.id}
+                    isCommissioner={isOwner}
                     memberCount={item.memberCount}
                     playerCount={item.league.player_count}
                     scheduledDraftAt={item.league.scheduled_draft_at}
@@ -434,12 +467,12 @@ export function DashboardContent({
                   />
                 )}
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {!isActive && (
                     <Button
                       variant="secondary"
                       className="flex-1 text-sm"
-                      disabled={switchingLeagueId === item.league.id}
+                      disabled={busy}
                       onClick={() => void setActiveLeague(item.league.id)}
                     >
                       Select
@@ -504,6 +537,7 @@ export function DashboardContent({
                       </Button>
                     </div>
                   )}
+                  {renderOwnerDeleteButton(item.league, busy)}
                 </div>
               </div>
             );
@@ -590,19 +624,26 @@ export function DashboardContent({
       {activeHumanLeague?.humanDraftComplete && (
         <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
           <div>
+            <div className="mb-2">
+              <LeagueSupportId code={activeHumanLeague.league.support_code} />
+            </div>
             <h2 className="text-lg font-semibold">{activeHumanLeague.humanTeamName}</h2>
             <p className="text-muted text-sm">{activeHumanLeague.league.name}</p>
             <p className="text-muted text-xs capitalize mt-1">
               {leagueStatusLabel(activeHumanLeague.league.status)} · Draft complete
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button href="/league" variant="primary" className="flex-1">
               League hub
             </Button>
             <Button href="/matchups" variant="secondary" className="flex-1">
               Matchups
             </Button>
+            {renderOwnerDeleteButton(
+              activeHumanLeague.league,
+              switchingLeagueId === activeHumanLeague.league.id
+            )}
           </div>
         </section>
       )}
@@ -619,10 +660,7 @@ export function DashboardContent({
 
           {leagues.map((item) => {
             const isActive = item.league.id === activeLeagueId;
-            const busy =
-              switchingLeagueId === item.league.id ||
-              deletingLeagueId === item.league.id;
-            const isDeleting = deletingLeagueId === item.league.id;
+            const busy = switchingLeagueId === item.league.id;
 
             return (
               <div
@@ -730,14 +768,7 @@ export function DashboardContent({
                       </Button>
                     </>
                   )}
-                  <Button
-                    variant="ghost"
-                    className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 ml-auto"
-                    disabled={busy}
-                    onClick={() => void handleDeleteLeague(item.league.id)}
-                  >
-                    {isDeleting ? "Deleting…" : "Delete League"}
-                  </Button>
+                  {renderOwnerDeleteButton(item.league, busy)}
                 </div>
               </div>
             );
@@ -858,6 +889,10 @@ export function DashboardContent({
                 upcoming
               />
             )}
+          {renderOwnerDeleteButton(
+            activeSummary.league,
+            switchingLeagueId === activeSummary.league.id
+          )}
         </section>
       )}
 

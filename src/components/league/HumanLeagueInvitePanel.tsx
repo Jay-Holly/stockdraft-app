@@ -58,9 +58,7 @@ export function HumanLeagueInvitePanel({
     }
     setShareLink(`${window.location.origin}${buildInviteLinkPath(resolvedInviteToken)}`);
   }, [resolvedInviteToken, inviteLink]);
-  const [busy, setBusy] = useState<"cancel" | "regenerate" | "delete" | null>(
-    null
-  );
+  const [busy, setBusy] = useState<"cancel" | "regenerate" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function runInviteAction(action: "cancel" | "regenerate") {
@@ -94,38 +92,6 @@ export function HumanLeagueInvitePanel({
     );
     if (!confirmed) return;
     await runInviteAction("cancel");
-  }
-
-  async function handleDeleteLeague() {
-    const label = leagueName ? `"${leagueName}"` : "this league";
-    const confirmed = window.confirm(
-      `Permanently delete ${label}? This removes the league, draft setup, and invite for all players. This cannot be undone.`
-    );
-    if (!confirmed) return;
-
-    setBusy("delete");
-    setError(null);
-
-    try {
-      const res = await fetch("/api/leagues", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leagueId }),
-      });
-      const data = (await res.json()) as { error?: string };
-
-      if (!res.ok) {
-        setError(data.error ?? "Could not delete league.");
-        return;
-      }
-
-      router.push("/dashboard");
-      router.refresh();
-    } catch {
-      setError("Network error — try again.");
-    } finally {
-      setBusy(null);
-    }
   }
 
   function copyLink() {
@@ -220,23 +186,6 @@ export function HumanLeagueInvitePanel({
           </Button>
         </>
       ) : null}
-
-      {isCommissioner && (
-        <div className="pt-2 border-t border-dark-border">
-          <Button
-            variant="ghost"
-            className="w-full text-sm text-red-400 border border-red-500/30 hover:border-red-400/50"
-            disabled={busy !== null}
-            onClick={() => void handleDeleteLeague()}
-          >
-            {busy === "delete" ? "Deleting…" : "Delete league"}
-          </Button>
-          <p className="text-[0.6875rem] text-muted mt-2">
-            Deletes the entire league permanently. Use &ldquo;Cancel invite
-            link&rdquo; above if you only want to invalidate the current URL.
-          </p>
-        </div>
-      )}
 
       {error && <p className="text-xs text-red-400">{error}</p>}
     </div>

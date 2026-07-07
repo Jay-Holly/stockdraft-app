@@ -586,6 +586,7 @@ export async function loadLeaguePageData(
       leagueSupportCode: league.support_code,
       leagueName: league.name,
       leagueStatus: league.status,
+      isLeagueOwner: league.owner_user_id === userId,
       scoringMode,
       currentWeek,
       humanRecord: {

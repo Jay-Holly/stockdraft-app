@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { startLiveDraft } from "@/lib/draft/live-draft";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { summarizePicks } from "@/lib/draft/engine";
@@ -278,7 +279,7 @@ export async function deleteAiLeagueForUser(
     return { error: "League not found." };
   }
 
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { error } = await supabase
     .from("leagues")
     .delete()

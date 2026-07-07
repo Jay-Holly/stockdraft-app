@@ -9,11 +9,14 @@ import {
 } from "@/lib/league/scoring-mode";
 import type { LeaguePageData } from "@/lib/roster/types";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
+import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
+import { Button } from "@/components/Button";
 
 export function LeaguePageContent() {
   const [data, setData] = useState<LeaguePageData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -82,15 +85,36 @@ export function LeaguePageContent() {
 
   return (
     <div className="space-y-4">
+      <DeleteLeagueModal
+        open={deleteOpen}
+        leagueId={data.leagueId}
+        leagueName={data.leagueName}
+        supportCode={data.leagueSupportCode}
+        onClose={() => setDeleteOpen(false)}
+      />
+
       <section className="season-card">
-        <div className="mb-2">
-          <LeagueSupportId code={data.leagueSupportCode} size="md" />
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="mb-2">
+              <LeagueSupportId code={data.leagueSupportCode} size="md" />
+            </div>
+            <h1 className="text-xl font-bold">{data.leagueName}</h1>
+            <p className="text-muted text-sm mt-1 capitalize">
+              Week {data.currentWeek} · {data.leagueStatus} ·{" "}
+              {scoringModeShortLabel(data.scoringMode)} matchups
+            </p>
+          </div>
+          {data.isLeagueOwner ? (
+            <Button
+              variant="ghost"
+              className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 shrink-0"
+              onClick={() => setDeleteOpen(true)}
+            >
+              Delete League
+            </Button>
+          ) : null}
         </div>
-        <h1 className="text-xl font-bold">{data.leagueName}</h1>
-        <p className="text-muted text-sm mt-1 capitalize">
-          Week {data.currentWeek} · {data.leagueStatus} ·{" "}
-          {scoringModeShortLabel(data.scoringMode)} matchups
-        </p>
         <p className="text-2xl font-black text-gold mt-3">
           {data.humanRecord.wins}-{data.humanRecord.losses}
           <span className="text-sm font-semibold text-muted ml-2">Your record</span>

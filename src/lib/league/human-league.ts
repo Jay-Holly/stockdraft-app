@@ -312,14 +312,14 @@ export async function createHumanLeague(
   };
 }
 
-async function assertWaitingHumanLeagueCommissioner(
+async function assertHumanLeagueOwner(
   userId: string,
   leagueId: string
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("leagues")
-    .select("league_type, status, owner_user_id")
+    .select("league_type, owner_user_id")
     .eq("id", leagueId)
     .maybeSingle();
 
@@ -327,9 +327,27 @@ async function assertWaitingHumanLeagueCommissioner(
     return { error: "League not found." };
   }
   if (data.owner_user_id !== userId) {
-    return { error: "Only the league commissioner can manage invites." };
+    return { error: "Only the league commissioner can manage this league." };
   }
-  if (data.status !== "waiting") {
+
+  return {};
+}
+
+async function assertWaitingHumanLeagueCommissioner(
+  userId: string,
+  leagueId: string
+): Promise<{ error?: string }> {
+  const owner = await assertHumanLeagueOwner(userId, leagueId);
+  if (owner.error) return owner;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("leagues")
+    .select("status")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (data?.status !== "waiting") {
     return { error: "Invites can only be changed while waiting for players." };
   }
 
@@ -356,22 +374,21 @@ export async function cancelHumanLeagueInvite(
   return {};
 }
 
-/** Permanently removes a waiting human league and all cascaded league data. */
+/** Permanently removes a human league and all cascaded league data. */
 export async function deleteHumanLeagueForUser(
   userId: string,
   leagueId: string
 ): Promise<{ error?: string }> {
-  const guard = await assertWaitingHumanLeagueCommissioner(userId, leagueId);
+  const guard = await assertHumanLeagueOwner(userId, leagueId);
   if (guard.error) return guard;
 
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { error } = await supabase
     .from("leagues")
     .delete()
     .eq("id", leagueId)
     .eq("league_type", "human")
-    .eq("owner_user_id", userId)
-    .eq("status", "waiting");
+    .eq("owner_user_id", userId);
 
   if (error) return { error: error.message };
   return {};
