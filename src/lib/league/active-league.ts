@@ -3,15 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import type { AiLeague } from "@/lib/league/ai-league";
 import type { HumanLeague } from "@/lib/league/human-league";
 import { AI_LEAGUE_FIELDS, HUMAN_LEAGUE_FIELDS } from "@/lib/league/fields";
+import {
+  ACTIVE_LEAGUE_COOKIE,
+  activeLeagueCookieOptions,
+} from "@/lib/league/active-league-cookie";
 
-export const ACTIVE_LEAGUE_COOKIE = "stockdraft_active_league_id";
-
-const COOKIE_OPTIONS = {
-  path: "/",
-  httpOnly: true,
-  sameSite: "lax" as const,
-  maxAge: 60 * 60 * 24 * 365,
-};
+export { ACTIVE_LEAGUE_COOKIE } from "@/lib/league/active-league-cookie";
 
 export async function getActiveLeagueIdFromCookie(): Promise<string | null> {
   const cookieStore = await cookies();
@@ -20,7 +17,7 @@ export async function getActiveLeagueIdFromCookie(): Promise<string | null> {
 
 export async function setActiveLeagueCookie(leagueId: string): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(ACTIVE_LEAGUE_COOKIE, leagueId, COOKIE_OPTIONS);
+  cookieStore.set(ACTIVE_LEAGUE_COOKIE, leagueId, activeLeagueCookieOptions);
 }
 
 export async function clearActiveLeagueCookie(): Promise<void> {

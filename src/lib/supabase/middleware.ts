@@ -1,6 +1,10 @@
 import { createServerClient, type SetAllCookies } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveSafeRedirectPath } from "@/lib/auth/redirect-path";
+import {
+  ACTIVE_LEAGUE_COOKIE,
+  activeLeagueCookieOptions,
+} from "@/lib/league/active-league-cookie";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -52,6 +56,19 @@ export async function updateSession(request: NextRequest) {
       resolveSafeRedirectPath(`${pathname}${request.nextUrl.search}`)
     );
     return NextResponse.redirect(url);
+  }
+
+  if (pathname.startsWith("/draft") && user) {
+    const leagueId =
+      request.nextUrl.searchParams.get("league") ??
+      request.nextUrl.searchParams.get("leagueId");
+    if (leagueId) {
+      supabaseResponse.cookies.set(
+        ACTIVE_LEAGUE_COOKIE,
+        leagueId,
+        activeLeagueCookieOptions
+      );
+    }
   }
 
   if (pathname.startsWith("/auth") && user) {

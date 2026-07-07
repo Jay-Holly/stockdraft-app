@@ -4,8 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import {
   resolveActiveLeagueId,
   getHumanLeagueById,
-  setActiveLeagueCookie,
-  verifyUserCanAccessLeague,
 } from "@/lib/league/active-league";
 import { isHumanLeagueDraftFinished } from "@/lib/league/human-league";
 import { DraftRoom } from "@/components/draft/DraftRoom";
@@ -55,13 +53,6 @@ export default async function DraftPage({
 
   const params = await searchParams;
   const preferredLeagueId = resolveLeagueQueryParam(params);
-
-  if (
-    preferredLeagueId &&
-    (await verifyUserCanAccessLeague(user.id, preferredLeagueId))
-  ) {
-    await setActiveLeagueCookie(preferredLeagueId);
-  }
 
   const activeLeagueId = await resolveActiveLeagueId(
     user.id,
