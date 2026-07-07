@@ -73,16 +73,21 @@ export function DraftRoom({
 
   const readOnly = initialDraft?.status === "complete";
   const liveDraft = state?.liveDraft ?? null;
-  const isWaitingRoom =
-    state?.leagueStatus === "waiting" &&
-    state?.isLiveFormat === true &&
-    liveDraft?.status !== "in_progress";
-  const isLiveDraft = Boolean(liveDraft) || isWaitingRoom;
   const liveInProgress = liveDraft?.status === "in_progress";
+  const draftHasStarted = (state?.draftFeed?.length ?? 0) > 0 || liveInProgress;
+  const isWaitingRoom =
+    state?.isLiveFormat === true &&
+    state?.leagueStatus === "waiting" &&
+    !draftHasStarted;
+  const isLiveDraft =
+    Boolean(liveDraft) || isWaitingRoom || (state?.isLiveFormat === true && draftHasStarted);
+  const isOnClock =
+    liveDraft?.onClockUserId != null &&
+    liveDraft.onClockUserId === profile.id;
   const canPick =
     !readOnly &&
     !isWaitingRoom &&
-    (!isLiveDraft || liveDraft?.isMyTurn === true);
+    (!isLiveDraft || liveDraft?.isMyTurn === true || isOnClock);
 
   const { stocks: poolStocks, loading: poolLoading, error: poolError } =
     useDraftPool();

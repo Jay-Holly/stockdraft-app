@@ -5,6 +5,7 @@ import {
 import type { DraftState } from "@/lib/draft/types";
 import {
   buildLiveDraftView,
+  describeLiveDraftClock,
   ensureLiveDraftProgress,
   getDraftFeed,
   isLiveDraftLeague,
@@ -72,6 +73,26 @@ export async function loadDraftApiPayload(
       .eq("id", leagueId)
       .maybeSingle();
 
+    if (live && leagueMeta?.status === "waiting") {
+      const { data: liveState } = await supabase
+        .from("league_draft_state")
+        .select("status, global_pick_number")
+        .eq("league_id", leagueId)
+        .maybeSingle();
+
+      if (
+        liveState?.status === "in_progress" &&
+        (liveState.global_pick_number ?? 0) > 0
+      ) {
+        await supabase
+          .from("leagues")
+          .update({ status: "drafting" })
+          .eq("id", leagueId)
+          .eq("status", "waiting");
+        leagueMeta.status = "drafting";
+      }
+    }
+
     const opponentBoardsPromise =
       leagueMeta?.league_type === "human"
         ? getHumanLeagueOpponentBoards(userId, leagueId).then((boards) =>
@@ -90,7 +111,7 @@ export async function loadDraftApiPayload(
           )
         : getAiLeagueBotDraftBoards(userId, leagueId);
 
-    const [liveDraft, draftFeed, draftChat, botDraftBoards, waitingRoomMembers] =
+    const [liveDraftRaw, draftFeed, draftChat, botDraftBoards, waitingRoomMembers] =
       await Promise.all([
       live
         ? buildLiveDraftView(leagueId, userId).catch((err) => {
@@ -113,6 +134,24 @@ export async function loadDraftApiPayload(
           )
         : Promise.resolve(undefined),
     ]);
+
+    let liveDraft = liveDraftRaw;
+    if (live && !liveDraft) {
+      const clock = await describeLiveDraftClock(leagueId);
+      if (clock?.onClockUserId && clock.currentPickIndex < clock.totalPickSlots) {
+        liveDraft = {
+          status: "in_progress",
+          onClockUserId: clock.onClockUserId,
+          onClockTeamName: null,
+          pickDeadlineAt: clock.pickDeadlineAt,
+          isMyTurn: clock.onClockUserId === userId,
+          currentPickIndex: clock.currentPickIndex,
+          totalPickSlots: clock.totalPickSlots,
+          globalPickNumber: clock.globalPickNumber,
+          draftOrder: [],
+        };
+      }
+    }
 
     return {
       ok: true,
