@@ -67,6 +67,11 @@ export function computeWeekFinalizeAt(
     return zonedDateTime(parts.year, parts.month, parts.day, 16, 0);
   }
 
+  const standardEntry = getWeekCalendarEntry(settings, weekNumber);
+  if (standardEntry) {
+    return zonedDateTimeFromIso(standardEntry.date, 6, 0);
+  }
+
   return nextMondaySixAmEt(anchor);
 }
 

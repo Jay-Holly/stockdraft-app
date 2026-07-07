@@ -93,6 +93,21 @@ assert(
   "standard week 1 from Mon Jun 29 finalizes Mon Jul 6 6 AM"
 );
 
+const standardWithCalendar = resolveSeasonSettings(sdpl4, {
+  season_format: "standard",
+  regular_season_weeks: 11,
+  week_calendar: [{ week: 1, date: "2026-07-14" }],
+});
+const sponsorWeek1 = computeWeekFinalizeAt(
+  standardWithCalendar,
+  1,
+  zonedDateTimeFromIso("2026-07-06", 22, 0)
+);
+assert(
+  sponsorWeek1.getTime() === zonedDateTimeFromIso("2026-07-14", 6, 0).getTime(),
+  "standard week_calendar week 1 finalizes Jul 14 6 AM ET (ignores draft-night anchor)"
+);
+
 assert(
   !isPastFinalizeAt(
     zonedDateTimeFromIso("2026-07-06", 6, 0).toISOString(),
