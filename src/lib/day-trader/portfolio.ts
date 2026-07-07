@@ -6,6 +6,7 @@ import {
   computeDayTraderFinalMetrics,
   fetchDayTraderPositionQuotes,
 } from "@/lib/day-trader/portfolio-value";
+import { buildDayTraderPositionGainMetrics } from "@/lib/day-trader/position-gains";
 import type { DayTraderEntryRow } from "@/lib/day-trader/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,6 +17,10 @@ export type DayTraderPositionView = {
   slotOrder: number;
   price: number;
   marketValue: number;
+  dailyGainPercent: number;
+  dailyDollarGain: number;
+  weekGainPercent: number;
+  weekDollarGain: number;
 };
 
 export type DayTraderPortfolioView = {
@@ -53,13 +58,31 @@ export async function loadDayTraderPortfolio(
   const quotes = await fetchDayTraderPositionQuotes(
     positions.map((position) => ({ symbol: position.symbol }))
   );
+  const gainMetrics = await buildDayTraderPositionGainMetrics(
+    entry.user_id,
+    entry.source_league_id,
+    positions.map((position) => ({
+      symbol: position.symbol,
+      shares: position.shares,
+      price: quotes[position.symbol]?.price ?? 0,
+    })),
+    quotes
+  );
 
   const positionViews: DayTraderPositionView[] = positions.map((position) => {
     const price = quotes[position.symbol]?.price ?? 0;
+    const gains = gainMetrics[position.symbol];
     return {
-      ...position,
+      id: position.id,
+      symbol: position.symbol,
+      shares: position.shares,
+      slotOrder: position.slotOrder,
       price,
       marketValue: position.shares * price,
+      dailyGainPercent: gains?.dailyGainPercent ?? 0,
+      dailyDollarGain: gains?.dailyDollarGain ?? 0,
+      weekGainPercent: gains?.weekGainPercent ?? 0,
+      weekDollarGain: gains?.weekDollarGain ?? 0,
     };
   });
 

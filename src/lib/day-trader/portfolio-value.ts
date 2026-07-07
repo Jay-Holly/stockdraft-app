@@ -1,9 +1,16 @@
 import { fetchCachedStockQuotes } from "@/lib/market/cached-prices";
+import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
+
+export type DayTraderStockQuote = {
+  price: number;
+  changePercent: number;
+  prevClose: number;
+};
 
 export function computeDayTraderEntryValue(
   cashBalance: number,
   positions: readonly { symbol: string; shares: number }[],
-  quotes: Record<string, { price: number }>
+  quotes: Record<string, Pick<DayTraderStockQuote, "price">>
 ): number {
   let equity = 0;
   for (const position of positions) {
@@ -15,14 +22,31 @@ export function computeDayTraderEntryValue(
 
 export async function fetchDayTraderPositionQuotes(
   positions: readonly { symbol: string }[]
-): Promise<Record<string, { price: number }>> {
+): Promise<Record<string, DayTraderStockQuote>> {
   const symbols = positions.map((position) => position.symbol);
-  const quotes = await fetchCachedStockQuotes(symbols);
-  const prices: Record<string, { price: number }> = {};
-  for (const [symbol, quote] of Object.entries(quotes)) {
-    prices[symbol] = { price: quote.price };
+  const cached = await fetchCachedStockQuotes(symbols);
+  const quotes: Record<string, DayTraderStockQuote> = {};
+
+  for (const symbol of symbols.map((value) => value.toUpperCase())) {
+    const quote = cached[symbol];
+    if (quote?.price) {
+      quotes[symbol] = {
+        price: quote.price,
+        changePercent: quote.changePercent,
+        prevClose: quote.prevClose,
+      };
+      continue;
+    }
+
+    const fallback = getFallbackStockQuote(symbol);
+    quotes[symbol] = {
+      price: fallback?.price ?? 0,
+      changePercent: fallback?.changePercent ?? 0,
+      prevClose: fallback?.prevClose ?? fallback?.price ?? 0,
+    };
   }
-  return prices;
+
+  return quotes;
 }
 
 export function computeDayTraderFinalMetrics(

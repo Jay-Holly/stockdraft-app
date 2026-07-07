@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { DayTraderLeaderboardLinks } from "@/components/day-trader/DayTraderLeaderboardLinks";
+import { formatPct, formatSignedMoney } from "@/lib/format";
 import { DAY_TRADER_MAX_POSITIONS } from "@/lib/day-trader/constants";
 
 type PositionView = {
@@ -13,6 +14,10 @@ type PositionView = {
   slotOrder: number;
   price: number;
   marketValue: number;
+  dailyGainPercent: number;
+  dailyDollarGain: number;
+  weekGainPercent: number;
+  weekDollarGain: number;
 };
 
 type PortfolioView = {
@@ -40,7 +45,7 @@ type DayTraderTradingPanelProps = {
   contestStatus: string | null;
 };
 
-function formatMoney(value: number): string {
+function formatPortfolioMoney(value: number): string {
   const prefix = value >= 0 ? "+" : "-";
   return `${prefix}$${Math.abs(value).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -48,9 +53,35 @@ function formatMoney(value: number): string {
   })}`;
 }
 
-function formatPct(value: number): string {
-  const prefix = value >= 0 ? "+" : "";
-  return `${prefix}${value.toFixed(2)}%`;
+function gainTone(value: number): string {
+  return value >= 0 ? "text-green-400" : "text-red-400";
+}
+
+function PositionGainStats({ position }: { position: PositionView }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+      <div>
+        <p className="text-muted">Daily</p>
+        <p className={gainTone(position.dailyGainPercent)}>
+          {formatPct(position.dailyGainPercent)}
+          <span className="text-muted font-normal">
+            {" "}
+            · {formatSignedMoney(position.dailyDollarGain)}
+          </span>
+        </p>
+      </div>
+      <div>
+        <p className="text-muted">Weekly</p>
+        <p className={gainTone(position.weekGainPercent)}>
+          {formatPct(position.weekGainPercent)}
+          <span className="text-muted font-normal">
+            {" "}
+            · {formatSignedMoney(position.weekDollarGain)}
+          </span>
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function DayTraderTradingPanel({
@@ -233,7 +264,7 @@ export function DayTraderTradingPanel({
                 portfolio.dollarGain >= 0 ? "text-emerald-400" : "text-red-400"
               }
             >
-              {formatMoney(portfolio.dollarGain)}
+              {formatPortfolioMoney(portfolio.dollarGain)}
             </p>
           </div>
           <div>
@@ -293,6 +324,7 @@ export function DayTraderTradingPanel({
                     })}
                   </p>
                 </div>
+                <PositionGainStats position={position} />
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="number"
