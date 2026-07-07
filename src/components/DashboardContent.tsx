@@ -325,8 +325,6 @@ export function DashboardContent({
 
       <LiveTickerTape />
 
-      {dayTrader ? <DayTraderDashboardCard summary={dayTrader} /> : null}
-
       <section className="bg-dark-card border border-gold/30 rounded-2xl p-6 space-y-4">
         <div>
           <h2 className="text-lg font-semibold mb-1">Create New League</h2>
@@ -645,6 +643,8 @@ export function DashboardContent({
           Draft real players&apos; stocks — injuries and all. Coming soon.
         </p>
       </section>
+
+      {dayTrader ? <DayTraderDashboardCard summary={dayTrader} /> : null}
 
       {activeHumanLeague?.league.status === "waiting" &&
         activeHumanLeague.league.owner_user_id === profile.id && (

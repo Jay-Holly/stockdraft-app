@@ -1,10 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/Button";
-import { formatPct, formatSignedMoney } from "@/lib/format";
-import {
-  DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE,
-  getDayTraderTradingStatusLabel,
-} from "@/lib/day-trader/contest-period";
+import { DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE } from "@/lib/day-trader/contest-period";
 import type { DayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
 
 type DayTraderDashboardCardProps = {
@@ -13,11 +9,6 @@ type DayTraderDashboardCardProps = {
 
 export function DayTraderDashboardCard({ summary }: DayTraderDashboardCardProps) {
   const contest = summary.contest;
-  const tradingStatusLabel = getDayTraderTradingStatusLabel({
-    entryOpen: summary.entryOpen,
-    tradingOpen: summary.tradingOpen,
-    contestStatus: contest?.status ?? null,
-  });
 
   return (
     <section className="bg-dark-card border border-gold/30 rounded-2xl p-6 space-y-4">
@@ -26,21 +17,6 @@ export function DayTraderDashboardCard({ summary }: DayTraderDashboardCardProps)
           <h2 className="text-lg font-semibold">Day Trader</h2>
           <p className="text-muted text-sm mt-1">
             Weekly contest — enter Fri–Fri, trade Mon–Fri.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <p className="text-xs text-muted">Entry</p>
-          <p className={summary.entryOpen ? "text-emerald-400" : "text-muted"}>
-            {summary.entryOpen ? "Open" : "Closed"}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-muted">Trading</p>
-          <p className={summary.tradingOpen ? "text-emerald-400" : "text-muted"}>
-            {tradingStatusLabel}
           </p>
         </div>
       </div>
@@ -59,52 +35,7 @@ export function DayTraderDashboardCard({ summary }: DayTraderDashboardCardProps)
         </p>
       )}
 
-      {summary.joined && summary.entry ? (
-        <div className="rounded-xl border border-dark-border bg-dark/40 p-4 space-y-2 text-sm">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-muted">$ rank</p>
-              <p className="font-semibold">
-                {summary.dollarRank != null ? `#${summary.dollarRank}` : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted">% rank</p>
-              <p className="font-semibold">
-                {summary.percentRank != null ? `#${summary.percentRank}` : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted">$ Gain</p>
-              <p
-                className={
-                  (summary.dollarGain ?? 0) >= 0
-                    ? "text-emerald-400 font-semibold"
-                    : "text-red-400 font-semibold"
-                }
-              >
-                {summary.dollarGain != null
-                  ? formatSignedMoney(summary.dollarGain)
-                  : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted">% Gain</p>
-              <p
-                className={
-                  (summary.percentGain ?? 0) >= 0
-                    ? "text-emerald-400 font-semibold"
-                    : "text-red-400 font-semibold"
-                }
-              >
-                {summary.percentGain != null
-                  ? formatPct(summary.percentGain)
-                  : "—"}
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : summary.joined && summary.canEnter ? (
+      {summary.joined && summary.entry ? null : summary.joined && summary.canEnter ? (
         <p className="text-sm text-muted">
           You haven&apos;t entered this week&apos;s contest yet.
         </p>
