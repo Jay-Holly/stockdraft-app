@@ -70,7 +70,7 @@ export async function getLeagueDeletePreview(
   leagueId: string
 ): Promise<{ preview?: LeagueDeletePreview; error?: string }> {
   const owner = await assertLeagueOwnerForDelete(userId, leagueId);
-  if ("error" in owner && owner.error) {
+  if ("error" in owner) {
     return { error: owner.error };
   }
 

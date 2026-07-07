@@ -97,7 +97,7 @@ export async function DELETE(request: Request) {
   }
 
   const owner = await assertLeagueOwnerForDelete(user.id, body.leagueId);
-  if ("error" in owner && owner.error) {
+  if ("error" in owner) {
     const status = owner.error === "League not found." ? 404 : 400;
     return NextResponse.json({ error: owner.error }, { status });
   }
