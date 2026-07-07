@@ -722,33 +722,6 @@ export function DashboardContent({
         </section>
       )}
 
-      {activeHumanLeague?.humanDraftComplete && (
-        <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
-          <div>
-            <div className="mb-2">
-              <LeagueSupportId code={activeHumanLeague.league.support_code} />
-            </div>
-            <h2 className="text-lg font-semibold">{activeHumanLeague.humanTeamName}</h2>
-            <p className="text-muted text-sm">{activeHumanLeague.league.name}</p>
-            <p className="text-muted text-xs capitalize mt-1">
-              {leagueStatusLabel(activeHumanLeague.league.status)} · Draft complete
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button href="/league" variant="primary" className="flex-1">
-              League hub
-            </Button>
-            <Button href="/matchups" variant="secondary" className="flex-1">
-              Matchups
-            </Button>
-            {renderOwnerDeleteButton(
-              activeHumanLeague.league,
-              switchingLeagueId === activeHumanLeague.league.id
-            )}
-          </div>
-        </section>
-      )}
-
       {activeSummary && activeSummary.league.id === activeLeagueId && (
         <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
           <div className="flex items-start justify-between gap-3">
