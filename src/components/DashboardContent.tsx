@@ -331,14 +331,14 @@ export function DashboardContent({
         <div>
           <h2 className="text-lg font-semibold mb-1">Create New League</h2>
           <p className="text-muted text-sm">
-            Start a human league with a friend, or spin up a Free AI League against
+            Start a Squad League with friends, or spin up a Free Sim League against
             three bot managers.
           </p>
         </div>
 
         <Link href="/leagues/create" className="block">
           <Button variant="primary" className="w-full">
-            Create Human League
+            Create Squad League
           </Button>
         </Link>
 
@@ -365,15 +365,143 @@ export function DashboardContent({
               setShowBotSelection(true);
             }}
           >
-            Create Free AI League
+            Create Free Sim League
           </Button>
         )}
       </section>
 
+      {leagues.length > 0 && (
+        <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Free Sim Leagues</h2>
+            <p className="text-muted text-sm">
+              {leagues.length} league{leagues.length === 1 ? "" : "s"} · select
+              one to play
+            </p>
+          </div>
+
+          {leagues.map((item) => {
+            const isActive = item.league.id === activeLeagueId;
+            const busy = switchingLeagueId === item.league.id;
+
+            return (
+              <div
+                key={item.league.id}
+                className={`rounded-xl border p-4 space-y-3 ${
+                  isActive
+                    ? "border-gold/50 bg-gold/5"
+                    : "border-dark-border bg-dark/20"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="mb-2">
+                      <LeagueSupportId code={item.league.support_code} />
+                    </div>
+                    <p className="font-semibold truncate">{item.humanTeamName}</p>
+                    <p className="text-xs text-muted truncate">{item.league.name}</p>
+                    <p className="text-xs text-muted capitalize">
+                      {leagueStatusLabel(item.league.status)}
+                      {isActive ? " · selected" : ""}
+                    </p>
+                    <p className="text-xs text-muted mt-1 truncate">
+                      vs {item.botNames.join(", ")}
+                    </p>
+                  </div>
+                  {item.standings && (
+                    <div className="text-right shrink-0">
+                      <p className="text-xl font-black text-gold">
+                        {item.standings.wins}-{item.standings.losses}
+                      </p>
+                      <p className="text-[10px] text-muted uppercase tracking-wider">
+                        W-L
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {!isActive && (
+                    <Button
+                      variant="ghost"
+                      className="text-xs px-3"
+                      disabled={busy}
+                      onClick={() => void setActiveLeague(item.league.id)}
+                    >
+                      {busy ? "Selecting…" : "Select"}
+                    </Button>
+                  )}
+                  {item.league.status === "drafting" && (
+                    <Button
+                      variant="primary"
+                      className="text-xs px-3"
+                      disabled={busy}
+                      onClick={() =>
+                        void setActiveLeague(item.league.id, "/draft")
+                      }
+                    >
+                      Enter Draft Room
+                    </Button>
+                  )}
+                  {canEnterSeasonLeague(
+                    item.league.status,
+                    item.humanDraftComplete
+                  ) && (
+                    <>
+                      <Button
+                        variant="primary"
+                        className="text-xs px-3"
+                        disabled={busy}
+                        onClick={() =>
+                          void setActiveLeague(item.league.id, "/league")
+                        }
+                      >
+                        Open league
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="text-xs px-3"
+                        disabled={busy}
+                        onClick={() =>
+                          void setActiveLeague(item.league.id, "/matchups")
+                        }
+                      >
+                        Matchups
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="text-xs px-3"
+                        disabled={busy}
+                        onClick={() =>
+                          void setActiveLeague(item.league.id, "/my-team")
+                        }
+                      >
+                        My Team
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="text-xs px-3"
+                        disabled={busy}
+                        onClick={() =>
+                          void setActiveLeague(item.league.id, "/free-agents")
+                        }
+                      >
+                        Free Agents
+                      </Button>
+                    </>
+                  )}
+                  {renderOwnerDeleteButton(item.league, busy)}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
       {humanLeagues.length > 0 && (
         <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
           <div>
-            <h2 className="text-lg font-semibold">Human Leagues</h2>
+            <h2 className="text-lg font-semibold">Squad Leagues</h2>
             <p className="text-muted text-sm">
               {humanLeagues.length} league{humanLeagues.length === 1 ? "" : "s"}
             </p>
@@ -511,6 +639,13 @@ export function DashboardContent({
         </section>
       )}
 
+      <section className="bg-dark-card border border-dark-border/80 rounded-2xl p-6">
+        <h2 className="text-lg font-semibold mb-1">Sports Sim Leagues</h2>
+        <p className="text-muted text-sm">
+          Draft real players&apos; stocks — injuries and all. Coming soon.
+        </p>
+      </section>
+
       {activeHumanLeague?.league.status === "waiting" &&
         activeHumanLeague.league.owner_user_id === profile.id && (
         <section className="bg-dark-card border border-amber-500/30 rounded-2xl p-6 space-y-4">
@@ -611,134 +746,6 @@ export function DashboardContent({
               switchingLeagueId === activeHumanLeague.league.id
             )}
           </div>
-        </section>
-      )}
-
-      {leagues.length > 0 && (
-        <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold">My Leagues</h2>
-            <p className="text-muted text-sm">
-              {leagues.length} league{leagues.length === 1 ? "" : "s"} · select
-              one to play
-            </p>
-          </div>
-
-          {leagues.map((item) => {
-            const isActive = item.league.id === activeLeagueId;
-            const busy = switchingLeagueId === item.league.id;
-
-            return (
-              <div
-                key={item.league.id}
-                className={`rounded-xl border p-4 space-y-3 ${
-                  isActive
-                    ? "border-gold/50 bg-gold/5"
-                    : "border-dark-border bg-dark/20"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="mb-2">
-                      <LeagueSupportId code={item.league.support_code} />
-                    </div>
-                    <p className="font-semibold truncate">{item.humanTeamName}</p>
-                    <p className="text-xs text-muted truncate">{item.league.name}</p>
-                    <p className="text-xs text-muted capitalize">
-                      {leagueStatusLabel(item.league.status)}
-                      {isActive ? " · selected" : ""}
-                    </p>
-                    <p className="text-xs text-muted mt-1 truncate">
-                      vs {item.botNames.join(", ")}
-                    </p>
-                  </div>
-                  {item.standings && (
-                    <div className="text-right shrink-0">
-                      <p className="text-xl font-black text-gold">
-                        {item.standings.wins}-{item.standings.losses}
-                      </p>
-                      <p className="text-[10px] text-muted uppercase tracking-wider">
-                        W-L
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {!isActive && (
-                    <Button
-                      variant="ghost"
-                      className="text-xs px-3"
-                      disabled={busy}
-                      onClick={() => void setActiveLeague(item.league.id)}
-                    >
-                      {busy ? "Selecting…" : "Select"}
-                    </Button>
-                  )}
-                  {item.league.status === "drafting" && (
-                    <Button
-                      variant="primary"
-                      className="text-xs px-3"
-                      disabled={busy}
-                      onClick={() =>
-                        void setActiveLeague(item.league.id, "/draft")
-                      }
-                    >
-                      Enter Draft Room
-                    </Button>
-                  )}
-                  {canEnterSeasonLeague(
-                    item.league.status,
-                    item.humanDraftComplete
-                  ) && (
-                    <>
-                      <Button
-                        variant="primary"
-                        className="text-xs px-3"
-                        disabled={busy}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/league")
-                        }
-                      >
-                        Open league
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="text-xs px-3"
-                        disabled={busy}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/matchups")
-                        }
-                      >
-                        Matchups
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="text-xs px-3"
-                        disabled={busy}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/my-team")
-                        }
-                      >
-                        My Team
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="text-xs px-3"
-                        disabled={busy}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/free-agents")
-                        }
-                      >
-                        Free Agents
-                      </Button>
-                    </>
-                  )}
-                  {renderOwnerDeleteButton(item.league, busy)}
-                </div>
-              </div>
-            );
-          })}
         </section>
       )}
 
