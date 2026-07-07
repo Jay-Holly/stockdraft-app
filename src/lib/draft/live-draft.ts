@@ -1,3 +1,4 @@
+import { loadLeagueMemberIds } from "@/lib/league/draft-order-server";
 import { fetchDraftPool } from "@/lib/draft-pool/server";
 import { decideAiPick } from "@/lib/draft/ai-strategy";
 import {
@@ -249,7 +250,101 @@ export async function isLiveDraftLeague(leagueId: string): Promise<boolean> {
   return data?.draft_format === "live";
 }
 
+async function repairHumanLiveDraftOrderIfNeeded(leagueId: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: league } = await supabase
+    .from("leagues")
+    .select("league_type, status")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (league?.league_type !== "human") return;
+
+  const state = await getLeagueDraftStateRow(leagueId);
+  if (!state || state.status !== "in_progress") return;
+
+  const memberIds = await loadLeagueMemberIds(leagueId);
+  if (memberIds.length < 2) return;
+
+  const memberSet = new Set(memberIds);
+  const order = normalizeDraftOrder(state.draft_order);
+  const staleInOrder = order.filter((id) => !memberSet.has(id));
+  const missingFromOrder = memberIds.filter((id) => !order.includes(id));
+
+  if (staleInOrder.length === 0 && missingFromOrder.length === 0) {
+    if (league.status === "waiting") {
+      await supabase
+        .from("leagues")
+        .update({ status: "drafting" })
+        .eq("id", leagueId)
+        .eq("status", "waiting");
+    }
+    return;
+  }
+
+  const missingQueue = [...missingFromOrder];
+  const newOrder = [...order];
+
+  for (let i = 0; i < newOrder.length; i++) {
+    if (!memberSet.has(newOrder[i])) {
+      const replacement = missingQueue.shift();
+      if (replacement) {
+        newOrder[i] = replacement;
+      } else {
+        newOrder.splice(i, 1);
+        i -= 1;
+      }
+    }
+  }
+
+  for (const memberId of missingQueue) {
+    if (!newOrder.includes(memberId)) {
+      newOrder.push(memberId);
+    }
+  }
+
+  const totalPickSlots = newOrder.length * 15;
+
+  await supabase
+    .from("league_draft_state")
+    .update({
+      draft_order: newOrder,
+      total_pick_slots: totalPickSlots,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("league_id", leagueId);
+
+  for (let slot = 0; slot < newOrder.length; slot++) {
+    await supabase
+      .from("league_members")
+      .update({ draft_slot: slot })
+      .eq("league_id", leagueId)
+      .eq("user_id", newOrder[slot]);
+  }
+
+  if (league.status === "waiting") {
+    await supabase
+      .from("leagues")
+      .update({ status: "drafting" })
+      .eq("id", leagueId)
+      .eq("status", "waiting");
+  }
+
+  if (state.on_clock_user_id && !memberSet.has(state.on_clock_user_id)) {
+    await supabase
+      .from("league_draft_state")
+      .update({
+        on_clock_user_id: null,
+        pick_deadline_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("league_id", leagueId);
+  }
+}
+
 async function repairLiveDraftOrderIfNeeded(leagueId: string): Promise<void> {
+  await repairHumanLiveDraftOrderIfNeeded(leagueId);
+
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.status !== "in_progress") return;
 
@@ -708,6 +803,18 @@ export async function assignOnClock(
 
     const teamIndex = pickIndex % draftOrder.length;
     const userId = draftOrder[teamIndex];
+
+    const { data: memberRow } = await supabase
+      .from("league_members")
+      .select("user_id")
+      .eq("league_id", leagueId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!memberRow) {
+      pickIndex += 1;
+      continue;
+    }
 
     const prepared = await prepareTeamOnClock(leagueId, userId);
     if (prepared.error) return { error: prepared.error };
