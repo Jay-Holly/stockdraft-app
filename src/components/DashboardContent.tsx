@@ -5,9 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  AVATAR_COLORS,
   getAvatarHex,
-  type AvatarColorId,
   type Profile,
 } from "@/lib/types";
 import type {
@@ -30,8 +28,6 @@ import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import type { BotPersonality } from "@/lib/league/bots";
 import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
-import { DraftRoster } from "@/components/draft/DraftRoster";
-import type { DraftPick } from "@/lib/draft/types";
 import {
   formatMatchupScore,
   parseLeagueScoringMode,
@@ -137,9 +133,6 @@ function MatchupResultCard({
 
 export function DashboardContent({
   profile,
-  email,
-  draftComplete = false,
-  draftPicks = [],
   leagues = [],
   humanLeagues = [],
   activeHumanLeague = null,
@@ -150,9 +143,6 @@ export function DashboardContent({
   dayTrader,
 }: {
   profile: Profile;
-  email: string;
-  draftComplete?: boolean;
-  draftPicks?: DraftPick[];
   leagues?: AiLeagueListItem[];
   humanLeagues?: HumanLeagueListItem[];
   activeHumanLeague?: HumanLeagueListItem | null;
@@ -164,12 +154,6 @@ export function DashboardContent({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [username, setUsername] = useState(profile.username);
-  const [teamName, setTeamName] = useState(profile.team_name);
-  const [avatarColor, setAvatarColor] = useState<AvatarColorId>(
-    profile.avatar_color as AvatarColorId
-  );
-  const [saving, setSaving] = useState(false);
   const [startingLeague, setStartingLeague] = useState(false);
   const [switchingLeagueId, setSwitchingLeagueId] = useState<string | null>(
     null
@@ -192,32 +176,8 @@ export function DashboardContent({
   }, [router, searchParams]);
 
   const supabase = createClient();
-  const avatarHex = getAvatarHex(avatarColor);
-  const initials = username.slice(0, 2).toUpperCase();
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setMessage(null);
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        username,
-        team_name: teamName,
-        avatar_color: avatarColor,
-      })
-      .eq("id", profile.id);
-
-    setSaving(false);
-
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-
-    setMessage("Profile saved!");
-  }
+  const avatarHex = getAvatarHex(profile.avatar_color);
+  const initials = profile.username.slice(0, 2).toUpperCase();
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -350,9 +310,15 @@ export function DashboardContent({
             {initials}
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-bold truncate">{teamName}</h1>
-            <p className="text-muted text-sm truncate">@{username}</p>
+            <h1 className="text-xl font-bold truncate">{profile.team_name}</h1>
+            <p className="text-muted text-sm truncate">@{profile.username}</p>
             <p className="text-muted text-xs mt-1">Member since {createdDate}</p>
+            <Link
+              href="/profile"
+              className="inline-block text-xs font-semibold text-gold hover:underline mt-2"
+            >
+              Manager Profile
+            </Link>
           </div>
         </div>
       </section>
@@ -381,7 +347,7 @@ export function DashboardContent({
         )}
         {showBotSelection ? (
           <BotSelectionPanel
-            defaultTeamName={teamName}
+            defaultTeamName={profile.team_name}
             onCancel={() => {
               setShowBotSelection(false);
               setLeagueError(null);
@@ -784,7 +750,7 @@ export function DashboardContent({
                 <LeagueSupportId code={activeSummary.league.support_code} size="md" />
               </div>
               <h2 className="text-lg font-semibold">
-                {activeLeagueItem?.humanTeamName ?? teamName}
+                {activeLeagueItem?.humanTeamName ?? profile.team_name}
               </h2>
               <p className="text-muted text-sm">{activeSummary.league.name}</p>
               <p className="text-muted text-xs capitalize mt-1">
@@ -896,80 +862,9 @@ export function DashboardContent({
         </section>
       )}
 
-      <section className="bg-dark-card border border-dark-border rounded-2xl p-6">
-        <h2 className="text-lg font-semibold mb-1">Your profile</h2>
-        <p className="text-muted text-sm mb-6">{email}</p>
-
-        <form onSubmit={handleSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Username
-            </label>
-            <input
-              type="text"
-              required
-              minLength={3}
-              maxLength={24}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Team name
-            </label>
-            <input
-              type="text"
-              required
-              maxLength={40}
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Avatar color
-            </label>
-            <div className="flex gap-2 flex-wrap">
-              {AVATAR_COLORS.map((color) => (
-                <button
-                  key={color.id}
-                  type="button"
-                  title={color.label}
-                  onClick={() => setAvatarColor(color.id)}
-                  className={`w-9 h-9 rounded-full transition-transform ${
-                    avatarColor === color.id
-                      ? "ring-2 ring-gold ring-offset-2 ring-offset-dark-card scale-110"
-                      : "hover:scale-105"
-                  }`}
-                  style={{ backgroundColor: color.hex }}
-                />
-              ))}
-            </div>
-          </div>
-
-          {message && <p className="text-sm text-green-400">{message}</p>}
-
-          <Button type="submit" variant="primary" disabled={saving} className="w-full">
-            {saving ? "Saving…" : "Save profile"}
-          </Button>
-        </form>
-      </section>
-
-      {draftComplete && draftPicks.length > 0 && (activeSummary?.league.status !== "drafting" || activeHumanLeague?.humanDraftComplete) && (
-        <DraftRoster picks={draftPicks} />
-      )}
-
       <Button variant="ghost" onClick={handleSignOut} className="w-full">
         Sign out
       </Button>
     </div>
   );
 }
-
-const inputClass =
-  "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";

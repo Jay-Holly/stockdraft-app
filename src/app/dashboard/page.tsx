@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { loadDraftStateDetailed } from "@/lib/draft/server";
-import { resolveActiveLeagueId, verifyUserCanAccessLeague } from "@/lib/league/active-league";
+import { resolveActiveLeagueId } from "@/lib/league/active-league";
 import { listHumanLeaguesForUser, listPendingHumanLeagueInvites } from "@/lib/league/human-league";
 import {
   getAiLeagueSummary,
@@ -17,7 +16,6 @@ import {
 import { DashboardContent } from "@/components/DashboardContent";
 import { Logo } from "@/components/Logo";
 import { loadDayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
-import type { DraftPick } from "@/lib/draft/types";
 import type { Profile } from "@/lib/types";
 
 export default async function DashboardPage() {
@@ -107,19 +105,6 @@ export default async function DashboardPage() {
     ? await getAiLeagueSummary(user.id, activeLeagueId)
     : null;
 
-  let draftPicks: DraftPick[] = [];
-  let draftComplete = false;
-
-  if (activeLeagueId && (activeSummary || activeHumanLeague)) {
-    const draftState = await loadDraftStateDetailed(user.id, {
-      leagueId: activeLeagueId,
-    });
-    if (draftState.ok) {
-      draftComplete = draftState.state.draft.status === "complete";
-      draftPicks = draftState.state.picks.filter((p) => p.pick_type !== "skip");
-    }
-  }
-
   return (
     <div className="min-h-screen flex flex-col">
       <header className="px-4 py-4 border-b border-dark-border">
@@ -135,9 +120,6 @@ export default async function DashboardPage() {
         <Suspense fallback={<p className="text-muted text-sm py-12 text-center">Loading dashboard…</p>}>
           <DashboardContent
             profile={profile as Profile}
-            email={user.email ?? ""}
-            draftComplete={draftComplete}
-            draftPicks={draftPicks}
             leagues={aiLeagues}
             humanLeagues={humanLeagues}
             activeHumanLeague={activeHumanLeague ?? null}
