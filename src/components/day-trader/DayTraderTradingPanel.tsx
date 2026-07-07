@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
+import { DayTraderLeaderboardLinks } from "@/components/day-trader/DayTraderLeaderboardLinks";
 import { DAY_TRADER_MAX_POSITIONS } from "@/lib/day-trader/constants";
 
 type PositionView = {
@@ -250,6 +251,8 @@ export function DayTraderTradingPanel({
           {portfolio.positionCount}/{DAY_TRADER_MAX_POSITIONS} stock positions
         </p>
       </div>
+
+      <DayTraderLeaderboardLinks />
 
       {tradingDisabled ? (
         <div className="rounded-xl border border-dark-border p-4 text-sm text-muted">

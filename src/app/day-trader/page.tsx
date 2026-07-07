@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/Button";
 import { DayTraderEnterForm } from "@/components/day-trader/DayTraderEnterForm";
+import { DayTraderLeaderboardLinks } from "@/components/day-trader/DayTraderLeaderboardLinks";
 import { DayTraderTradingPanel } from "@/components/day-trader/DayTraderTradingPanel";
 import {
   DAY_TRADER_STARTING_VALUE,
@@ -134,6 +135,8 @@ export default async function DayTraderPage() {
           </div>
         </div>
 
+        {!(context.entry && portfolio) ? <DayTraderLeaderboardLinks /> : null}
+
         {context.entry && portfolio ? (
           <div className="space-y-3">
             <p className="text-xs text-muted text-center">
@@ -186,21 +189,6 @@ export default async function DayTraderPage() {
             max 10 symbols.
           </p>
           <p>One entry per user per week.</p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-2 justify-center">
-          <Link
-            href="/day-trader/leaderboard/dollar-gainer"
-            className="text-center text-sm text-gold hover:text-gold-dark"
-          >
-            $ Gainer leaderboard
-          </Link>
-          <Link
-            href="/day-trader/leaderboard/percent-gainer"
-            className="text-center text-sm text-gold hover:text-gold-dark"
-          >
-            % Gainer leaderboard
-          </Link>
         </div>
 
         <Link
