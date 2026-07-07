@@ -12,7 +12,7 @@ import {
 import { getDraftChatMessages } from "@/lib/draft/chat";
 import { getAiLeagueBotDraftBoards } from "@/lib/league/ai-league";
 import type { BotDraftBoard } from "@/lib/league/ai-league";
-import { getHumanLeagueOpponentBoards } from "@/lib/league/human-league";
+import { getHumanLeagueOpponentBoards, getHumanLeagueMembers } from "@/lib/league/human-league";
 import { resolveActiveLeagueId } from "@/lib/league/active-league";
 import { createClient } from "@/lib/supabase/server";
 
@@ -68,7 +68,7 @@ export async function loadDraftApiPayload(
     const supabase = await createClient();
     const { data: leagueMeta } = await supabase
       .from("leagues")
-      .select("league_type")
+      .select("league_type, status, scheduled_draft_at, draft_format")
       .eq("id", leagueId)
       .maybeSingle();
 
@@ -90,7 +90,8 @@ export async function loadDraftApiPayload(
           )
         : getAiLeagueBotDraftBoards(userId, leagueId);
 
-    const [liveDraft, draftFeed, draftChat, botDraftBoards] = await Promise.all([
+    const [liveDraft, draftFeed, draftChat, botDraftBoards, waitingRoomMembers] =
+      await Promise.all([
       live
         ? buildLiveDraftView(leagueId, userId).catch((err) => {
             console.error("buildLiveDraftView failed:", err);
@@ -103,6 +104,14 @@ export async function loadDraftApiPayload(
         console.error("opponent draft boards failed:", err);
         return null;
       }),
+      live && leagueMeta?.status === "waiting"
+        ? getHumanLeagueMembers(leagueId).then((members) =>
+            members.map((member) => ({
+              userId: member.userId,
+              teamName: member.displayName,
+            }))
+          )
+        : Promise.resolve(undefined),
     ]);
 
     return {
@@ -113,6 +122,10 @@ export async function loadDraftApiPayload(
         draftFeed,
         draftChat,
         botDraftBoards: botDraftBoards ?? undefined,
+        leagueStatus: leagueMeta?.status,
+        scheduledDraftAt: leagueMeta?.scheduled_draft_at ?? null,
+        isLiveFormat: live,
+        waitingRoomMembers,
       },
     };
   } catch (error) {

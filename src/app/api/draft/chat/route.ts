@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const leagueId = await resolveActiveLeagueId(
     user.id,
-    url.searchParams.get("leagueId")
+    url.searchParams.get("league") ?? url.searchParams.get("leagueId")
   );
 
   if (!leagueId) {

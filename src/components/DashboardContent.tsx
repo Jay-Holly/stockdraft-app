@@ -16,6 +16,12 @@ import type {
 } from "@/lib/league/ai-league";
 import type { HumanLeagueListItem, PendingHumanLeagueInvite } from "@/lib/league/human-league";
 import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
+import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCountdown";
+import {
+  canEnterScheduledDraftRoom,
+  draftRoomHref,
+  isDraftCountdownVisible,
+} from "@/lib/league/scheduled-draft";
 import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInviteBanner";
 import { DayTraderDashboardCard } from "@/components/day-trader/DayTraderDashboardCard";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
@@ -417,6 +423,17 @@ export function DashboardContent({
                   />
                 )}
 
+                {waiting && isDraftCountdownVisible(item.league.scheduled_draft_at) && (
+                  <ScheduledDraftCountdown
+                    scheduledDraftAt={item.league.scheduled_draft_at}
+                    leagueId={item.league.id}
+                    compact
+                    onEnterDraft={(leagueId, href) =>
+                      void setActiveLeague(leagueId, href)
+                    }
+                  />
+                )}
+
                 <div className="flex gap-2">
                   {!isActive && (
                     <Button
@@ -429,13 +446,29 @@ export function DashboardContent({
                     </Button>
                   )}
                   {waiting ? (
-                    <Button
-                      variant="primary"
-                      className="flex-1 text-sm"
-                      onClick={() => void setActiveLeague(item.league.id)}
-                    >
-                      View invite
-                    </Button>
+                    canEnterScheduledDraftRoom(item.league.scheduled_draft_at) ? (
+                      <Button
+                        variant="primary"
+                        className="flex-1 text-sm"
+                        disabled={switchingLeagueId === item.league.id}
+                        onClick={() =>
+                          void setActiveLeague(
+                            item.league.id,
+                            draftRoomHref(item.league.id)
+                          )
+                        }
+                      >
+                        Enter Draft
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        className="flex-1 text-sm"
+                        onClick={() => void setActiveLeague(item.league.id)}
+                      >
+                        View invite
+                      </Button>
+                    )
                   ) : enterDraft ? (
                     <Button
                       variant="primary"
@@ -542,6 +575,15 @@ export function DashboardContent({
             scheduledDraftAt={activeHumanLeague.league.scheduled_draft_at}
             isCommissioner
           />
+          {isDraftCountdownVisible(activeHumanLeague.league.scheduled_draft_at) && (
+            <ScheduledDraftCountdown
+              scheduledDraftAt={activeHumanLeague.league.scheduled_draft_at}
+              leagueId={activeHumanLeague.league.id}
+              onEnterDraft={(leagueId, href) =>
+                void setActiveLeague(leagueId, href)
+              }
+            />
+          )}
         </section>
       )}
 

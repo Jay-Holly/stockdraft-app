@@ -109,6 +109,11 @@ export type LiveDraftView = {
   draftOrder: Array<{ userId: string; teamName: string; isBot: boolean }>;
 };
 
+export type DraftWaitingRoomMember = {
+  userId: string;
+  teamName: string;
+};
+
 export type DraftState = {
   draft: Draft;
   picks: DraftPick[];
@@ -126,4 +131,9 @@ export type DraftState = {
   safetyPickSymbol?: string | null;
   /** Ordered safety picks — tried #1, then #2, … on timer expiry. */
   safetyPickQueue: string[];
+  /** League status from leagues.status (e.g. waiting, drafting). */
+  leagueStatus?: string;
+  scheduledDraftAt?: string | null;
+  isLiveFormat?: boolean;
+  waitingRoomMembers?: DraftWaitingRoomMember[];
 };

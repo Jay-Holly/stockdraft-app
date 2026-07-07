@@ -1,14 +1,38 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { resolveActiveLeagueId, getHumanLeagueById } from "@/lib/league/active-league";
+import {
+  resolveActiveLeagueId,
+  getHumanLeagueById,
+  setActiveLeagueCookie,
+  verifyUserCanAccessLeague,
+} from "@/lib/league/active-league";
 import { isHumanLeagueDraftFinished } from "@/lib/league/human-league";
 import { DraftRoom } from "@/components/draft/DraftRoom";
 import { Logo } from "@/components/Logo";
 import type { Draft } from "@/lib/draft/types";
 import type { Profile } from "@/lib/types";
 
-export default async function DraftPage() {
+function resolveLeagueQueryParam(
+  searchParams: Record<string, string | string[] | undefined>
+): string | null {
+  const league = searchParams.league ?? searchParams.leagueId;
+  if (!league) return null;
+  return Array.isArray(league) ? league[0] : league;
+}
+
+function canEnterHumanDraftWaitingRoom(league: {
+  status: string;
+  scheduled_draft_at: string | null;
+}): boolean {
+  return league.status === "waiting" && Boolean(league.scheduled_draft_at);
+}
+
+export default async function DraftPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const supabase = await createClient();
 
   const {
@@ -29,7 +53,20 @@ export default async function DraftPage() {
     redirect("/dashboard");
   }
 
-  const activeLeagueId = await resolveActiveLeagueId(user.id);
+  const params = await searchParams;
+  const preferredLeagueId = resolveLeagueQueryParam(params);
+
+  if (
+    preferredLeagueId &&
+    (await verifyUserCanAccessLeague(user.id, preferredLeagueId))
+  ) {
+    await setActiveLeagueCookie(preferredLeagueId);
+  }
+
+  const activeLeagueId = await resolveActiveLeagueId(
+    user.id,
+    preferredLeagueId
+  );
 
   if (activeLeagueId) {
     const humanLeague = await getHumanLeagueById(activeLeagueId);
@@ -38,15 +75,10 @@ export default async function DraftPage() {
         ? await isHumanLeagueDraftFinished(humanLeague, user.id)
         : null;
 
-    console.log("[draft/page] post-draft redirect check", {
-      activeLeagueId,
-      humanLeagueStatus: humanLeague?.status ?? null,
-      humanLeagueId: humanLeague?.id ?? null,
-      isHumanLeagueDraftFinished: draftFinished,
-      userId: user.id,
-    });
-
-    if (humanLeague?.status === "waiting") {
+    if (
+      humanLeague?.status === "waiting" &&
+      !canEnterHumanDraftWaitingRoom(humanLeague)
+    ) {
       redirect("/dashboard");
     }
     if (humanLeague && draftFinished) {
@@ -89,6 +121,7 @@ export default async function DraftPage() {
         <DraftRoom
           profile={profile as Profile}
           initialDraft={draft}
+          initialLeagueId={activeLeagueId}
         />
       </main>
     </div>

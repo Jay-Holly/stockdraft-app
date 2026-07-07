@@ -25,7 +25,9 @@ import { DraftRoundSelector } from "./DraftRoundSelector";
 import { OnClockBanner } from "./OnClockBanner";
 import { SalaryCapBar } from "./SalaryCapBar";
 import { StockPool } from "./StockPool";
+import { DraftWaitingRoomPanel } from "./DraftWaitingRoomPanel";
 import type { BotDraftBoard } from "@/lib/league/ai-league";
+import { DRAFT_COUNTDOWN_TICK_MS } from "@/lib/league/scheduled-draft";
 
 const POOL_QUOTE_BATCH = 80;
 const POLL_STALE_MS = 10000;
@@ -52,9 +54,11 @@ function schedulePostDraftRedirect(
 export function DraftRoom({
   profile,
   initialDraft = null,
+  initialLeagueId = null,
 }: {
   profile: Profile;
   initialDraft?: Draft | null;
+  initialLeagueId?: string | null;
 }) {
   const router = useRouter();
   const [state, setState] = useState<DraftState | null>(null);
@@ -69,10 +73,16 @@ export function DraftRoom({
 
   const readOnly = initialDraft?.status === "complete";
   const liveDraft = state?.liveDraft ?? null;
-  const isLiveDraft = Boolean(liveDraft);
+  const isWaitingRoom =
+    state?.leagueStatus === "waiting" &&
+    state?.isLiveFormat === true &&
+    liveDraft?.status !== "in_progress";
+  const isLiveDraft = Boolean(liveDraft) || isWaitingRoom;
   const liveInProgress = liveDraft?.status === "in_progress";
   const canPick =
-    !readOnly && (!isLiveDraft || liveDraft?.isMyTurn === true);
+    !readOnly &&
+    !isWaitingRoom &&
+    (!isLiveDraft || liveDraft?.isMyTurn === true);
 
   const { stocks: poolStocks, loading: poolLoading, error: poolError } =
     useDraftPool();
@@ -114,8 +124,14 @@ export function DraftRoom({
   const skipRecoveryAttempts = useRef(0);
   const loadDraftInFlight = useRef<Promise<void> | null>(null);
   const lastPollOkAt = useRef(Date.now());
-  const activeLeagueIdRef = useRef<string | null>(null);
+  const activeLeagueIdRef = useRef<string | null>(initialLeagueId);
   const [pollStale, setPollStale] = useState(false);
+
+  useEffect(() => {
+    if (initialLeagueId) {
+      activeLeagueIdRef.current = initialLeagueId;
+    }
+  }, [initialLeagueId]);
 
   const mergeDraftFeed = useCallback(
     (
@@ -186,7 +202,7 @@ export function DraftRoom({
       setError(null);
       try {
         const leagueQuery = activeLeagueIdRef.current
-          ? `?leagueId=${encodeURIComponent(activeLeagueIdRef.current)}`
+          ? `?league=${encodeURIComponent(activeLeagueIdRef.current)}`
           : "";
         const { res, data } = await fetchJsonWithTimeout<Record<string, unknown>>(
           `/api/draft${leagueQuery}`,
@@ -280,12 +296,13 @@ export function DraftRoom({
   }, [loadDraft]);
 
   useEffect(() => {
-    if (!liveInProgress) return;
+    if (!liveInProgress && !isWaitingRoom) return;
+    const intervalMs = isWaitingRoom ? DRAFT_COUNTDOWN_TICK_MS : 2500;
     const id = window.setInterval(() => {
       void loadDraft();
-    }, 2500);
+    }, intervalMs);
     return () => window.clearInterval(id);
-  }, [liveInProgress, loadDraft]);
+  }, [liveInProgress, isWaitingRoom, loadDraft]);
 
   useEffect(() => {
     if (!liveInProgress) {
@@ -524,9 +541,11 @@ export function DraftRoom({
         <div>
           <h1 className="text-xl font-bold">Draft Room — 2026 Season</h1>
           <p className="text-muted text-sm mt-0.5">
-            {isLiveDraft && !liveDraft?.isMyTurn
-              ? `Watching live draft · ${state.turn.label}`
-              : state.turn.label}
+            {isWaitingRoom
+              ? "Waiting room — draft has not started yet"
+              : isLiveDraft && !liveDraft?.isMyTurn
+                ? `Watching live draft · ${state.turn.label}`
+                : state.turn.label}
           </p>
         </div>
         <span
@@ -536,9 +555,11 @@ export function DraftRoom({
               : "draft-phase-pill"
           }
         >
-          {isLiveDraft
-            ? `Pick ${Math.min(liveDraft!.globalPickNumber + 1, liveDraft!.totalPickSlots)} / ${liveDraft!.totalPickSlots}`
-            : `Round ${state.draft.current_round} / 15`}
+          {isWaitingRoom
+            ? "Waiting"
+            : isLiveDraft
+              ? `Pick ${Math.min(liveDraft!.globalPickNumber + 1, liveDraft!.totalPickSlots)} / ${liveDraft!.totalPickSlots}`
+              : `Round ${state.draft.current_round} / 15`}
         </span>
       </div>
 
@@ -617,52 +638,66 @@ export function DraftRoom({
 
       <div className="draft-layout draft-layout--live">
         <div className="draft-layout-main">
-          <StockPool
-            poolStocks={poolStocks}
-            poolLoading={poolLoading}
-            cryptoPool={cryptoPool}
-            cryptoPoolLoading={cryptoPoolLoading}
-            pushbackSkipsRemaining={state.draft.pushback_skips_remaining}
-            quotes={quotes}
-            turn={state.turn}
-            buyerCounts={state.buyerCounts}
-            leagueOffBoard={leagueOffBoard}
-            myDrafted={myDrafted}
-            onDraft={handleDraft}
-            draftingSymbol={draftingSymbol}
-            quotesLoading={poolQuotesLoading}
-            busy={busy}
-            canPick={canPick}
-            safetyPickQueue={state.safetyPickQueue ?? []}
-            onToggleSafetyPick={
-              isLiveDraft && liveInProgress ? handleToggleSafetyPick : undefined
-            }
-          />
-          <DraftBoardTabs
-            teamName={leagueTeamName}
-            myPicks={state.picks}
-            mySummary={state.summary}
-            myCurrentRound={state.draft.current_round}
-            botDraftBoards={botDraftBoards}
-            onUndo={handleUndo}
-            onReset={handleReset}
-            busy={busy || readOnly || liveInProgress}
-          />
+          {isWaitingRoom ? (
+            <DraftWaitingRoomPanel
+              scheduledDraftAt={state.scheduledDraftAt}
+              members={state.waitingRoomMembers ?? []}
+              myUserId={profile.id}
+            />
+          ) : (
+            <>
+              <StockPool
+                poolStocks={poolStocks}
+                poolLoading={poolLoading}
+                cryptoPool={cryptoPool}
+                cryptoPoolLoading={cryptoPoolLoading}
+                pushbackSkipsRemaining={state.draft.pushback_skips_remaining}
+                quotes={quotes}
+                turn={state.turn}
+                buyerCounts={state.buyerCounts}
+                leagueOffBoard={leagueOffBoard}
+                myDrafted={myDrafted}
+                onDraft={handleDraft}
+                draftingSymbol={draftingSymbol}
+                quotesLoading={poolQuotesLoading}
+                busy={busy}
+                canPick={canPick}
+                safetyPickQueue={state.safetyPickQueue ?? []}
+                onToggleSafetyPick={
+                  isLiveDraft && liveInProgress ? handleToggleSafetyPick : undefined
+                }
+              />
+              <DraftBoardTabs
+                teamName={leagueTeamName}
+                myPicks={state.picks}
+                mySummary={state.summary}
+                myCurrentRound={state.draft.current_round}
+                botDraftBoards={botDraftBoards}
+                onUndo={handleUndo}
+                onReset={handleReset}
+                busy={busy || readOnly || liveInProgress}
+              />
+            </>
+          )}
         </div>
 
         {isLiveDraft && (
           <div className="live-draft-sidebar">
-            <LiveDraftTicker
-              feed={state.draftFeed ?? []}
-              status={liveDraft?.status}
-              syncStatus={feedSyncStatus}
-              syncDetail={feedSyncDetail}
-            />
-            <DraftRoundSelector
-              feed={state.draftFeed ?? []}
-              liveDraft={liveDraft}
-              compact
-            />
+            {!isWaitingRoom && (
+              <>
+                <LiveDraftTicker
+                  feed={state.draftFeed ?? []}
+                  status={liveDraft?.status}
+                  syncStatus={feedSyncStatus}
+                  syncDetail={feedSyncDetail}
+                />
+                <DraftRoundSelector
+                  feed={state.draftFeed ?? []}
+                  liveDraft={liveDraft}
+                  compact
+                />
+              </>
+            )}
             <DraftChatBox
               leagueId={state.leagueId}
               initialMessages={state.draftChat ?? []}

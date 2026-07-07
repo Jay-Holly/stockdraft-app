@@ -25,9 +25,10 @@ export async function GET(request: Request) {
     }
 
     const url = new URL(request.url);
-    const leagueId =
-      url.searchParams.get("leagueId") ??
-      (await resolveActiveLeagueId(user.id));
+    const leagueId = await resolveActiveLeagueId(
+      user.id,
+      url.searchParams.get("league") ?? url.searchParams.get("leagueId")
+    );
 
     try {
       await processDueScheduledDrafts();
