@@ -7,6 +7,7 @@ import { buildInviteLinkPath } from "@/lib/app-url";
 import {
   isHumanLeagueSupported,
   playerCountsForFormat,
+  playerCountForSportsLeague,
   requiresScheduledDraft,
   SPORTS_LEAGUE_FORMATS,
   unsupportedLeagueConfigMessage,
@@ -145,7 +146,16 @@ export function CreateLeagueForm({
     config.visibility === "private" && config.opponentType === "all_human";
   const inviteSlotsRemaining = Math.max(playerCount - 1, 0);
   const allHumanLeague = config.opponentType === "all_human";
-  const playerCountOptions = playerCountsForFormat(formatType);
+  const playerCountOptions = playerCountsForFormat(formatType, sportsLeagueId);
+  const requiredSportsPlayerCount = playerCountForSportsLeague(sportsLeagueId);
+
+  useEffect(() => {
+    if (formatType !== "sports_league") return;
+    const required = playerCountForSportsLeague(sportsLeagueId);
+    if (required != null) {
+      setPlayerCount(required);
+    }
+  }, [formatType, sportsLeagueId]);
   const draftOrderOptions = (
     Object.keys(DRAFT_ORDER_METHOD_LABELS) as DraftOrderMethodSetting[]
   ).map((method) => ({
@@ -260,7 +270,8 @@ export function CreateLeagueForm({
         onChange={(value) => {
           setFormatType(value);
           if (value === "sports_league") {
-            setPlayerCount(30);
+            const required = playerCountForSportsLeague(sportsLeagueId);
+            if (required != null) setPlayerCount(required);
           } else if (playerCount > 12) {
             setPlayerCount(4);
           }
@@ -279,7 +290,11 @@ export function CreateLeagueForm({
         <OptionGroup<string>
           label="Sports league"
           value={sportsLeagueId}
-          onChange={setSportsLeagueId}
+          onChange={(value) => {
+            setSportsLeagueId(value);
+            const required = playerCountForSportsLeague(value);
+            if (required != null) setPlayerCount(required);
+          }}
           options={SPORTS_LEAGUE_FORMATS.map((f) => ({
             value: f.id,
             label: f.label,
@@ -300,17 +315,14 @@ export function CreateLeagueForm({
         />
       )}
 
-      {formatType === "sports_league" && (
-        <OptionGroup<LeaguePlayerCount>
-          label="League size"
-          value={playerCount}
-          onChange={setPlayerCount}
-          options={playerCountOptions.map((count) => ({
-            value: count,
-            label: `${count} teams`,
-            hint: "Open slots fill with managers at draft time",
-          }))}
-        />
+      {formatType === "sports_league" && requiredSportsPlayerCount != null && (
+        <div className="rounded-xl border border-dark-border bg-dark/40 px-4 py-3">
+          <p className="text-sm font-semibold">League size</p>
+          <p className="text-sm text-muted mt-1">
+            {requiredSportsPlayerCount} teams — fixed for this format. Open slots
+            fill with managers or bots at draft time.
+          </p>
+        </div>
       )}
 
       {formatType === "standard" && (

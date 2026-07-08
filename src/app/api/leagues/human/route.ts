@@ -7,6 +7,7 @@ import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import {
   isHumanLeagueSupported,
   playerCountsForFormat,
+  playerCountForSportsLeague,
   unsupportedLeagueConfigMessage,
 } from "@/lib/league/league-config";
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
@@ -31,13 +32,23 @@ export async function POST(request: Request) {
 
   const formatType =
     body.formatType === "sports_league" ? "sports_league" : "standard";
-  const allowedCounts = playerCountsForFormat(formatType);
+  const allowedCounts = playerCountsForFormat(
+    formatType,
+    typeof body.sportsLeagueId === "string" ? body.sportsLeagueId : undefined
+  );
   const rawCount = body.playerCount;
+  const sportsRequiredCount =
+    formatType === "sports_league"
+      ? playerCountForSportsLeague(
+          typeof body.sportsLeagueId === "string" ? body.sportsLeagueId : undefined
+        )
+      : null;
   const playerCount: CreateLeagueConfig["playerCount"] =
-    VALID_COUNTS.includes(rawCount as CreateLeagueConfig["playerCount"]) &&
+    sportsRequiredCount ??
+    (VALID_COUNTS.includes(rawCount as CreateLeagueConfig["playerCount"]) &&
     allowedCounts.includes(rawCount as CreateLeagueConfig["playerCount"])
       ? (rawCount as CreateLeagueConfig["playerCount"])
-      : allowedCounts[0];
+      : allowedCounts[0]);
 
   const config: CreateLeagueConfig = {
     formatType,

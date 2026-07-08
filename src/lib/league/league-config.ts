@@ -13,6 +13,17 @@ export const STANDARD_PLAYER_COUNTS: LeaguePlayerCount[] = [
 
 export const SPORTS_LEAGUE_PLAYER_COUNTS: LeaguePlayerCount[] = [30, 32];
 
+/** Fixed franchise counts per sports sim league (mirrors real league sizes). */
+export const SPORTS_LEAGUE_REQUIRED_PLAYER_COUNT: Record<
+  (typeof SPORTS_LEAGUE_FORMATS)[number]["id"],
+  LeaguePlayerCount
+> = {
+  sdfl: 32,
+  sdhl: 32,
+  sdba: 30,
+  sdlb: 30,
+};
+
 export const SPORTS_LEAGUE_FORMATS = [
   { id: "sdfl", label: "SDFL", description: "StockDraft Football League" },
   { id: "sdhl", label: "SDHL", description: "StockDraft Hockey League" },
@@ -36,12 +47,23 @@ export type CreateLeagueConfig = {
   draftOrderMethod?: DraftOrderMethodSetting;
 };
 
+export function playerCountForSportsLeague(
+  sportsLeagueId: string | undefined
+): LeaguePlayerCount | null {
+  if (!sportsLeagueId) return null;
+  const id = sportsLeagueId.toLowerCase() as keyof typeof SPORTS_LEAGUE_REQUIRED_PLAYER_COUNT;
+  return SPORTS_LEAGUE_REQUIRED_PLAYER_COUNT[id] ?? null;
+}
+
 export function playerCountsForFormat(
-  formatType: LeagueFormatType
+  formatType: LeagueFormatType,
+  sportsLeagueId?: string
 ): LeaguePlayerCount[] {
-  return formatType === "sports_league"
-    ? SPORTS_LEAGUE_PLAYER_COUNTS
-    : STANDARD_PLAYER_COUNTS;
+  if (formatType === "sports_league") {
+    const required = playerCountForSportsLeague(sportsLeagueId);
+    return required != null ? [required] : SPORTS_LEAGUE_PLAYER_COUNTS;
+  }
+  return STANDARD_PLAYER_COUNTS;
 }
 
 export function requiresScheduledDraft(config: CreateLeagueConfig): boolean {
@@ -57,14 +79,16 @@ export function requiresScheduledDraft(config: CreateLeagueConfig): boolean {
 }
 
 export function isHumanLeagueSupported(config: CreateLeagueConfig): boolean {
-  const allowedCounts = playerCountsForFormat(config.formatType);
-  if (!allowedCounts.includes(config.playerCount)) return false;
-
   if (config.formatType === "sports_league") {
     if (!config.sportsLeagueId) return false;
     if (!SPORTS_LEAGUE_FORMATS.some((format) => format.id === config.sportsLeagueId)) {
       return false;
     }
+    const requiredCount = playerCountForSportsLeague(config.sportsLeagueId);
+    if (requiredCount == null || config.playerCount !== requiredCount) return false;
+  } else {
+    const allowedCounts = playerCountsForFormat(config.formatType);
+    if (!allowedCounts.includes(config.playerCount)) return false;
   }
 
   if (config.visibility === "public" && config.opponentType === "all_human") {
@@ -88,9 +112,19 @@ export function unsupportedLeagueConfigMessage(config: CreateLeagueConfig): stri
     return "Choose a sports league format (SDFL, SDHL, SDBA, or SDLB).";
   }
 
-  const allowedCounts = playerCountsForFormat(config.formatType);
-  if (!allowedCounts.includes(config.playerCount)) {
-    return `${config.playerCount} players is not available for this format.`;
+  if (config.formatType === "sports_league" && config.sportsLeagueId) {
+    const requiredCount = playerCountForSportsLeague(config.sportsLeagueId);
+    if (requiredCount != null && config.playerCount !== requiredCount) {
+      const label =
+        SPORTS_LEAGUE_FORMATS.find((f) => f.id === config.sportsLeagueId)?.label ??
+        config.sportsLeagueId.toUpperCase();
+      return `${label} requires exactly ${requiredCount} teams.`;
+    }
+  } else {
+    const allowedCounts = playerCountsForFormat(config.formatType);
+    if (!allowedCounts.includes(config.playerCount)) {
+      return `${config.playerCount} players is not available for this format.`;
+    }
   }
 
   if (config.visibility === "public" && config.opponentType === "all_human") {
