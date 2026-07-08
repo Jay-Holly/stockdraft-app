@@ -19,6 +19,8 @@ import {
   verifyUserOwnsLeague,
 } from "@/lib/league/active-league";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
+import { ensureIrSlotsForLeague } from "@/lib/sim/ir-slots";
+import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import { backfillFinalizeAtForLeague } from "@/lib/matchup/finalize-week";
 import { AI_LEAGUE_FIELDS } from "@/lib/league/fields";
 import { DEFAULT_LEAGUE_SCORING_MODE } from "@/lib/league/scoring-mode";
@@ -370,6 +372,21 @@ export async function activateAiLeagueSchedule(
     .eq("id", leagueId);
 
   if (leagueError) return { error: leagueError.message };
+
+  const { data: leagueMeta } = await supabase
+    .from("leagues")
+    .select("format_type, sports_league_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (
+    isSportsSimLeague({
+      formatType: leagueMeta?.format_type,
+      sportsLeagueId: leagueMeta?.sports_league_id,
+    })
+  ) {
+    await ensureIrSlotsForLeague(supabase, leagueId);
+  }
 
   await captureWeekBaselinesForLeague(leagueId, 1);
   await backfillFinalizeAtForLeague(leagueId);

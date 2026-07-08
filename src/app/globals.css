@@ -1782,6 +1782,11 @@ body:has(.landing-screen) {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.draft-roster-head--ir {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.08);
+}
+
 .draft-roster-count {
   font-size: 0.625rem;
   font-weight: 600;
@@ -2672,6 +2677,11 @@ body:has(.landing-screen) {
   border-color: rgba(96, 165, 250, 0.35);
 }
 
+.season-calendar-banner--ir {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
 .season-calendar-banner__title {
   font-size: 0.8125rem;
   font-weight: 800;
@@ -2680,6 +2690,10 @@ body:has(.landing-screen) {
 
 .season-calendar-banner--fa .season-calendar-banner__title {
   color: #93c5fd;
+}
+
+.season-calendar-banner--ir .season-calendar-banner__title {
+  color: #fca5a5;
 }
 
 .season-calendar-banner__detail {

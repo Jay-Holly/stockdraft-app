@@ -42,7 +42,9 @@ import {
   getSeasonWeekContext,
 } from "@/lib/league/season-weeks";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
-import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
+import { isSdplSeasonRulesLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
+import { resolveIrResolutionState } from "@/lib/sim/ir-enforcement";
+import { ensureIrSlotsForDraft } from "@/lib/sim/ir-slots";
 import {
   computeGainPercent,
   fetchStockQuotes,
@@ -57,6 +59,7 @@ import {
 import {
   canonicalActiveCryptoPicks,
   filterScoringRosterPicks,
+  isScoringRosterPick,
 } from "@/lib/roster/crypto-picks";
 import {
   computeScoringSeasonGainPercentForUser,
@@ -176,7 +179,7 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
       changePercent = quote?.changePercent ?? 0;
     }
 
-    const scores = pick.pick_type === "stock" || pick.pick_type === "crypto";
+    const scores = isScoringRosterPick(pick);
     const currentValue = pick.shares > 0 ? pick.shares * price : 0;
     const gainPercent = scores
       ? computeGainPercent(pick.budget_spent, currentValue)
@@ -217,9 +220,22 @@ export async function loadRosterView(
 
   const { data: league } = await supabase
     .from("leagues")
-    .select("status, scoring_mode")
+    .select("status, scoring_mode, format_type, sports_league_id, sports_standings_season, current_week")
     .eq("id", leagueId)
     .maybeSingle();
+
+  const sportsSimIrEnabled = isSportsSimLeague({
+    formatType: league?.format_type,
+    sportsLeagueId: league?.sports_league_id,
+  });
+
+  if (sportsSimIrEnabled && !isHistorical) {
+    await ensureIrSlotsForDraft(
+      supabase,
+      userId,
+      state.state.draft.id
+    );
+  }
 
   const scoringMode = parseLeagueScoringMode(league?.scoring_mode);
   const picks = state.state.picks.filter((p) => p.pick_type !== "skip");
@@ -268,6 +284,7 @@ export async function loadRosterView(
         maxViewableWeek: weekContext.maxViewableWeek,
         starters: partitioned.starters,
         bench: partitioned.bench,
+        ir: partitioned.ir,
         crypto: partitioned.crypto,
         cryptoBuyerCounts: {},
         cryptoQuotes: {},
@@ -288,7 +305,14 @@ export async function loadRosterView(
     };
   }
 
-  const enriched = await enrichPicks(picks);
+  const refreshedState = sportsSimIrEnabled
+    ? await loadDraftStateDetailed(userId, { leagueId })
+    : state;
+  const livePicks = (refreshedState.ok ? refreshedState.state.picks : picks).filter(
+    (p) => p.pick_type !== "skip"
+  );
+
+  const enriched = await enrichPicks(livePicks);
   const buyerCounts = await fetchBuyerCounts(supabase, leagueId);
   const cryptoQuoteMap = await getCryptoQuotesMap();
   const cryptoQuotes: Record<string, { price: number; changePercent: number }> =
@@ -305,14 +329,14 @@ export async function loadRosterView(
     leagueId,
     userId,
     viewWeek,
-    picks
+    livePicks
   );
   const baselineByPick = await loadBaselinesThroughWeek(
     supabase,
     leagueId,
     userId,
     viewWeek,
-    { picks }
+    { picks: livePicks }
   );
 
   const withWeekMetrics: RosterPickView[] = enriched.map((pick) => {
@@ -346,10 +370,10 @@ export async function loadRosterView(
   });
 
   const canonicalCryptoIds = new Set(
-    canonicalActiveCryptoPicks(picks).map((pick) => pick.id)
+    canonicalActiveCryptoPicks(livePicks).map((pick) => pick.id)
   );
   const scoringPickIds = new Set(
-    filterScoringRosterPicks(picks).map((pick) => pick.id)
+    filterScoringRosterPicks(livePicks).map((pick) => pick.id)
   );
 
   const scoringWeekInputs = withWeekMetrics
@@ -377,6 +401,17 @@ export async function loadRosterView(
     0
   );
 
+  let irResolution;
+  if (sportsSimIrEnabled && league) {
+    irResolution = await resolveIrResolutionState(
+      supabase,
+      leagueId,
+      league,
+      livePicks,
+      league.current_week ?? weekContext.currentWeek
+    );
+  }
+
   return {
     ok: true,
     roster: {
@@ -390,6 +425,7 @@ export async function loadRosterView(
       maxViewableWeek: weekContext.maxViewableWeek,
       starters: withWeekMetrics.filter((p) => p.pick_type === "stock"),
       bench: withWeekMetrics.filter((p) => p.pick_type === "bench"),
+      ir: withWeekMetrics.filter((p) => p.pick_type === "ir"),
       crypto: withWeekMetrics.filter((pick) => canonicalCryptoIds.has(pick.id)),
       cryptoBuyerCounts: buyerCounts,
       cryptoQuotes,
@@ -399,6 +435,8 @@ export async function loadRosterView(
         computeScoringWeekGainPercent(scoringWeekInputs),
       scoringWeekDollarGain,
       totalWeekDollarGain,
+      sportsSimIrEnabled,
+      irResolution,
     },
   };
 }
@@ -647,6 +685,15 @@ export async function loadFreeAgentsPageData(
         symbol: p.symbol,
         isOpen: p.symbol.toUpperCase() === "__OPEN__",
       })),
+      openActiveSlots: roster.roster.sportsSimIrEnabled
+        ? roster.roster.starters
+            .filter((p) => p.symbol.toUpperCase() === "__OPEN__")
+            .map((p) => ({
+              pickId: p.id,
+              symbol: p.symbol,
+              isOpen: true,
+            }))
+        : undefined,
       calendar,
     },
   };

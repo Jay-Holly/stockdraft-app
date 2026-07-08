@@ -22,6 +22,7 @@ import { requireSeasonLeague } from "@/lib/roster/server";
 import {
   enforceFreeAgencyOpenForLeague,
   enforceLineupUnlockedForLeague,
+  enforceSportsSimIrMoveAllowed,
   type RosterMoveResult,
 } from "@/lib/season/move-gates";
 import {
@@ -207,6 +208,8 @@ export async function applyIrSwap(
   if ("error" in season) return { error: season.error };
 
   const { league } = season;
+  const irGate = await enforceSportsSimIrMoveAllowed(league.id, userId, "other");
+  if (irGate) return irGate;
   const gate = await enforceLineupUnlockedForLeague(league.id);
   if (gate) return gate;
   const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
@@ -295,6 +298,10 @@ export async function applyCryptoRebalance(
   const season = await requireSeasonLeague(userId);
   if ("error" in season) return { error: season.error };
 
+  const { league } = season;
+  const irGate = await enforceSportsSimIrMoveAllowed(league.id, userId, "other");
+  if (irGate) return irGate;
+
   if (!Number.isFinite(sellPercent) || sellPercent <= 0 || sellPercent > 100) {
     return { error: "Sell percentage must be between 1 and 100." };
   }
@@ -304,7 +311,6 @@ export async function applyCryptoRebalance(
     return { error: "Invalid crypto symbol." };
   }
 
-  const { league } = season;
   const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
   if (!state.ok) return { error: state.error };
 
@@ -475,17 +481,31 @@ export async function applyWaiverClaim(
 
   const upper = addSymbol.toUpperCase();
   const { league } = season;
+  const irGate = await enforceSportsSimIrMoveAllowed(league.id, userId, "other");
+  if (irGate) return irGate;
   const gate = await enforceFreeAgencyOpenForLeague(league.id);
   if (gate) return gate;
   const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
   if (!state.ok) return { error: state.error };
 
   const benchPick = state.state.picks.find((p) => p.id === droppedPickId);
-  if (!benchPick || benchPick.pick_type !== "bench") {
-    return { error: "Select a bench slot to drop." };
+  const openStockPick = state.state.picks.find((p) => p.id === droppedPickId);
+  const targetPick = benchPick ?? openStockPick;
+
+  if (!targetPick) {
+    return { error: "Select a valid roster slot." };
   }
 
-  const droppedSymbol = benchPick.symbol.toUpperCase();
+  const isOpenStockClaim =
+    targetPick.pick_type === "stock" &&
+    targetPick.symbol.toUpperCase() === "__OPEN__";
+  const isBenchClaim = targetPick.pick_type === "bench";
+
+  if (!isBenchClaim && !isOpenStockClaim) {
+    return { error: "Select an open bench slot or open active slot to add a free agent." };
+  }
+
+  const droppedSymbol = targetPick.symbol.toUpperCase();
   const isOpenSlot = droppedSymbol === "__OPEN__";
 
   const offBoard = await getLeagueOffBoardSymbols(league.id);
@@ -504,9 +524,9 @@ export async function applyWaiverClaim(
 
   const supabase = await createClient();
 
-  const patchResult = await patchDraftPick(supabase, userId, benchPick.id, {
+  const patchResult = await patchDraftPick(supabase, userId, targetPick.id, {
     symbol: upper,
-    pick_type: "bench",
+    pick_type: isOpenStockClaim ? "stock" : "bench",
     budget_spent: 0,
     effective_value: 0,
     shares: 0,
@@ -536,10 +556,10 @@ export async function applyWaiverClaim(
         league_id: league.id,
         user_id: userId,
         move_type: "waiver_drop",
-        pick_id: benchPick.id,
+        pick_id: targetPick.id,
         symbol: droppedSymbol,
-        prior_pick_type: "bench",
-        budget_before: benchPick.budget_spent,
+        prior_pick_type: isOpenStockClaim ? "stock" : "bench",
+        budget_before: targetPick.budget_spent,
         budget_after: 0,
         notes: `Released ${droppedSymbol} to league free agency`,
       });
@@ -550,17 +570,19 @@ export async function applyWaiverClaim(
     league_id: league.id,
     user_id: userId,
     move_type: "waiver_add",
-    pick_id: benchPick.id,
+    pick_id: targetPick.id,
     symbol: upper,
     prior_symbol: isOpenSlot ? undefined : droppedSymbol,
-    prior_pick_type: "bench",
-    new_pick_type: "bench",
-    budget_before: benchPick.budget_spent,
+    prior_pick_type: isOpenStockClaim ? "stock" : "bench",
+    new_pick_type: isOpenStockClaim ? "stock" : "bench",
+    budget_before: targetPick.budget_spent,
     budget_after: 0,
     price_at_move: quote.price,
     shares_after: 0,
     notes: isOpenSlot
-      ? `Added FA ${upper} to open bench slot at $0 until IR promote`
+      ? isOpenStockClaim
+        ? `Added FA ${upper} to open active slot at $0 until promoted`
+        : `Added FA ${upper} to open bench slot at $0 until IR promote`
       : `Dropped ${droppedSymbol}, added FA ${upper} to bench at $0 until IR promote`,
   });
 
@@ -575,6 +597,8 @@ export async function applyBenchDrop(
   if ("error" in season) return { error: season.error };
 
   const { league } = season;
+  const irGate = await enforceSportsSimIrMoveAllowed(league.id, userId, "other");
+  if (irGate) return irGate;
   const gate = await enforceFreeAgencyOpenForLeague(league.id);
   if (gate) return gate;
   const state = await loadDraftStateDetailed(userId, { leagueId: league.id });

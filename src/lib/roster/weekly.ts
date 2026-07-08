@@ -722,6 +722,34 @@ export async function applyIrSwapWeekBaselines(
   );
 }
 
+/** Sports-sim IR move/return: set week baseline on the pick receiving roster value. */
+export async function applyIrMoveWeekBaselines(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  receivingPickId: string,
+  clearedPickId: string,
+  transferBudget: number
+): Promise<void> {
+  const weekNumber = await getCurrentWeek(supabase, leagueId, userId);
+  await setPickWeekBaseline(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber,
+    clearedPickId,
+    0
+  );
+  await setPickWeekBaseline(
+    supabase,
+    leagueId,
+    userId,
+    weekNumber,
+    receivingPickId,
+    transferBudget
+  );
+}
+
 export async function applyCryptoRebalanceWeekBaselines(
   supabase: SupabaseClient,
   leagueId: string,

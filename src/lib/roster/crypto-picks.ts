@@ -78,7 +78,10 @@ export function findActiveCryptoPick(
 }
 
 export function isScoringRosterPick(pick: DraftPick): boolean {
-  if (pick.pick_type === "stock") return true;
+  if (pick.pick_type === "ir" || pick.pick_type === "bench") return false;
+  if (pick.pick_type === "stock") {
+    return pick.symbol.toUpperCase() !== "__OPEN__";
+  }
   if (pick.pick_type === "crypto") return isActiveCryptoPick(pick);
   return false;
 }

@@ -10,6 +10,9 @@ import {
 import { getLastCryptoQuoteSource } from "@/lib/roster/quotes";
 import { listAiLeaguesForUser } from "@/lib/league/active-league";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
+import { runSportsSimIrWeeklyCheck } from "@/lib/sim/ir-enforcement";
+import { ensureIrSlotsForLeague } from "@/lib/sim/ir-slots";
+import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import {
   canFinalizeLeagueWeek,
   setNextWeekFinalizeAt,
@@ -514,6 +517,23 @@ async function advanceLeagueCalendar(
   await syncLeagueCurrentWeek(leagueId, nextWeek, supabase);
   await captureWeekBaselinesForLeague(leagueId, nextWeek, supabase);
   await setNextWeekFinalizeAt(leagueId, nextWeek, new Date());
+
+  const { data: leagueMeta } = await supabase
+    .from("leagues")
+    .select("format_type, sports_league_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (
+    isSportsSimLeague({
+      formatType: leagueMeta?.format_type,
+      sportsLeagueId: leagueMeta?.sports_league_id,
+    })
+  ) {
+    await ensureIrSlotsForLeague(supabase, leagueId);
+    await runSportsSimIrWeeklyCheck(supabase, leagueId, nextWeek);
+  }
+
   return { seasonComplete: false, nextWeek };
 }
 

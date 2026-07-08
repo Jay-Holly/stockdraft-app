@@ -14,6 +14,7 @@ import {
 } from "@/lib/fetch-client";
 import { SeasonWeekNavigator } from "@/components/season/SeasonWeekNavigator";
 import { SeasonCalendarBanner } from "@/components/season/SeasonCalendarBanner";
+import { RosterIrBanner } from "@/components/season/RosterIrBanner";
 
 export function MyTeamPageContent() {
   const [roster, setRoster] = useState<RosterView | null>(null);
@@ -23,6 +24,9 @@ export function MyTeamPageContent() {
   const [busy, setBusy] = useState(false);
   const [irStarterId, setIrStarterId] = useState<string | null>(null);
   const [irBenchId, setIrBenchId] = useState<string | null>(null);
+  const [irMoveStarterId, setIrMoveStarterId] = useState<string | null>(null);
+  const [irMoveSlotId, setIrMoveSlotId] = useState<string | null>(null);
+  const [irReturnPickId, setIrReturnPickId] = useState<string | null>(null);
   const [cryptoPickId, setCryptoPickId] = useState<string | null>(null);
   const { coins: cryptoPool } = useCryptoPool();
   const cryptoSymbols = useMemo(
@@ -141,6 +145,83 @@ export function MyTeamPageContent() {
     const id = window.setInterval(() => void load(roster.viewWeek), 15_000);
     return () => window.clearInterval(id);
   }, [load, roster?.isHistorical, roster?.viewWeek]);
+
+  async function handleMoveToIr() {
+    if (!irMoveStarterId || !irMoveSlotId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { res, data: json } = await fetchJsonWithTimeout<{
+        error?: string;
+      }>("/api/roster/move-to-ir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          starterPickId: irMoveStarterId,
+          irSlotPickId: irMoveSlotId,
+        }),
+        timeoutMs: 30_000,
+        label: "Move to IR",
+      });
+
+      if (!res.ok) {
+        setError(json.error ?? `Move to IR failed (HTTP ${res.status})`);
+        return;
+      }
+
+      setIrMoveStarterId(null);
+      setIrMoveSlotId(null);
+      void load(selectedWeek ?? roster?.viewWeek).catch((reloadErr) => {
+        setError(
+          formatFetchError(reloadErr, "Move to IR saved, but roster refresh")
+        );
+      });
+    } catch (err) {
+      setError(formatFetchError(err, "Move to IR"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReturnFromIr() {
+    if (!irReturnPickId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const openStockPickId = roster?.starters.find(
+        (pick) => pick.symbol.toUpperCase() === "__OPEN__"
+      )?.id;
+
+      const { res, data: json } = await fetchJsonWithTimeout<{
+        error?: string;
+      }>("/api/roster/return-from-ir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          irPickId: irReturnPickId,
+          openStockPickId,
+        }),
+        timeoutMs: 30_000,
+        label: "Return from IR",
+      });
+
+      if (!res.ok) {
+        setError(json.error ?? `Return from IR failed (HTTP ${res.status})`);
+        return;
+      }
+
+      setIrReturnPickId(null);
+      void load(selectedWeek ?? roster?.viewWeek).catch((reloadErr) => {
+        setError(
+          formatFetchError(reloadErr, "Return from IR saved, but roster refresh")
+        );
+      });
+    } catch (err) {
+      setError(formatFetchError(err, "Return from IR"));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleIrSwap() {
     if (!irStarterId || !irBenchId) return;
@@ -304,6 +385,10 @@ export function MyTeamPageContent() {
         <SeasonCalendarBanner calendar={roster.calendar} variant="lineup" />
       )}
 
+      {!viewingHistorical && roster.sportsSimIrEnabled && (
+        <RosterIrBanner resolution={roster.irResolution} />
+      )}
+
       {error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
@@ -316,12 +401,23 @@ export function MyTeamPageContent() {
         tone="starters"
         scoringMode={roster.scoringMode}
         picks={roster.starters}
-        selectable={!viewingHistorical && !lineupLocked}
-        selectedId={irStarterId}
-        onSelect={(id) =>
-          setIrStarterId((prev) => (prev === id ? null : id))
+        selectable={
+          !viewingHistorical &&
+          !lineupLocked &&
+          !roster.irResolution?.required
         }
-        selectLabel="Bench"
+        selectedId={roster.sportsSimIrEnabled ? irMoveStarterId ?? irStarterId : irStarterId}
+        onSelect={(id) => {
+          const pick = roster.starters.find((row) => row.id === id);
+          if (roster.sportsSimIrEnabled && pick?.symbol.toUpperCase() !== "__OPEN__") {
+            setIrMoveStarterId((prev) => (prev === id ? null : id));
+            setIrStarterId(null);
+            return;
+          }
+          setIrStarterId((prev) => (prev === id ? null : id));
+          setIrMoveStarterId(null);
+        }}
+        selectLabel={roster.sportsSimIrEnabled ? "To IR" : "Bench"}
       />
 
       <RosterBlock
@@ -330,15 +426,89 @@ export function MyTeamPageContent() {
         tone="bench"
         scoringMode={roster.scoringMode}
         picks={roster.bench}
-        selectable={!viewingHistorical && !lineupLocked}
+        selectable={!viewingHistorical && !lineupLocked && !roster.irResolution?.required}
         selectedId={irBenchId}
         onSelect={(id) => setIrBenchId((prev) => (prev === id ? null : id))}
         selectLabel="Promote"
       />
 
+      {roster.sportsSimIrEnabled && (
+        <RosterBlock
+          title="Injured reserve"
+          subtitle="Up to 3 slots · does not score · injury-eligible stocks only"
+          tone="ir"
+          scoringMode={roster.scoringMode}
+          picks={roster.ir ?? []}
+          selectable={!viewingHistorical}
+          selectedId={irMoveSlotId ?? irReturnPickId}
+          onSelect={(id) => {
+            const pick = roster.ir?.find((row) => row.id === id);
+            if (!pick) return;
+            if (pick.symbol.toUpperCase() === "__OPEN__") {
+              setIrMoveSlotId((prev) => (prev === id ? null : id));
+              setIrReturnPickId(null);
+              return;
+            }
+            const stale = roster.irResolution?.picks.some((row) => row.pickId === id);
+            if (stale) {
+              setIrReturnPickId((prev) => (prev === id ? null : id));
+              setIrMoveSlotId(null);
+            }
+          }}
+          selectLabel={
+            roster.irResolution?.required ? "Return" : "IR slot"
+          }
+        />
+      )}
+
+      {roster.sportsSimIrEnabled && !viewingHistorical && (
+        <section className="season-card space-y-3">
+          <div>
+            <h2 className="season-card-title">Move to IR</h2>
+            <p className="text-sm text-muted">
+              Select an injury-eligible starter and an empty IR slot. The active
+              spot opens for a free-agent add. IR stocks never score.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            className="w-full"
+            disabled={
+              busy ||
+              roster.irResolution?.required ||
+              !irMoveStarterId ||
+              !irMoveSlotId
+            }
+            onClick={handleMoveToIr}
+          >
+            {busy ? "Processing…" : "Move starter to IR"}
+          </Button>
+
+          {roster.irResolution?.required && (
+            <>
+              <div>
+                <h2 className="season-card-title">Return from IR</h2>
+                <p className="text-sm text-muted">
+                  Drop or bench a starter to open an active slot, then return the
+                  healed stock from IR.
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                className="w-full"
+                disabled={busy || !irReturnPickId}
+                onClick={handleReturnFromIr}
+              >
+                {busy ? "Processing…" : "Return selected stock to active"}
+              </Button>
+            </>
+          )}
+        </section>
+      )}
+
       {!viewingHistorical && (
       <section className="season-card">
-        <h2 className="season-card-title">IR swap</h2>
+        <h2 className="season-card-title">Bench promote (IR swap)</h2>
         <p className="text-sm text-muted mb-3">
           Bench a starter and call up a bench player. The promoted stock receives
           budget equal to the benched starter&apos;s current market value (not the
@@ -347,14 +517,20 @@ export function MyTeamPageContent() {
         <Button
           variant="primary"
           className="w-full"
-          disabled={busy || lineupLocked || !irStarterId || !irBenchId}
+          disabled={
+            busy ||
+            lineupLocked ||
+            roster.irResolution?.required ||
+            !irStarterId ||
+            !irBenchId
+          }
           onClick={handleIrSwap}
         >
           {busy
             ? "Processing…"
             : lineupLocked
               ? "Lineups locked until 4:00 PM ET"
-              : "Confirm IR swap"}
+              : "Confirm bench promote"}
         </Button>
       </section>
       )}
@@ -597,7 +773,7 @@ function RosterBlock({
 }: {
   title: string;
   subtitle: string;
-  tone: "starters" | "bench" | "crypto";
+  tone: "starters" | "bench" | "crypto" | "ir";
   scoringMode: LeagueScoringMode;
   picks: RosterPickView[];
   selectable?: boolean;

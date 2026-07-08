@@ -18,7 +18,7 @@ export const CRYPTO_FLEX_ROUNDS = 0;
 /** Surcharge % by buyer index: 1st=0%, 2nd=5%, 3rd=10%, 4th=20%, 5th=40%, 6th+=80% */
 export const CRYPTO_SURCHARGE_TIERS = [0, 5, 10, 20, 40, 80] as const;
 
-export type PickType = "stock" | "bench" | "crypto" | "skip";
+export type PickType = "stock" | "bench" | "crypto" | "skip" | "ir";
 export type DraftStatus = "in_progress" | "complete";
 
 export type Draft = {
@@ -133,6 +133,8 @@ export type DraftState = {
   safetyPickQueue: string[];
   /** League status from leagues.status (e.g. waiting, drafting). */
   leagueStatus?: string;
+  /** Human-readable league ID (e.g. SDAI-00022) from leagues.support_code. */
+  leagueSupportCode?: string;
   scheduledDraftAt?: string | null;
   isLiveFormat?: boolean;
   waitingRoomMembers?: DraftWaitingRoomMember[];

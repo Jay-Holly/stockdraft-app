@@ -33,6 +33,14 @@ export function FreeAgentsPageContent() {
     return () => window.clearInterval(id);
   }, [load]);
 
+  const claimSlots = useMemo(() => {
+    if (!data) return [];
+    return [
+      ...data.benchSlots,
+      ...(data.openActiveSlots ?? []),
+    ];
+  }, [data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
     const q = filter.trim().toUpperCase();
@@ -70,7 +78,7 @@ export function FreeAgentsPageContent() {
 
   async function handleDropOnly() {
     if (!dropPickId || !data) return;
-    const slot = data.benchSlots.find((s) => s.pickId === dropPickId);
+    const slot = claimSlots.find((s) => s.pickId === dropPickId);
     if (!slot || slot.isOpen || slot.symbol.toUpperCase() === "__OPEN__") {
       return;
     }
@@ -129,12 +137,13 @@ export function FreeAgentsPageContent() {
       )}
 
       <section className="season-card">
-        <h2 className="season-card-title">Bench slot</h2>
+        <h2 className="season-card-title">Drop slot</h2>
         <p className="text-xs text-muted mt-1 mb-2">
-          Pick a bench player to drop, or an empty slot if you already released one.
+          Pick a bench player to drop, an empty bench slot, or an open active slot
+          opened by an IR move.
         </p>
         <div className="flex flex-wrap gap-2 mt-2">
-          {data.benchSlots.map((slot) => (
+          {claimSlots.map((slot) => (
             <button
               key={slot.pickId}
               type="button"
@@ -147,7 +156,9 @@ export function FreeAgentsPageContent() {
               }
             >
               {slot.isOpen || slot.symbol.toUpperCase() === "__OPEN__"
-                ? "Use open bench slot"
+                ? data.openActiveSlots?.some((s) => s.pickId === slot.pickId)
+                  ? "Use open active slot"
+                  : "Use open bench slot"
                 : `Drop ${slot.symbol}`}
             </button>
           ))}
@@ -200,7 +211,7 @@ export function FreeAgentsPageContent() {
       </section>
 
       {dropPickId &&
-        data.benchSlots.some(
+        claimSlots.some(
           (s) =>
             s.pickId === dropPickId &&
             !s.isOpen &&
@@ -215,7 +226,7 @@ export function FreeAgentsPageContent() {
             {busy
               ? "Releasing…"
               : `Release ${
-                  data.benchSlots.find((s) => s.pickId === dropPickId)?.symbol
+                  claimSlots.find((s) => s.pickId === dropPickId)?.symbol
                 } to free agency only`}
           </Button>
         )}

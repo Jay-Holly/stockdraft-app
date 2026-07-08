@@ -55,7 +55,7 @@ function resolveWeekCloseValue(
   return weekDetail?.open ?? 0;
 }
 
-import { isActiveCryptoPick } from "@/lib/roster/crypto-picks";
+import { isActiveCryptoPick, isScoringRosterPick } from "@/lib/roster/crypto-picks";
 
 export async function buildHistoricalRosterPicks(
   leagueId: string,
@@ -89,7 +89,7 @@ export async function buildHistoricalRosterPicks(
       nextWeekBaselines.get(pick.id)
     );
 
-    const scores = pick.pick_type === "stock" || pick.pick_type === "crypto";
+    const scores = isScoringRosterPick(pick);
     const shares = pick.shares > 0 ? pick.shares : 0;
     const currentPrice =
       shares > 0 ? weekCloseValue / shares : pick.price_at_pick;
@@ -141,11 +141,13 @@ export async function buildHistoricalRosterPicks(
 export function partitionHistoricalRosterPicks(picks: RosterPickView[]): {
   starters: RosterPickView[];
   bench: RosterPickView[];
+  ir: RosterPickView[];
   crypto: RosterPickView[];
 } {
   return {
     starters: picks.filter((pick) => pick.pick_type === "stock"),
     bench: picks.filter((pick) => pick.pick_type === "bench"),
+    ir: picks.filter((pick) => pick.pick_type === "ir"),
     crypto: picks.filter(
       (pick) => pick.pick_type === "crypto" && isActiveCryptoPick(pick)
     ),

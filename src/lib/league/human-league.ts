@@ -9,6 +9,8 @@ import type { League } from "@/lib/league/server";
 import { getLeagueMemberTeamName } from "@/lib/league/server";
 import { HUMAN_LEAGUE_FIELDS } from "@/lib/league/fields";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
+import { ensureIrSlotsForLeague } from "@/lib/sim/ir-slots";
+import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import { isHumanLeagueSupported } from "@/lib/league/league-config";
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
@@ -627,6 +629,21 @@ export async function activateHumanLeagueSchedule(
     .eq("id", leagueId);
 
   if (leagueError) return { error: leagueError.message };
+
+  const { data: leagueRow } = await supabase
+    .from("leagues")
+    .select("format_type, sports_league_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (
+    isSportsSimLeague({
+      formatType: leagueRow?.format_type,
+      sportsLeagueId: leagueRow?.sports_league_id,
+    })
+  ) {
+    await ensureIrSlotsForLeague(supabase, leagueId);
+  }
 
   await captureWeekBaselinesForLeague(leagueId, 1);
   return {};

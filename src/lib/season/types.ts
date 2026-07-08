@@ -38,7 +38,10 @@ export type SeasonCalendarState = {
   freeAgencyMessage: string | null;
 };
 
-export type SeasonCalendarErrorCode = "LINEUP_LOCKED" | "FA_CLOSED";
+export type SeasonCalendarErrorCode =
+  | "LINEUP_LOCKED"
+  | "FA_CLOSED"
+  | "IR_RESOLUTION_REQUIRED";
 
 export class SeasonCalendarError extends Error {
   readonly code: SeasonCalendarErrorCode;

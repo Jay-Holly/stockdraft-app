@@ -2,6 +2,8 @@ import type { DraftPick, CryptoBuyerCounts } from "@/lib/draft/types";
 import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
 import type { SeasonCalendarState } from "@/lib/season/types";
 
+import type { IrResolutionState } from "@/lib/sim/types";
+
 export type RosterPickView = DraftPick & {
   acquired_via?: string;
   currentPrice: number;
@@ -27,6 +29,7 @@ export type RosterView = {
   maxViewableWeek: number;
   starters: RosterPickView[];
   bench: RosterPickView[];
+  ir: RosterPickView[];
   crypto: RosterPickView[];
   cryptoBuyerCounts: CryptoBuyerCounts;
   cryptoQuotes: Record<string, { price: number; changePercent: number }>;
@@ -38,6 +41,10 @@ export type RosterView = {
   scoringWeekDollarGain: number;
   /** Weekly $ gain across all roster slots (Winner of the Week). */
   totalWeekDollarGain: number;
+  /** Sports-sim only: stale IR stocks blocking other roster moves. */
+  irResolution?: IrResolutionState;
+  /** Sports-sim only: whether this league supports IR mechanics. */
+  sportsSimIrEnabled?: boolean;
   calendar?: SeasonCalendarState;
 };
 
@@ -101,5 +108,7 @@ export type FreeAgentsPageData = {
   leagueId: string;
   freeAgents: FreeAgentStock[];
   benchSlots: Array<{ pickId: string; symbol: string; isOpen?: boolean }>;
+  /** Sports-sim open active slots (from IR moves). */
+  openActiveSlots?: Array<{ pickId: string; symbol: string; isOpen?: boolean }>;
   calendar?: SeasonCalendarState;
 };
