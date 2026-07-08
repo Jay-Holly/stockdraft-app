@@ -138,4 +138,10 @@ export type DraftState = {
   scheduledDraftAt?: string | null;
   isLiveFormat?: boolean;
   waitingRoomMembers?: DraftWaitingRoomMember[];
+  /** Persisted scheduler/bot-fill failure for due scheduled drafts. */
+  scheduledDraftError?: string | null;
+  /** Roster fill progress while bots are provisioning after scheduled time. */
+  scheduledDraftRosterFill?: { current: number; target: number } | null;
+  /** Latest nudge error from GET /api/draft (same poll). */
+  schedulerNudgeError?: string | null;
 };

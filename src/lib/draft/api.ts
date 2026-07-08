@@ -14,6 +14,7 @@ import { getDraftChatMessages } from "@/lib/draft/chat";
 import { getAiLeagueBotDraftBoards } from "@/lib/league/ai-league";
 import type { BotDraftBoard } from "@/lib/league/ai-league";
 import { getHumanLeagueOpponentBoards, getHumanLeagueMembers } from "@/lib/league/human-league";
+import { getScheduledDraftRoomStatus } from "@/lib/league/scheduled-draft-status";
 import { resolveActiveLeagueId } from "@/lib/league/active-league";
 import { createClient } from "@/lib/supabase/server";
 
@@ -69,7 +70,7 @@ export async function loadDraftApiPayload(
     const supabase = await createClient();
     const { data: leagueMeta } = await supabase
       .from("leagues")
-      .select("league_type, status, scheduled_draft_at, draft_format")
+      .select("league_type, status, scheduled_draft_at, draft_format, support_code")
       .eq("id", leagueId)
       .maybeSingle();
 
@@ -111,7 +112,7 @@ export async function loadDraftApiPayload(
           )
         : getAiLeagueBotDraftBoards(userId, leagueId);
 
-    const [liveDraftRaw, draftFeed, draftChat, botDraftBoards, waitingRoomMembers] =
+    const [liveDraftRaw, draftFeed, draftChat, botDraftBoards, waitingRoomMembers, scheduledDraftStatus] =
       await Promise.all([
       live
         ? buildLiveDraftView(leagueId, userId).catch((err) => {
@@ -133,6 +134,9 @@ export async function loadDraftApiPayload(
             }))
           )
         : Promise.resolve(undefined),
+      live && leagueMeta?.status === "waiting"
+        ? getScheduledDraftRoomStatus(supabase, leagueId)
+        : Promise.resolve(null),
     ]);
 
     let liveDraft = liveDraftRaw;
@@ -162,9 +166,13 @@ export async function loadDraftApiPayload(
         draftChat,
         botDraftBoards: botDraftBoards ?? undefined,
         leagueStatus: leagueMeta?.status,
+        leagueSupportCode:
+          result.state.leagueSupportCode ?? leagueMeta?.support_code ?? undefined,
         scheduledDraftAt: leagueMeta?.scheduled_draft_at ?? null,
         isLiveFormat: live,
         waitingRoomMembers,
+        scheduledDraftError: scheduledDraftStatus?.lastError ?? null,
+        scheduledDraftRosterFill: scheduledDraftStatus?.rosterFill ?? null,
       },
     };
   } catch (error) {

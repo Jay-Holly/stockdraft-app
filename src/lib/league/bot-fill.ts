@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient } from "@/lib/supabase/server";
 import {
   ALL_BOT_PERSONALITIES,
@@ -66,11 +68,23 @@ function pickTeamName(used: Set<string>, index: number): string {
   return fallback;
 }
 
+export type FillEmptySlotsResult = {
+  filled: number;
+  remainingSlots: number;
+  resumedFrom: number;
+  error?: string;
+};
+
 export async function fillEmptySlotsWithBots(
   leagueId: string,
-  playerCount: number
-): Promise<{ filled: number; error?: string }> {
-  const supabase = await createClient();
+  playerCount: number,
+  options?: {
+    supabase?: SupabaseClient;
+    /** Cap bots created this invocation; remaining slots resume on the next run. */
+    maxBotsPerRun?: number;
+  }
+): Promise<FillEmptySlotsResult> {
+  const supabase = options?.supabase ?? (await createClient());
 
   const { data: members, error: membersError } = await supabase
     .from("league_members")
@@ -79,12 +93,19 @@ export async function fillEmptySlotsWithBots(
     .order("draft_slot", { ascending: true, nullsFirst: false });
 
   if (membersError) {
-    return { filled: 0, error: membersError.message };
+    return {
+      filled: 0,
+      remainingSlots: playerCount,
+      resumedFrom: 0,
+      error: membersError.message,
+    };
   }
 
   const existingCount = members?.length ?? 0;
   const slotsToFill = Math.max(0, playerCount - existingCount);
-  if (slotsToFill === 0) return { filled: 0 };
+  if (slotsToFill === 0) {
+    return { filled: 0, remainingSlots: 0, resumedFrom: existingCount };
+  }
 
   const usedNames = new Set(
     (members ?? [])
@@ -92,9 +113,12 @@ export async function fillEmptySlotsWithBots(
       .filter(Boolean) as string[]
   );
 
+  const maxThisRun = options?.maxBotsPerRun ?? slotsToFill;
   let filled = 0;
 
   for (let slot = existingCount; slot < playerCount; slot++) {
+    if (filled >= maxThisRun) break;
+
     const personality =
       ALL_BOT_PERSONALITIES[slot % ALL_BOT_PERSONALITIES.length] as BotPersonality;
     const displayName = pickTeamName(usedNames, slot);
@@ -111,6 +135,8 @@ export async function fillEmptySlotsWithBots(
     if (error || !botId) {
       return {
         filled,
+        remainingSlots: Math.max(0, playerCount - existingCount - filled),
+        resumedFrom: existingCount,
         error: error?.message ?? "Could not provision league bot.",
       };
     }
@@ -118,13 +144,18 @@ export async function fillEmptySlotsWithBots(
     filled += 1;
   }
 
-  return { filled };
+  return {
+    filled,
+    remainingSlots: Math.max(0, playerCount - existingCount - filled),
+    resumedFrom: existingCount,
+  };
 }
 
 export async function ensureStandingsForLeagueMembers(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: members } = await supabase
     .from("league_members")
     .select("user_id")

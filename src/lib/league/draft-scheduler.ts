@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient } from "@/lib/supabase/server";
 import { getLeagueDraftStateRow, normalizeDraftOrder, startLiveDraft } from "@/lib/draft/live-draft";
 import {
@@ -6,13 +8,29 @@ import {
   shouldFillEmptySlotsWithBots,
 } from "@/lib/league/bot-fill";
 import { resolveDraftOrderForLeague } from "@/lib/league/draft-order-server";
-import { HUMAN_LEAGUE_FIELDS } from "@/lib/league/fields";
+import {
+  clearScheduledDraftError,
+  recordScheduledDraftAttempt,
+} from "@/lib/league/scheduled-draft-status";
 import { finalizeHumanLeagueAfterDraft } from "@/lib/matchup/seed-human-schedule";
 
+export type ProcessDueScheduledDraftsOptions = {
+  supabase?: SupabaseClient;
+  /** Max synthetic bots to add per league per invocation (resume on next run). */
+  maxBotsPerLeaguePerRun?: number;
+};
+
+export type MaybeStartHumanLeagueDraftOptions = {
+  force?: boolean;
+  supabase?: SupabaseClient;
+  maxBotsPerRun?: number;
+};
+
 export async function ensureDraftRowsForAllMembers(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: members, error: membersError } = await supabase
     .from("league_members")
     .select("user_id")
@@ -48,14 +66,18 @@ export async function ensureDraftRowsForAllMembers(
 
 export async function maybeStartHumanLeagueDraft(
   leagueId: string,
-  options?: { force?: boolean }
-): Promise<{ started?: boolean; error?: string }> {
-  const supabase = await createClient();
+  options?: MaybeStartHumanLeagueDraftOptions
+): Promise<{
+  started?: boolean;
+  botFillInProgress?: boolean;
+  error?: string;
+}> {
+  const supabase = options?.supabase ?? (await createClient());
 
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
     .select(
-      "id, status, owner_user_id, player_count, visibility, opponent_type, scheduled_draft_at, pick_time_seconds"
+      "id, status, owner_user_id, player_count, visibility, opponent_type, scheduled_draft_at, pick_time_seconds, support_code"
     )
     .eq("id", leagueId)
     .eq("league_type", "human")
@@ -65,8 +87,10 @@ export async function maybeStartHumanLeagueDraft(
     return { error: leagueError?.message ?? "League not found." };
   }
 
+  const leagueLabel = league.support_code ?? leagueId;
+
   if (league.status === "drafting" || league.status === "active") {
-    const existingState = await getLeagueDraftStateRow(leagueId);
+    const existingState = await getLeagueDraftStateRow(leagueId, supabase);
     if (normalizeDraftOrder(existingState?.draft_order).length >= 2) {
       return { started: true };
     }
@@ -98,8 +122,21 @@ export async function maybeStartHumanLeagueDraft(
   });
 
   if (fillBots && humans < playerCount) {
-    const fillResult = await fillEmptySlotsWithBots(leagueId, playerCount);
-    if (fillResult.error) return { error: fillResult.error };
+    const fillResult = await fillEmptySlotsWithBots(leagueId, playerCount, {
+      supabase,
+      maxBotsPerRun: options?.maxBotsPerRun,
+    });
+
+    if (fillResult.error) {
+      const message = `${leagueLabel}: bot fill failed after ${fillResult.filled} bot(s) — ${fillResult.error}`;
+      await recordScheduledDraftAttempt(supabase, leagueId, message);
+      return { error: message };
+    }
+
+    if (fillResult.remainingSlots > 0) {
+      await recordScheduledDraftAttempt(supabase, leagueId, null);
+      return { started: false, botFillInProgress: true };
+    }
   }
 
   const { count: finalCount } = await supabase
@@ -111,39 +148,62 @@ export async function maybeStartHumanLeagueDraft(
     if (scheduledAt && scheduledAt > now && !options?.force) {
       return { started: false };
     }
-    // All-human leagues wait quietly until every roster spot is filled.
     if (!fillBots) {
       return { started: false };
     }
-    return {
-      error: `Waiting for ${playerCount - (finalCount ?? 0)} more player(s).`,
-    };
+    const message = `${leagueLabel}: waiting for ${playerCount - (finalCount ?? 0)} more player(s).`;
+    await recordScheduledDraftAttempt(supabase, leagueId, message);
+    return { error: message };
   }
 
-  const standingsResult = await ensureStandingsForLeagueMembers(leagueId);
-  if (standingsResult.error) return standingsResult;
+  const standingsResult = await ensureStandingsForLeagueMembers(
+    leagueId,
+    supabase
+  );
+  if (standingsResult.error) {
+    const message = `${leagueLabel}: ${standingsResult.error}`;
+    await recordScheduledDraftAttempt(supabase, leagueId, message);
+    return { error: message };
+  }
 
-  const draftsResult = await ensureDraftRowsForAllMembers(leagueId);
-  if (draftsResult.error) return draftsResult;
+  const draftsResult = await ensureDraftRowsForAllMembers(leagueId, supabase);
+  if (draftsResult.error) {
+    const message = `${leagueLabel}: ${draftsResult.error}`;
+    await recordScheduledDraftAttempt(supabase, leagueId, message);
+    return { error: message };
+  }
 
-  const orderResult = await resolveDraftOrderForLeague(leagueId);
-  if (orderResult.error) return { error: orderResult.error };
+  const orderResult = await resolveDraftOrderForLeague(leagueId, supabase);
+  if (orderResult.error) {
+    const message = `${leagueLabel}: ${orderResult.error}`;
+    await recordScheduledDraftAttempt(supabase, leagueId, message);
+    return { error: message };
+  }
 
   const draftOrder = orderResult.draftOrder;
   if (draftOrder.length < 2) {
-    return { error: "Not enough teams to start the draft." };
+    const message = `${leagueLabel}: not enough teams to start the draft.`;
+    await recordScheduledDraftAttempt(supabase, leagueId, message);
+    return { error: message };
   }
 
   const ownerId = league.owner_user_id;
-  if (!ownerId) return { error: "League commissioner not found." };
+  if (!ownerId) {
+    const message = `${leagueLabel}: league commissioner not found.`;
+    await recordScheduledDraftAttempt(supabase, leagueId, message);
+    return { error: message };
+  }
 
   const pickTimeSeconds = league.pick_time_seconds ?? 120;
   const startResult = await startLiveDraft(leagueId, ownerId, pickTimeSeconds, {
     draftOrder,
+    supabase,
   });
 
   if (startResult.error) {
-    return { error: startResult.error };
+    const message = `${leagueLabel}: ${startResult.error}`;
+    await recordScheduledDraftAttempt(supabase, leagueId, message);
+    return { error: message };
   }
 
   const { error: statusError } = await supabase
@@ -151,16 +211,25 @@ export async function maybeStartHumanLeagueDraft(
     .update({ status: "drafting" })
     .eq("id", leagueId);
 
-  if (statusError) return { error: statusError.message };
+  if (statusError) {
+    const message = `${leagueLabel}: ${statusError.message}`;
+    await recordScheduledDraftAttempt(supabase, leagueId, message);
+    return { error: message };
+  }
 
+  await clearScheduledDraftError(supabase, leagueId);
   return { started: true };
 }
 
-export async function processDueScheduledDrafts(): Promise<{
+export async function processDueScheduledDrafts(
+  options?: ProcessDueScheduledDraftsOptions
+): Promise<{
   processed: number;
+  inProgress: number;
   errors: string[];
+  attemptedLeagues: number;
 }> {
-  const supabase = await createClient();
+  const supabase = options?.supabase ?? (await createClient());
   const nowIso = new Date().toISOString();
 
   const { data: dueLeagues } = await supabase
@@ -173,6 +242,7 @@ export async function processDueScheduledDrafts(): Promise<{
 
   const errors: string[] = [];
   let processed = 0;
+  let inProgress = 0;
 
   for (const league of dueLeagues ?? []) {
     const { data: leagueRow } = await supabase
@@ -195,22 +265,34 @@ export async function processDueScheduledDrafts(): Promise<{
 
         const playerCount = leagueRow.player_count ?? 2;
         if ((memberCount ?? 0) < playerCount) {
-          // All-human leagues stay open for joins until every roster spot is filled,
-          // even if the scheduled draft time has passed.
           continue;
         }
       }
     }
 
-    const result = await maybeStartHumanLeagueDraft(league.id, { force: true });
+    const result = await maybeStartHumanLeagueDraft(league.id, {
+      force: true,
+      supabase,
+      maxBotsPerRun: options?.maxBotsPerLeaguePerRun,
+    });
+
     if (result.error) {
       errors.push(result.error);
+      continue;
+    }
+    if (result.botFillInProgress) {
+      inProgress += 1;
       continue;
     }
     if (result.started) processed += 1;
   }
 
-  return { processed, errors };
+  return {
+    processed,
+    inProgress,
+    errors,
+    attemptedLeagues: dueLeagues?.length ?? 0,
+  };
 }
 
 export async function activateHumanLeagueScheduleWithMatchups(

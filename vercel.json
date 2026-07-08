@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/start-scheduled-drafts",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/cron/finalize-matchups",
       "schedule": "0 10 * * 1"
     },

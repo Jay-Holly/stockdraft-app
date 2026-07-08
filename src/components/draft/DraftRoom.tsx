@@ -648,6 +648,10 @@ export function DraftRoom({
               scheduledDraftAt={state.scheduledDraftAt}
               members={state.waitingRoomMembers ?? []}
               myUserId={profile.id}
+              rosterFill={state.scheduledDraftRosterFill}
+              schedulerError={
+                state.scheduledDraftError ?? state.schedulerNudgeError ?? null
+              }
             />
           ) : (
             <>

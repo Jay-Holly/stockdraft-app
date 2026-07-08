@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient } from "@/lib/supabase/server";
 import {
   applyStandardDraftOrderMethod,
@@ -10,8 +12,11 @@ import {
 } from "@/lib/league/sports-league-draft-order";
 import { parseSportsLeagueId } from "@/lib/league/sports-league-standings";
 
-export async function loadLeagueMemberIds(leagueId: string): Promise<string[]> {
-  const supabase = await createClient();
+export async function loadLeagueMemberIds(
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
+): Promise<string[]> {
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: members } = await supabase
     .from("league_members")
     .select("user_id, draft_slot")
@@ -23,9 +28,10 @@ export async function loadLeagueMemberIds(leagueId: string): Promise<string[]> {
 
 export async function persistDraftSlotOrder(
   leagueId: string,
-  draftOrder: string[]
+  draftOrder: string[],
+  supabaseOverride?: SupabaseClient
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
 
   for (let slot = 0; slot < draftOrder.length; slot++) {
     const { error } = await supabase
@@ -41,9 +47,10 @@ export async function persistDraftSlotOrder(
 }
 
 export async function resolveDraftOrderForLeague(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<{ draftOrder: string[]; error?: string }> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
 
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
@@ -57,7 +64,7 @@ export async function resolveDraftOrderForLeague(
     return { draftOrder: [], error: leagueError?.message ?? "League not found." };
   }
 
-  const memberIds = await loadLeagueMemberIds(leagueId);
+  const memberIds = await loadLeagueMemberIds(leagueId, supabase);
   if (memberIds.length < 2) {
     return { draftOrder: memberIds };
   }
@@ -89,7 +96,7 @@ export async function resolveDraftOrderForLeague(
     );
   }
 
-  const persist = await persistDraftSlotOrder(leagueId, draftOrder);
+  const persist = await persistDraftSlotOrder(leagueId, draftOrder, supabase);
   if (persist.error) {
     return { draftOrder: [], error: persist.error };
   }

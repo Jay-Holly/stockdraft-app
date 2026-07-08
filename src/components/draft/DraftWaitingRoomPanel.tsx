@@ -16,10 +16,14 @@ export function DraftWaitingRoomPanel({
   scheduledDraftAt,
   members,
   myUserId,
+  rosterFill,
+  schedulerError,
 }: {
   scheduledDraftAt: string | null | undefined;
   members: DraftWaitingRoomMember[];
   myUserId: string;
+  rosterFill?: { current: number; target: number } | null;
+  schedulerError?: string | null;
 }) {
   const [msRemaining, setMsRemaining] = useState<number | null>(() =>
     getMsUntilScheduledDraft(scheduledDraftAt)
@@ -37,6 +41,24 @@ export function DraftWaitingRoomPanel({
 
   return (
     <section className="rounded-xl border border-gold/30 bg-gold/5 p-6 space-y-4">
+      {schedulerError ? (
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <p className="font-semibold text-red-100">Draft could not start yet</p>
+          <p className="mt-1 text-red-200/90">{schedulerError}</p>
+          <p className="mt-2 text-xs text-red-200/70">
+            The scheduler will retry automatically every couple of minutes. Refresh
+            this page to see updated roster progress.
+          </p>
+        </div>
+      ) : null}
+
+      {rosterFill && rosterFill.current < rosterFill.target ? (
+        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Filling roster: {rosterFill.current} of {rosterFill.target} teams (adding bot
+          managers…)
+        </div>
+      ) : null}
+
       <div>
         <h2 className="text-lg font-semibold text-gold">Waiting for draft</h2>
         <p className="text-sm text-muted mt-1">

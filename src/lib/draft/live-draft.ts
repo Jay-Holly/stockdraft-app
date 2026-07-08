@@ -39,6 +39,7 @@ import {
   toggleSafetyPickQueueSymbol,
 } from "@/lib/draft/safety-queue";
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   leagueDraftUsesSnakeOrder,
   resolveUserIdForPickIndex,
@@ -166,9 +167,10 @@ async function getTeamName(
 }
 
 export async function getLeagueDraftStateRow(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<LeagueDraftStateRow | null> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data, error } = await supabase.rpc("get_league_draft_state", {
     p_league_id: leagueId,
   });
@@ -403,9 +405,9 @@ export async function startLiveDraft(
   leagueId: string,
   humanUserId: string,
   pickTimeSeconds = 120,
-  options?: { draftOrder?: string[] }
+  options?: { draftOrder?: string[]; supabase?: SupabaseClient }
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
+  const supabase = options?.supabase ?? (await createClient());
 
   const resolvedOrder = normalizeDraftOrder(
     options?.draftOrder ??
@@ -416,7 +418,7 @@ export async function startLiveDraft(
     return { error: "Not enough teams to start the live draft." };
   }
 
-  const existing = await getLeagueDraftStateRow(leagueId);
+  const existing = await getLeagueDraftStateRow(leagueId, supabase);
   const existingOrder = normalizeDraftOrder(existing?.draft_order);
   if (
     existing &&
@@ -424,7 +426,7 @@ export async function startLiveDraft(
     existing.status !== "complete"
   ) {
     if (!existing.on_clock_user_id && existing.status === "in_progress") {
-      return assignOnClock(leagueId);
+      return assignOnClock(leagueId, supabase);
     }
     return {};
   }
@@ -467,10 +469,10 @@ export async function startLiveDraft(
       error.code === "23505" ||
       error.message.toLowerCase().includes("duplicate key");
     if (isDuplicate) {
-      const repaired = await getLeagueDraftStateRow(leagueId);
+      const repaired = await getLeagueDraftStateRow(leagueId, supabase);
       if (normalizeDraftOrder(repaired?.draft_order).length >= 2) {
         if (!repaired?.on_clock_user_id && repaired?.status === "in_progress") {
-          return assignOnClock(leagueId);
+          return assignOnClock(leagueId, supabase);
         }
         return {};
       }
@@ -478,7 +480,7 @@ export async function startLiveDraft(
     return { error: error.message };
   }
 
-  return assignOnClock(leagueId);
+  return assignOnClock(leagueId, supabase);
 }
 
 async function recordDraftEvent(
@@ -806,10 +808,11 @@ export async function repairLiveDraftClock(
 }
 
 export async function assignOnClock(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const state = await getLeagueDraftStateRow(leagueId);
+  const supabase = supabaseOverride ?? (await createClient());
+  const state = await getLeagueDraftStateRow(leagueId, supabase);
   if (!state || state.status === "complete") return {};
 
   const draftOrder = normalizeDraftOrder(state.draft_order);
@@ -826,6 +829,10 @@ export async function assignOnClock(
   const pickTimeSeconds = league?.pick_time_seconds ?? 120;
   let pickIndex = state.current_pick_index;
   let totalPickSlots = state.total_pick_slots;
+  const skipPrepare =
+    Boolean(supabaseOverride) &&
+    state.current_pick_index === 0 &&
+    state.global_pick_number === 0;
 
   while (true) {
     if (pickIndex >= totalPickSlots) {
@@ -858,7 +865,9 @@ export async function assignOnClock(
       continue;
     }
 
-    const prepared = await prepareTeamOnClock(leagueId, userId);
+    const prepared = skipPrepare
+      ? { ready: true, complete: false }
+      : await prepareTeamOnClock(leagueId, userId);
     if (prepared.error) return { error: prepared.error };
 
     if (prepared.liveSkipAdvanced) {
