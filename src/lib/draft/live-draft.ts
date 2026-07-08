@@ -39,6 +39,10 @@ import {
   toggleSafetyPickQueueSymbol,
 } from "@/lib/draft/safety-queue";
 import { createClient } from "@/lib/supabase/server";
+import {
+  leagueDraftUsesSnakeOrder,
+  resolveUserIdForPickIndex,
+} from "@/lib/draft/draft-turn-order";
 
 export type LeagueDraftStateRow = {
   league_id: string;
@@ -49,9 +53,27 @@ export type LeagueDraftStateRow = {
   on_clock_user_id: string | null;
   pick_deadline_at: string | null;
   global_pick_number: number;
+  /** Frozen at startLiveDraft — sports leagues only; default false for all existing drafts. */
+  use_snake_order?: boolean;
   started_at: string;
   updated_at: string;
 };
+
+function draftStateUsesSnakeOrder(state: LeagueDraftStateRow): boolean {
+  return state.use_snake_order === true;
+}
+
+function onClockUserIdForPickIndex(
+  pickIndex: number,
+  draftOrder: string[],
+  state: LeagueDraftStateRow
+): string | undefined {
+  return resolveUserIdForPickIndex(
+    pickIndex,
+    draftOrder,
+    draftStateUsesSnakeOrder(state)
+  );
+}
 
 export type { DraftFeedEvent, LiveDraftView };
 
@@ -422,6 +444,14 @@ export async function startLiveDraft(
     .update({ draft_format: "live", pick_time_seconds: pickTimeSeconds })
     .eq("id", leagueId);
 
+  const { data: leagueMeta } = await supabase
+    .from("leagues")
+    .select("format_type")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  const useSnakeOrder = leagueDraftUsesSnakeOrder(leagueMeta?.format_type);
+
   const { error } = await supabase.from("league_draft_state").insert({
     league_id: leagueId,
     status: "in_progress",
@@ -429,6 +459,7 @@ export async function startLiveDraft(
     current_pick_index: 0,
     total_pick_slots: totalPickSlots,
     global_pick_number: 0,
+    use_snake_order: useSnakeOrder,
   });
 
   if (error) {
@@ -631,7 +662,11 @@ export function getExpectedOnClockUserId(
   if (state.status !== "in_progress") return null;
   if (state.current_pick_index >= state.total_pick_slots) return null;
   if (draftOrder.length === 0) return null;
-  return draftOrder[state.current_pick_index % draftOrder.length];
+  return onClockUserIdForPickIndex(
+    state.current_pick_index,
+    draftOrder,
+    state
+  ) ?? null;
 }
 
 type OnClockPeek = "complete" | "ready" | "pushback_skip" | "unavailable";
@@ -669,7 +704,11 @@ async function peekNextOnClockUserId(
 
   let pickIndex = state.current_pick_index;
   while (pickIndex < state.total_pick_slots) {
-    const userId = draftOrder[pickIndex % draftOrder.length];
+    const userId = onClockUserIdForPickIndex(pickIndex, draftOrder, state);
+    if (!userId) {
+      pickIndex += 1;
+      continue;
+    }
     const status = await peekTeamOnClockStatus(leagueId, userId);
     if (status === "complete" || status === "unavailable") {
       pickIndex += 1;
@@ -801,8 +840,11 @@ export async function assignOnClock(
       }
     }
 
-    const teamIndex = pickIndex % draftOrder.length;
-    const userId = draftOrder[teamIndex];
+    const userId = onClockUserIdForPickIndex(pickIndex, draftOrder, state);
+    if (!userId) {
+      pickIndex += 1;
+      continue;
+    }
 
     const { data: memberRow } = await supabase
       .from("league_members")
