@@ -13,7 +13,8 @@ import {
 import { resolveSeasonSettings } from "@/lib/season/calendar";
 import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 import { backfillFinalizeAtForLeague } from "@/lib/matchup/finalize-week";
-import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
+import { isSdplSeasonRulesLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
+import { seedSportsLeaguePickInjuryMapIfMissing } from "@/lib/sim/pick-injury-map";
 
 async function createSeedSupabase(): Promise<SupabaseClient> {
   try {
@@ -217,6 +218,29 @@ export async function finalizeHumanLeagueAfterDraft(
   leagueId: string,
   ownerUserId: string
 ): Promise<{ error?: string }> {
+  const supabase = await createSeedSupabase();
+  const { data: leagueRow } = await supabase
+    .from("leagues")
+    .select("format_type, sports_league_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (
+    isSportsSimLeague({
+      formatType: leagueRow?.format_type,
+      sportsLeagueId: leagueRow?.sports_league_id,
+    })
+  ) {
+    const mapResult = await seedSportsLeaguePickInjuryMapIfMissing(leagueId);
+    if (mapResult.error) {
+      console.error(
+        `[finalizeHumanLeagueAfterDraft] injury map seed failed league=${leagueId}:`,
+        mapResult.error
+      );
+      return { error: mapResult.error };
+    }
+  }
+
   const result = await seedHumanLeagueRegularSeasonIfMissing(leagueId, ownerUserId);
   if (result.error && !result.seeded) {
     console.error(
