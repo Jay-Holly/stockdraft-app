@@ -59,7 +59,7 @@ function gainTone(value: number): string {
 
 function PositionGainStats({ position }: { position: PositionView }) {
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+    <div className="flex flex-wrap items-start gap-x-4 gap-y-1 text-xs">
       <div>
         <p className="text-muted">Daily</p>
         <p className={gainTone(position.dailyGainPercent)}>
@@ -289,40 +289,44 @@ export function DayTraderTradingPanel({
             {portfolio.positions.map((position) => (
               <div
                 key={position.id}
-                className="rounded-lg border border-dark-border bg-dark/60 p-3 space-y-2"
+                className="rounded-lg border border-dark-border bg-dark/60 p-3"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{position.symbol}</p>
-                    <p className="text-xs text-muted">
-                      {position.shares.toLocaleString(undefined, {
-                        maximumFractionDigits: 4,
-                      })}{" "}
-                      sh @ $
-                      {position.price.toLocaleString(undefined, {
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div>
+                      <p className="font-semibold">{position.symbol}</p>
+                      <p className="text-xs text-muted">
+                        {position.shares.toLocaleString(undefined, {
+                          maximumFractionDigits: 4,
+                        })}{" "}
+                        sh @ $
+                        {position.price.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </p>
+                    </div>
+                    <PositionGainStats position={position} />
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <p className="text-sm font-semibold whitespace-nowrap">
+                      $
+                      {position.marketValue.toLocaleString(undefined, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
                     </p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="min-w-[4.5rem] px-3"
+                      disabled={tradingDisabled || busy !== null}
+                      onClick={() => void handleSellAll(position.symbol)}
+                    >
+                      {busy === `sell:${position.symbol}` ? "Selling…" : "Sell"}
+                    </Button>
                   </div>
-                  <p className="text-sm font-semibold">
-                    $
-                    {position.marketValue.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </p>
                 </div>
-                <PositionGainStats position={position} />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full sm:w-auto"
-                  disabled={tradingDisabled || busy !== null}
-                  onClick={() => void handleSellAll(position.symbol)}
-                >
-                  {busy === `sell:${position.symbol}` ? "Selling…" : "Sell"}
-                </Button>
               </div>
             ))}
           </div>
