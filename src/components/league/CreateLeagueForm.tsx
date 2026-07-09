@@ -22,7 +22,7 @@ import {
   DRAFT_ORDER_METHOD_LABELS,
   type DraftOrderMethodSetting,
 } from "@/lib/league/draft-order";
-import { isSdflLeague } from "@/lib/league/sdfl-divisions";
+import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
 
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
@@ -102,6 +102,7 @@ export function CreateLeagueForm({
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [createdLeagueName, setCreatedLeagueName] = useState<string | null>(null);
+  const [createdLeagueId, setCreatedLeagueId] = useState<string | null>(null);
 
   useEffect(() => {
     if (inviteToken && typeof window !== "undefined") {
@@ -190,11 +191,26 @@ export function CreateLeagueForm({
         return;
       }
 
-      if (typeof data.redirectTo === "string") {
-        router.push(data.redirectTo);
+      const leagueId =
+        typeof data.activeLeagueId === "string"
+          ? data.activeLeagueId
+          : typeof data.league?.id === "string"
+            ? data.league.id
+            : null;
+
+      const identityPath =
+        typeof data.redirectTo === "string"
+          ? data.redirectTo
+          : isSdfl && leagueId
+            ? sdflIdentityPath(leagueId)
+            : null;
+
+      if (identityPath) {
+        router.push(identityPath);
         return;
       }
 
+      setCreatedLeagueId(leagueId);
       setInviteToken(
         typeof data.inviteToken === "string" ? data.inviteToken : null
       );
@@ -225,21 +241,34 @@ export function CreateLeagueForm({
                 Share this invite link with up to {inviteSlotsRemaining} friend
                 {inviteSlotsRemaining === 1 ? "" : "s"}. Anyone with the link can
                 join until all {playerCount} roster spots are filled.
-                {needsSchedule && allHumanLeague
-                  ? " The live draft begins at your scheduled time once the roster is full."
-                  : needsSchedule
-                    ? " The draft starts at your scheduled time — open slots fill with managers automatically."
-                    : " The live draft starts automatically once the league is full."}
+                {isSdfl
+                  ? " Claim your franchise identity before sharing invites."
+                  : needsSchedule && allHumanLeague
+                    ? " The live draft begins at your scheduled time once the roster is full."
+                    : needsSchedule
+                      ? " The draft starts at your scheduled time — open slots fill with managers automatically."
+                      : " The live draft starts automatically once the league is full."}
               </>
             ) : (
               <>
                 Your league is created.
-                {needsSchedule
-                  ? " Open slots will fill with managers at your scheduled draft time."
-                  : " Waiting for players to join."}
+                {isSdfl
+                  ? " Set up your SDFL franchise identity next."
+                  : needsSchedule
+                    ? " Open slots will fill with managers at your scheduled draft time."
+                    : " Waiting for players to join."}
               </>
             )}
           </p>
+          {isSdfl && createdLeagueId ? (
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={() => router.push(sdflIdentityPath(createdLeagueId))}
+            >
+              Set up your franchise
+            </Button>
+          ) : null}
           {shareLink && (
             <>
               <div className="rounded-xl border border-dark-border bg-dark p-3 break-all text-xs text-gold font-mono">
