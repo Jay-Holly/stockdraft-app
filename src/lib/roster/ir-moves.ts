@@ -5,9 +5,11 @@ import { isStockIrEligibleForLeague } from "@/lib/sim/injury-status";
 import {
   countOccupiedIrSlots,
   findOpenIrSlot,
-  findOpenStockSlot,
+  findOpenStarterSlot,
   isOccupiedIrSlot,
   isOpenIrSlot,
+  isOpenStarterSlot,
+  isScoringStarterPick,
 } from "@/lib/sim/ir-slots";
 import { resolveIrResolutionState } from "@/lib/sim/ir-enforcement";
 import { IR_OPEN_SYMBOL } from "@/lib/sim/types";
@@ -17,7 +19,7 @@ import {
   enforceSportsSimIrMoveAllowed,
   type RosterMoveResult,
 } from "@/lib/season/move-gates";
-import { getStockQuote } from "@/lib/roster/quotes";
+import { getSymbolQuote } from "@/lib/roster/quotes";
 import { applyIrMoveWeekBaselines } from "@/lib/roster/weekly";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -139,7 +141,7 @@ export async function applyMoveToIr(
   const starter = state.state.picks.find((pick) => pick.id === starterPickId);
   const irSlot = state.state.picks.find((pick) => pick.id === irSlotPickId);
 
-  if (!starter || starter.pick_type !== "stock") {
+  if (!starter || !isScoringStarterPick(starter)) {
     return { error: "Select a valid active starter to move to IR." };
   }
   if (starter.symbol.toUpperCase() === IR_OPEN_SYMBOL) {
@@ -169,12 +171,13 @@ export async function applyMoveToIr(
     };
   }
 
-  const quote = await getStockQuote(starter.symbol);
+  const quote = await getSymbolQuote(starter.symbol);
   const transferBudget = starter.shares * quote.price;
+  const starterPickType = starter.pick_type;
 
   const clearStarter = await patchDraftPick(supabase, userId, starter.id, {
     symbol: IR_OPEN_SYMBOL,
-    pick_type: "stock",
+    pick_type: starterPickType,
     budget_spent: 0,
     effective_value: 0,
     price_at_pick: 0,
@@ -209,7 +212,7 @@ export async function applyMoveToIr(
     related_pick_id: starter.id,
     symbol: starter.symbol,
     prior_symbol: starter.symbol,
-    prior_pick_type: "stock",
+    prior_pick_type: starterPickType,
     new_pick_type: "ir",
     budget_before: starter.budget_spent,
     budget_after: transferBudget,
@@ -269,28 +272,29 @@ export async function applyReturnFromIr(
     };
   }
 
-  const openStock =
+  const openStarter =
     (openStockPickId
       ? state.state.picks.find((pick) => pick.id === openStockPickId)
-      : undefined) ?? findOpenStockSlot(state.state.picks);
+      : undefined) ?? findOpenStarterSlot(state.state.picks);
 
-  if (!openStock || openStock.pick_type !== "stock") {
+  if (!openStarter || !isOpenStarterSlot(openStarter)) {
     return {
       error:
         "No open active slot. Drop or bench a starter first, then return this stock from IR.",
     };
   }
-  if (openStock.symbol.toUpperCase() !== IR_OPEN_SYMBOL) {
+  if (openStarter.symbol.toUpperCase() !== IR_OPEN_SYMBOL) {
     return { error: "Selected active slot is not open." };
   }
 
-  const quote = await getStockQuote(irPick.symbol);
+  const quote = await getSymbolQuote(irPick.symbol);
   const transferBudget =
     irPick.shares > 0 ? irPick.shares * quote.price : irPick.budget_spent;
+  const returnPickType = openStarter.pick_type;
 
-  const fillStarter = await patchDraftPick(supabase, userId, openStock.id, {
+  const fillStarter = await patchDraftPick(supabase, userId, openStarter.id, {
     symbol: irPick.symbol,
-    pick_type: "stock",
+    pick_type: returnPickType,
     budget_spent: transferBudget,
     effective_value: transferBudget,
     price_at_pick: quote.price,
@@ -312,7 +316,7 @@ export async function applyReturnFromIr(
     supabase,
     league.id,
     userId,
-    openStock.id,
+    openStarter.id,
     irPick.id,
     transferBudget
   );
@@ -321,11 +325,11 @@ export async function applyReturnFromIr(
     league_id: league.id,
     user_id: userId,
     move_type: "ir_return",
-    pick_id: openStock.id,
+    pick_id: openStarter.id,
     related_pick_id: irPick.id,
     symbol: irPick.symbol,
     prior_pick_type: "ir",
-    new_pick_type: "stock",
+    new_pick_type: returnPickType,
     budget_before: irPick.budget_spent,
     budget_after: transferBudget,
     price_at_move: quote.price,

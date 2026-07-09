@@ -19,6 +19,7 @@ export function DraftBoard({
   onReset,
   busy,
   showActions = true,
+  sportsSimDraftRules = false,
   subtitle,
   emptyMessage,
 }: {
@@ -30,6 +31,7 @@ export function DraftBoard({
   onReset?: () => void;
   busy?: boolean;
   showActions?: boolean;
+  sportsSimDraftRules?: boolean;
   subtitle?: string;
   emptyMessage?: string;
 }) {
@@ -57,6 +59,12 @@ export function DraftBoard({
     rows.push({ round, type: "bench", pick });
   }
 
+  const openSlotPicks = realPicks.filter(
+    (p) =>
+      p.round_number <= OPEN_ROUNDS &&
+      (p.pick_type === "stock" || p.pick_type === "crypto")
+  ).length;
+
   return (
     <aside className="draft-board">
       <div className="draft-board-header">
@@ -66,9 +74,13 @@ export function DraftBoard({
 
       <div className="draft-board-stats">
         <div>
-          <p className="draft-stat-label">Stock picks</p>
+          <p className="draft-stat-label">
+            {sportsSimDraftRules ? "Open slots" : "Stock picks"}
+          </p>
           <p className="draft-stat-val text-primary-light">
-            {summary.stockPicks} / {STOCK_ROUNDS}
+            {sportsSimDraftRules
+              ? `${openSlotPicks} / ${STOCK_ROUNDS}`
+              : `${summary.stockPicks} / ${STOCK_ROUNDS}`}
           </p>
         </div>
         <div>
@@ -77,18 +89,30 @@ export function DraftBoard({
             {summary.benchPicks} / {BENCH_ROUNDS}
           </p>
         </div>
-        <div>
-          <p className="draft-stat-label">Open rounds</p>
-          <p className="draft-stat-val text-muted">
-            {realPicks.filter((p) => p.round_number <= OPEN_ROUNDS && p.pick_type !== "bench").length} / {OPEN_ROUNDS}
-          </p>
-        </div>
-        <div>
-          <p className="draft-stat-label">Crypto left</p>
-          <p className="draft-stat-val text-green-400">
-            {formatMoney(summary.cryptoRemaining)}
-          </p>
-        </div>
+        {!sportsSimDraftRules && (
+          <>
+            <div>
+              <p className="draft-stat-label">Open rounds</p>
+              <p className="draft-stat-val text-muted">
+                {realPicks.filter((p) => p.round_number <= OPEN_ROUNDS && p.pick_type !== "bench").length} / {OPEN_ROUNDS}
+              </p>
+            </div>
+            <div>
+              <p className="draft-stat-label">Crypto left</p>
+              <p className="draft-stat-val text-green-400">
+                {formatMoney(summary.cryptoRemaining)}
+              </p>
+            </div>
+          </>
+        )}
+        {sportsSimDraftRules && (
+          <div>
+            <p className="draft-stat-label">Crypto picks</p>
+            <p className="draft-stat-val text-green-400">
+              {summary.cryptoPicks}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="draft-board-picks">
@@ -130,7 +154,9 @@ export function DraftBoard({
                     <p className="draft-board-detail">
                       {type === "bench"
                         ? "Free"
-                        : "Stock $80K or crypto"}
+                        : sportsSimDraftRules
+                          ? "Stock or crypto $80K"
+                          : "Stock $80K or crypto"}
                     </p>
                   </>
                 )}

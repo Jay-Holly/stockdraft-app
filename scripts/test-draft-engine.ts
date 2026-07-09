@@ -4,6 +4,7 @@
  */
 import {
   getTurn,
+  getDuplicateRosterError,
   hasRosterStructureComplete,
   isDraftComplete,
   isOpenPhaseComplete,
@@ -140,6 +141,66 @@ function cryptoSpend(amount: number, order: number, round = 5): DraftPick {
   const picks = tenStocks();
   assert(isOpenPhaseComplete(picks), "open phase complete at 10 stocks");
   assert(!isDraftComplete(picks), "draft not complete without bench+crypto");
+}
+
+// Sports-sim: crypto counts toward the same 10 open slots as stocks.
+const SPORTS_SIM_RULES = "sports_sim" as const;
+
+function sevenStocksThreeCrypto(): DraftPick[] {
+  const stocks = Array.from({ length: 7 }, (_, i) =>
+    pick({
+      pick_type: "stock",
+      symbol: `STK${i}`,
+      pick_order: i,
+      round_number: i + 1,
+    })
+  );
+  const cryptos = Array.from({ length: 3 }, (_, i) =>
+    pick({
+      pick_type: "crypto",
+      symbol: `COIN${i}`,
+      budget_spent: STOCK_BUDGET,
+      pick_order: 10 + i,
+      round_number: 8 + i,
+    })
+  );
+  return [...stocks, ...cryptos];
+}
+
+// 7 stock + 3 crypto + 2 bench → complete (no crypto flex phase)
+{
+  const picks = [...sevenStocksThreeCrypto(), ...twoBench(13)];
+  assert(isDraftComplete(picks, SPORTS_SIM_RULES), "sports sim 10 open + 2 bench is complete");
+  assert(getTurn(draft(15), picks, SPORTS_SIM_RULES).type === "complete", "sports sim turn complete");
+}
+
+// 7 stock + 2 crypto → open turn, both stock and crypto allowed
+{
+  const picks = sevenStocksThreeCrypto().slice(0, 9);
+  const turn = getTurn(draft(9), picks, SPORTS_SIM_RULES);
+  assert(turn.type === "open", "sports sim still in open phase");
+  assert(turn.canPickStock, "sports sim can pick stock");
+  assert(turn.canPickCrypto, "sports sim can pick crypto");
+}
+
+// Sports sim: duplicate crypto rejected
+{
+  const picks = [
+    pick({
+      pick_type: "crypto",
+      symbol: "BTC",
+      budget_spent: STOCK_BUDGET,
+      pick_order: 0,
+    }),
+  ];
+  assert(
+    getDuplicateRosterError("BTC", picks, "crypto", SPORTS_SIM_RULES) !== null,
+    "sports sim blocks duplicate crypto"
+  );
+  assert(
+    getDuplicateRosterError("BTC", picks, "crypto", "standard") === null,
+    "standard still allows duplicate crypto allocations"
+  );
 }
 
 console.log(process.exitCode === 1 ? "\nSome tests failed." : "\nAll tests passed.");

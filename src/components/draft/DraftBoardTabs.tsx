@@ -24,6 +24,7 @@ export function DraftBoardTabs({
   onUndo,
   onReset,
   busy,
+  sportsSimDraftRules = false,
 }: {
   teamName: string;
   myPicks: BotDraftBoard["picks"];
@@ -33,6 +34,7 @@ export function DraftBoardTabs({
   onUndo: () => void;
   onReset: () => void;
   busy: boolean;
+  sportsSimDraftRules?: boolean;
 }) {
   const tabs = useMemo<BoardTab[]>(() => {
     const mine: BoardTab = {
@@ -84,6 +86,7 @@ export function DraftBoardTabs({
         onUndo={onUndo}
         onReset={onReset}
         busy={busy}
+        sportsSimDraftRules={sportsSimDraftRules}
       />
     );
   }
@@ -121,6 +124,7 @@ export function DraftBoardTabs({
         onReset={onReset}
         busy={busy}
         showActions={activeTab.isMine}
+        sportsSimDraftRules={activeTab.isMine ? sportsSimDraftRules : false}
         subtitle={activeTab.subtitle}
         emptyMessage={
           !activeTab.isMine && activeTab.picks.length === 0

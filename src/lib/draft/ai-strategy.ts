@@ -9,11 +9,13 @@ import {
 import { fetchCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoPickEligible } from "@/lib/draft/engine";
 import {
+  getMyCryptoSymbols,
   getMyStockSymbols,
   getTurn,
   isCryptoSymbol,
   isStockPickEligible,
   summarizePicks,
+  draftRulesModeFromFlag,
 } from "@/lib/draft/engine";
 import type { DraftPick, DraftState } from "@/lib/draft/types";
 import { CRYPTO_POOL } from "@/lib/draft/types";
@@ -377,18 +379,39 @@ export async function decideAiPick(
   options?: { fast?: boolean }
 ): Promise<AiPickDecision | null> {
   const fast = options?.fast ?? false;
-  const { turn, picks, leagueOffBoard } = state;
+  const { turn, picks, leagueOffBoard, sportsSimDraftRules } = state;
   if (turn.type === "complete" || turn.type === "pushback_skip") return null;
 
   const summary = summarizePicks(picks);
   const offBoard = new Set(leagueOffBoard);
   const myDrafted = getMyStockSymbols(picks);
+  const myCrypto = getMyCryptoSymbols(picks);
 
-  if (turn.type === "crypto" && turn.canPickCrypto && summary.cryptoRemaining > 0) {
+  if (sportsSimDraftRules && turn.type === "open" && turn.canPickCrypto) {
+    const openSlotsLeft = 10 - summary.stockPicks - summary.cryptoPicks;
+    if (openSlotsLeft > 0) {
+      const wantCrypto =
+        personality === "crypto_king" ||
+        (personality === "gambler" && summary.cryptoPicks === 0) ||
+        (summary.stockPicks >= 7 && summary.cryptoPicks === 0);
+
+      if (wantCrypto) {
+        const symbol = "BTC";
+        if (!myCrypto.has(symbol)) {
+          const price = await getCryptoPrice(symbol);
+          if (price > 0) {
+            return { symbol, price };
+          }
+        }
+      }
+    }
+  }
+
+  if (!sportsSimDraftRules && turn.type === "crypto" && turn.canPickCrypto && summary.cryptoRemaining > 0) {
     return defaultCryptoChunk(summary, 0, summary.cryptoRemaining);
   }
 
-  if (personality === "crypto_king") {
+  if (!sportsSimDraftRules && personality === "crypto_king") {
     const cryptoPicks = picks.filter((p) => p.pick_type === "crypto");
     const openRound = turn.round;
 
@@ -425,7 +448,7 @@ export async function decideAiPick(
     }
   }
 
-  if (personality === "analyst") {
+  if (!sportsSimDraftRules && personality === "analyst") {
     if (turn.canPickStock) {
       return pickStockForPersonality(
         personality,
@@ -444,7 +467,7 @@ export async function decideAiPick(
     }
   }
 
-  if (personality === "gambler") {
+  if (!sportsSimDraftRules && personality === "gambler") {
     if (turn.canPickStock) {
       return pickStockForPersonality(
         personality,
@@ -463,7 +486,7 @@ export async function decideAiPick(
     }
   }
 
-  if (personality === "day_trader") {
+  if (!sportsSimDraftRules && personality === "day_trader") {
     if (turn.canPickStock) {
       return pickStockForPersonality(
         personality,
@@ -496,7 +519,7 @@ export async function decideAiPick(
     );
   }
 
-  if (turn.canPickCrypto && summary.cryptoRemaining > 0) {
+  if (!sportsSimDraftRules && turn.canPickCrypto && summary.cryptoRemaining > 0) {
     return defaultCryptoChunk(summary, 0, 40_000);
   }
 
@@ -504,9 +527,10 @@ export async function decideAiPick(
 }
 
 export function isDraftStateComplete(state: DraftState): boolean {
+  const rules = draftRulesModeFromFlag(state.sportsSimDraftRules);
   return (
     state.draft.status === "complete" ||
-    getTurn(state.draft, state.picks).type === "complete"
+    getTurn(state.draft, state.picks, rules).type === "complete"
   );
 }
 

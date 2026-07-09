@@ -283,6 +283,7 @@ export function StockPool({
   quotesLoading = false,
   busy = false,
   pushbackSkipsRemaining = 0,
+  sportsSimDraftRules = false,
   canPick = true,
   safetyPickQueue = [],
   onToggleSafetyPick,
@@ -301,6 +302,7 @@ export function StockPool({
   quotesLoading?: boolean;
   busy?: boolean;
   pushbackSkipsRemaining?: number;
+  sportsSimDraftRules?: boolean;
   canPick?: boolean;
   safetyPickQueue?: string[];
   onToggleSafetyPick?: (symbol: string) => void;
@@ -410,7 +412,7 @@ export function StockPool({
 
   const isTop100View = poolFilter === "Top 100";
   const isCryptoView = poolFilter === "Crypto";
-  const isPushbackSkip = turn.type === "pushback_skip";
+  const isPushbackSkip = !sportsSimDraftRules && turn.type === "pushback_skip";
 
   const poolVisibleLimit =
     poolFilter === "Top 100" ? TOP_100_PAGE_SIZE : POOL_PAGE_SIZE;
@@ -642,6 +644,9 @@ export function StockPool({
     if (!crypto && myDrafted.has(symbol)) {
       return { eligible: false, label: "Yours" };
     }
+    if (crypto && sportsSimDraftRules && myDrafted.has(symbol)) {
+      return { eligible: false, label: "Yours" };
+    }
     if (!crypto && leagueOffBoard.has(symbol)) {
       return { eligible: false, label: "Off board" };
     }
@@ -654,7 +659,12 @@ export function StockPool({
     }
 
     if (crypto) {
-      if (!turn.canPickCrypto) return { eligible: false, label: "Crypto done" };
+      if (!turn.canPickCrypto) {
+        return {
+          eligible: false,
+          label: sportsSimDraftRules ? "Open slots full" : "Crypto done",
+        };
+      }
       if (!quote || quote.price <= 0) {
         return { eligible: false, label: "No price" };
       }
@@ -670,8 +680,14 @@ export function StockPool({
     }
 
     if (turn.type === "open") {
-      if (!turn.canPickStock) {
-        return { eligible: false, label: "Stock limit" };
+      if (!turn.canPickStock && !crypto) {
+        return {
+          eligible: false,
+          label: sportsSimDraftRules ? "Open slots full" : "Stock limit",
+        };
+      }
+      if (crypto && sportsSimDraftRules && !turn.canPickCrypto) {
+        return { eligible: false, label: "Open slots full" };
       }
       return { eligible: Boolean(quote), label: "Draft" };
     }
@@ -691,7 +707,7 @@ export function StockPool({
     const { eligible, label, skipped } = getEligibility(symbol, quote);
     const price = quote?.price ?? 0;
     const change = quote?.changePercent ?? 0;
-    const surcharge = crypto ? getSurchargePercent(buyerCounts[symbol] ?? 0) : 0;
+    const surcharge = crypto && !sportsSimDraftRules ? getSurchargePercent(buyerCounts[symbol] ?? 0) : 0;
     const offBoard = !crypto && leagueOffBoard.has(symbol);
     const mine = myDrafted.has(symbol);
     const queuePriority = getSafetyPickQueuePriority(safetyPickQueue, symbol);
@@ -699,7 +715,7 @@ export function StockPool({
     return (
       <div
         key={`${isSearchPick ? "search" : "pool"}-${symbol}`}
-        className={`draft-pool-row ${offBoard || (mine && !crypto) ? "draft-pool-row--drafted" : ""} ${mine ? "draft-pool-row--mine" : ""} ${skipped ? "draft-pool-row--skipped" : ""} ${queuePriority ? "draft-pool-row--queued" : ""}`}
+        className={`draft-pool-row ${offBoard || mine ? "draft-pool-row--drafted" : ""} ${mine ? "draft-pool-row--mine" : ""} ${skipped ? "draft-pool-row--skipped" : ""} ${queuePriority ? "draft-pool-row--queued" : ""}`}
       >
         <span
           className={`draft-ticker-badge ${crypto ? "draft-ticker-badge--crypto" : ""} ${offBoard ? "draft-ticker-badge--taken" : ""}`}
@@ -939,7 +955,9 @@ export function StockPool({
           : isCryptoView
             ? cryptoPoolLoading
               ? "Loading top crypto pool from database…"
-              : `Top ${cryptoPool.length} crypto by market cap · surcharge per coin`
+              : sportsSimDraftRules
+                ? `Top ${cryptoPool.length} crypto · $80K per pick · once per manager`
+                : `Top ${cryptoPool.length} crypto by market cap · surcharge per coin`
             : isTop100View
               ? `Top 100 S&P 500 by market cap · showing ${poolVisible.length} of ${displayedPool.length} stocks`
               : `Showing ${poolVisible.length} of ${displayedPool.length} S&P 500 stocks`}

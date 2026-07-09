@@ -7,6 +7,8 @@ import {
   getSurchargePercent,
   isCryptoSymbol,
   isDraftComplete,
+  draftRulesModeFromFlag,
+  getMyCryptoSymbols,
   isStockPickEligible,
 } from "@/lib/draft/engine";
 import {
@@ -22,6 +24,7 @@ import type {
   DraftState,
   LiveDraftView,
 } from "@/lib/draft/types";
+import { STOCK_ROUNDS } from "@/lib/draft/types";
 import type { BotConfig, BotPersonality } from "@/lib/league/bots";
 import { BOT_BY_ID } from "@/lib/league/bots";
 import { getCryptoQuotesMap, getStockQuote } from "@/lib/roster/quotes";
@@ -552,7 +555,8 @@ async function isUserDraftComplete(
   const state = await loadDraftStateDetailed(userId, { leagueId });
   if (!state.ok) return true;
   if (state.state.draft.status === "complete") return true;
-  return isDraftComplete(state.state.picks);
+  const rules = draftRulesModeFromFlag(state.state.sportsSimDraftRules);
+  return isDraftComplete(state.state.picks, rules);
 }
 
 async function allTeamsDraftComplete(
@@ -617,12 +621,18 @@ async function prepareTeamOnClock(
 
     if (
       state.state.draft.status === "complete" ||
-      isDraftComplete(state.state.picks)
+      isDraftComplete(
+        state.state.picks,
+        draftRulesModeFromFlag(state.state.sportsSimDraftRules)
+      )
     ) {
       return { ready: false, complete: true };
     }
 
-    if (state.state.turn.type === "pushback_skip") {
+    if (
+      !state.state.sportsSimDraftRules &&
+      state.state.turn.type === "pushback_skip"
+    ) {
       const skipResult = await processPushbackSkipForLeague(userId, leagueId, {
         advanceLiveDraft: true,
       });
@@ -645,12 +655,18 @@ async function prepareTeamOnClock(
 
   if (
     state.state.draft.status === "complete" ||
-    isDraftComplete(state.state.picks)
+    isDraftComplete(
+      state.state.picks,
+      draftRulesModeFromFlag(state.state.sportsSimDraftRules)
+    )
   ) {
     return { ready: false, complete: true };
   }
 
-  if (state.state.turn.type === "pushback_skip") {
+  if (
+    !state.state.sportsSimDraftRules &&
+    state.state.turn.type === "pushback_skip"
+  ) {
     return prepareTeamOnClock(leagueId, userId, depth + 1);
   }
 
@@ -682,12 +698,18 @@ async function peekTeamOnClockStatus(
 
   if (
     state.state.draft.status === "complete" ||
-    isDraftComplete(state.state.picks)
+    isDraftComplete(
+      state.state.picks,
+      draftRulesModeFromFlag(state.state.sportsSimDraftRules)
+    )
   ) {
     return "complete";
   }
 
-  if (state.state.turn.type === "pushback_skip") {
+  if (
+    !state.state.sportsSimDraftRules &&
+    state.state.turn.type === "pushback_skip"
+  ) {
     return "pushback_skip";
   }
 
@@ -1158,10 +1180,15 @@ export async function pickMostExpensiveEligibleStock(
 async function resolveAutoCryptoPick(
   leagueId: string,
   userId: string,
-  state: Pick<DraftState, "summary" | "picks">
-): Promise<{ symbol: string; price: number; allocation: number } | null> {
-  const { summary, picks } = state;
-  if (summary.cryptoRemaining <= 0) return null;
+  state: Pick<DraftState, "summary" | "picks" | "sportsSimDraftRules">
+): Promise<{ symbol: string; price: number; allocation?: number } | null> {
+  const { summary, picks, sportsSimDraftRules } = state;
+
+  if (sportsSimDraftRules) {
+    if (summary.stockPicks + summary.cryptoPicks >= STOCK_ROUNDS) return null;
+  } else if (summary.cryptoRemaining <= 0) {
+    return null;
+  }
 
   let quotes: Awaited<ReturnType<typeof getCryptoQuotesMap>> | null = null;
   try {
@@ -1183,12 +1210,10 @@ async function resolveAutoCryptoPick(
         }));
 
   const supabase = await createClient();
-  const buyerCounts = await fetchBuyerCounts(supabase, leagueId);
-  const myDraftedCrypto = new Set(
-    picks
-      .filter((pick) => pick.pick_type === "crypto")
-      .map((pick) => pick.symbol.toUpperCase())
-  );
+  const buyerCounts = sportsSimDraftRules
+    ? {}
+    : await fetchBuyerCounts(supabase, leagueId);
+  const myDraftedCrypto = getMyCryptoSymbols(picks);
 
   type Candidate = { symbol: string; price: number; marketCapRank: number };
   const eligible: Candidate[] = [];
@@ -1198,9 +1223,11 @@ async function resolveAutoCryptoPick(
     const price = quotes?.[symbol]?.price ?? coin.referencePriceUsd ?? 0;
     if (price <= 0 || !isCryptoPickEligible(symbol, price)) continue;
 
-    const leagueBuyers = buyerCounts[symbol] ?? 0;
-    const surcharge = getSurchargePercent(leagueBuyers);
-    if (surcharge >= 80) continue;
+    if (!sportsSimDraftRules) {
+      const leagueBuyers = buyerCounts[symbol] ?? 0;
+      const surcharge = getSurchargePercent(leagueBuyers);
+      if (surcharge >= 80) continue;
+    }
 
     eligible.push({
       symbol,
@@ -1210,7 +1237,9 @@ async function resolveAutoCryptoPick(
   }
 
   const undrafted = eligible.filter((c) => !myDraftedCrypto.has(c.symbol));
-  const candidatePool = undrafted.length > 0 ? undrafted : eligible;
+  const candidatePool =
+    sportsSimDraftRules || undrafted.length > 0 ? undrafted : eligible;
+  if (candidatePool.length === 0) return null;
 
   let best: Candidate | null = null;
   for (const candidate of candidatePool) {
@@ -1229,7 +1258,7 @@ async function resolveAutoCryptoPick(
   return {
     symbol: best.symbol,
     price: best.price,
-    allocation: summary.cryptoRemaining,
+    allocation: sportsSimDraftRules ? undefined : summary.cryptoRemaining,
   };
 }
 
@@ -1277,7 +1306,7 @@ export async function resolveAutoPick(
 
   const { turn, summary } = state.state;
 
-  if (turn.type === "pushback_skip") {
+  if (!state.state.sportsSimDraftRules && turn.type === "pushback_skip") {
     return { kind: "pushback_skip" };
   }
 
@@ -1288,7 +1317,14 @@ export async function resolveAutoPick(
   const safety = await trySafetyStockAutoPick(leagueId, userId);
   if (safety && turn.type !== "crypto") return safety;
 
-  if (turn.type === "crypto" || (turn.canPickCrypto && !turn.canPickStock)) {
+  if (
+    turn.type === "crypto" ||
+    (turn.canPickCrypto && !turn.canPickStock) ||
+    (state.state.sportsSimDraftRules &&
+      turn.type === "open" &&
+      turn.canPickCrypto &&
+      summary.cryptoPicks < summary.stockPicks)
+  ) {
     const crypto = await resolveAutoCryptoPick(leagueId, userId, state.state);
     if (crypto) {
       return { ...crypto, reason: "timer" };

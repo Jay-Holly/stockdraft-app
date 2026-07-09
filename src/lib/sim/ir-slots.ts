@@ -40,6 +40,31 @@ export function findOpenStockSlot(picks: DraftPick[]): DraftPick | undefined {
   );
 }
 
+export function isOpenStarterSlot(pick: DraftPick): boolean {
+  return (
+    (pick.pick_type === "stock" || pick.pick_type === "crypto") &&
+    pick.symbol.toUpperCase() === IR_OPEN_SYMBOL
+  );
+}
+
+export function isScoringStarterPick(pick: DraftPick): boolean {
+  if (pick.pick_type === "stock") {
+    return pick.symbol.toUpperCase() !== IR_OPEN_SYMBOL;
+  }
+  if (pick.pick_type === "crypto") {
+    return pick.symbol.toUpperCase() !== IR_OPEN_SYMBOL;
+  }
+  return false;
+}
+
+export function findOpenStarterSlot(picks: DraftPick[]): DraftPick | undefined {
+  return picks.find(isOpenStarterSlot);
+}
+
+export function findAllOpenStarterSlots(picks: DraftPick[]): DraftPick[] {
+  return picks.filter(isOpenStarterSlot);
+}
+
 export async function ensureIrSlotsForDraft(
   supabase: SupabaseClient,
   userId: string,

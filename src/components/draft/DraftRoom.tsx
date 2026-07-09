@@ -8,7 +8,11 @@ import { useDraftPool } from "@/hooks/useDraftPool";
 import { useLiveDraftFeed } from "@/hooks/useLiveDraftFeed";
 import { usePoolQuotes } from "@/hooks/usePoolQuotes";
 import { getTop100PoolSymbols } from "@/lib/market/draft-pool";
-import { getDuplicateRosterError, isCryptoSymbol } from "@/lib/draft/engine";
+import {
+  getDuplicateRosterError,
+  isCryptoSymbol,
+  draftRulesModeFromFlag,
+} from "@/lib/draft/engine";
 import {
   fetchJsonWithTimeout,
   formatFetchError,
@@ -121,10 +125,15 @@ export function DraftRoom({
     [state?.leagueOffBoard]
   );
 
-  const myDrafted = useMemo(
-    () => new Set(state?.myStockSymbols ?? []),
-    [state?.myStockSymbols]
-  );
+  const myDrafted = useMemo(() => {
+    const stock = new Set(state?.myStockSymbols ?? []);
+    if (state?.sportsSimDraftRules) {
+      for (const symbol of state.myCryptoSymbols ?? []) {
+        stock.add(symbol);
+      }
+    }
+    return stock;
+  }, [state?.myStockSymbols, state?.myCryptoSymbols, state?.sportsSimDraftRules]);
 
   const skipRecoveryAttempts = useRef(0);
   const loadDraftInFlight = useRef<Promise<void> | null>(null);
@@ -235,6 +244,7 @@ export function DraftRoom({
         setPollStale(false);
 
         if (
+          !data.sportsSimDraftRules &&
           !data.liveDraft &&
           data.turn &&
           typeof data.turn === "object" &&
@@ -400,7 +410,8 @@ export function DraftRoom({
         ? getDuplicateRosterError(
             upper,
             state.picks,
-            isCryptoSymbol(upper) ? "crypto" : "stock"
+            isCryptoSymbol(upper) ? "crypto" : "stock",
+            draftRulesModeFromFlag(state.sportsSimDraftRules)
           )
         : null;
       if (duplicateError) {
@@ -476,6 +487,10 @@ export function DraftRoom({
     if (readOnly || busy || !canPick) return;
 
     if (isCryptoSymbol(symbol)) {
+      if (state?.sportsSimDraftRules) {
+        void submitPick(symbol, quote, undefined, isSearchPick);
+        return;
+      }
       setPendingSymbol(symbol);
       setPendingQuote(quote);
       setPendingSearchPick(false);
@@ -603,7 +618,10 @@ export function DraftRoom({
         </div>
       )}
 
-      {!readOnly && !isLiveDraft && state.turn.type === "pushback_skip" && (
+      {!readOnly &&
+        !state.sportsSimDraftRules &&
+        !isLiveDraft &&
+        state.turn.type === "pushback_skip" && (
         <div className="draft-pushback-banner">
           Round skipped — crypto pushback penalty. Processing skip
           {state.draft.pushback_skips_remaining > 1
@@ -613,6 +631,7 @@ export function DraftRoom({
       )}
 
       {!readOnly &&
+        !state.sportsSimDraftRules &&
         !isLiveDraft &&
         state.draft.pushback_skips_remaining > 0 &&
         state.turn.type !== "pushback_skip" && (
@@ -639,6 +658,7 @@ export function DraftRoom({
         summary={state.summary}
         currentRound={state.draft.current_round}
         picks={state.picks}
+        sportsSimDraftRules={state.sportsSimDraftRules}
       />
 
       <div className="draft-layout draft-layout--live">
@@ -660,7 +680,12 @@ export function DraftRoom({
                 poolLoading={poolLoading}
                 cryptoPool={cryptoPool}
                 cryptoPoolLoading={cryptoPoolLoading}
-                pushbackSkipsRemaining={state.draft.pushback_skips_remaining}
+                pushbackSkipsRemaining={
+                  state.sportsSimDraftRules
+                    ? 0
+                    : state.draft.pushback_skips_remaining
+                }
+                sportsSimDraftRules={state.sportsSimDraftRules}
                 quotes={quotes}
                 turn={state.turn}
                 buyerCounts={state.buyerCounts}
@@ -685,6 +710,7 @@ export function DraftRoom({
                 onUndo={handleUndo}
                 onReset={handleReset}
                 busy={busy || readOnly || liveInProgress}
+                sportsSimDraftRules={state.sportsSimDraftRules}
               />
             </>
           )}

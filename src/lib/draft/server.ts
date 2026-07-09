@@ -13,7 +13,9 @@ import {
   calculatePushback,
   computeCryptoPick,
   computeStockPick,
+  draftRulesModeFromFlag,
   getDuplicateRosterError,
+  getMyCryptoSymbols,
   getMyStockSymbols,
   getNextRoundAfterPick,
   getOpenPhaseCryptoPicks,
@@ -25,6 +27,7 @@ import {
   isStockPickEligible,
   summarizePicks,
 } from "./engine";
+import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import type {
   CryptoBuyerCounts,
   Draft,
@@ -288,13 +291,26 @@ export async function loadDraftStateDetailed(
     draft.id
   );
   const pickList = rawPickList.filter((pick) => pick.draft_id === draft.id);
+
+  const { data: leagueFormat } = await supabase
+    .from("leagues")
+    .select("format_type, sports_league_id")
+    .eq("id", league.id)
+    .maybeSingle();
+
+  const sportsSimDraftRules = isSportsSimLeague({
+    formatType: leagueFormat?.format_type,
+    sportsLeagueId: leagueFormat?.sports_league_id,
+  });
+  const draftRules = draftRulesModeFromFlag(sportsSimDraftRules);
+
   let draftRow = draft as Draft;
   const buyerCounts = await fetchBuyerCounts(supabase, league.id);
   let summary = summarizePicks(pickList);
 
   if (
     draftRow.status !== "complete" &&
-    isOpenPhaseComplete(pickList) &&
+    isOpenPhaseComplete(pickList, draftRules) &&
     summary.benchPicks < BENCH_ROUNDS &&
     draftRow.current_round < BENCH_START_ROUND
   ) {
@@ -317,9 +333,10 @@ export async function loadDraftStateDetailed(
   }
 
   if (
-    isOpenPhaseComplete(pickList) &&
+    !sportsSimDraftRules &&
+    isOpenPhaseComplete(pickList, draftRules) &&
     draftRow.pushback_skips_remaining > 0 &&
-    getTurn(draftRow, pickList).type !== "pushback_skip"
+    getTurn(draftRow, pickList, draftRules).type !== "pushback_skip"
   ) {
     await supabase
       .from("drafts")
@@ -329,9 +346,10 @@ export async function loadDraftStateDetailed(
   }
 
   summary = summarizePicks(pickList);
-  const turn = getTurn(draftRow, pickList);
+  const turn = getTurn(draftRow, pickList, draftRules);
   const leagueOffBoardSet = await getLeagueOffBoardSymbols(league.id);
   const myStockSymbols = [...getMyStockSymbols(pickList)];
+  const myCryptoSymbols = [...getMyCryptoSymbols(pickList)];
   const teamName = await getLeagueMemberTeamName(league.id, userId);
 
   const safetyPickQueue = normalizeSafetyPickQueue(
@@ -350,7 +368,10 @@ export async function loadDraftStateDetailed(
       leagueId: league.id,
       leagueOffBoard: [...leagueOffBoardSet],
       myStockSymbols,
+      myCryptoSymbols,
+      sportsSimDraftRules,
       teamName,
+      leagueSupportCode: league.support_code,
       safetyPickSymbol: safetyPickQueue[0] ?? null,
       safetyPickQueue,
     },
@@ -365,14 +386,18 @@ export async function processPushbackSkipForLeague(
   const stateResult = await loadDraftStateDetailed(userId, { leagueId });
   if (!stateResult.ok) return { error: stateResult.error };
 
-  const { draft, picks } = stateResult.state;
+  const { draft, picks, sportsSimDraftRules } = stateResult.state;
+  if (sportsSimDraftRules) {
+    return { error: "No pushback skip to process" };
+  }
   if (stateResult.state.turn.type !== "pushback_skip") {
     return { error: "No pushback skip to process" };
   }
 
+  const draftRules = draftRulesModeFromFlag(sportsSimDraftRules);
   const supabase = await createClient();
   const pickOrder = picks.length;
-  const nextRound = getNextRoundAfterPick(draft, picks, "skip");
+  const nextRound = getNextRoundAfterPick(draft, picks, "skip", draftRules);
 
   const { data: insertedPick, error: pickError } = await supabase
     .from("draft_picks")
@@ -447,10 +472,15 @@ export async function processAllPushbackSkips(
       return { error: stateResult.error, processed };
     }
 
-    const { turn, draft, picks } = stateResult.state;
+    const { turn, draft, picks, sportsSimDraftRules } = stateResult.state;
+    const draftRules = draftRulesModeFromFlag(sportsSimDraftRules);
+
+    if (sportsSimDraftRules) {
+      break;
+    }
 
     if (
-      isOpenPhaseComplete(picks) &&
+      isOpenPhaseComplete(picks, draftRules) &&
       draft.pushback_skips_remaining > 0 &&
       turn.type !== "pushback_skip"
     ) {
@@ -507,7 +537,9 @@ export async function makeDraftPickForLeague(
     }
   }
 
-  const { draft, picks, turn, buyerCounts, leagueOffBoard } = stateResult.state;
+  const { draft, picks, turn, buyerCounts, leagueOffBoard, sportsSimDraftRules } =
+    stateResult.state;
+  const draftRules = draftRulesModeFromFlag(sportsSimDraftRules);
   const leaguePicks = picks.filter((pick) => pick.draft_id === draft.id);
   if (draft.status === "complete" || turn.type === "complete") {
     return { error: "Draft is already complete" };
@@ -533,20 +565,20 @@ export async function makeDraftPickForLeague(
 
   if (isCryptoPick) {
     if (!turn.canPickCrypto) {
-      return { error: "No crypto budget remaining" };
+      return {
+        error: sportsSimDraftRules
+          ? "All 10 open picks are already made"
+          : "No crypto budget remaining",
+      };
     }
 
     const cryptoDuplicate = getDuplicateRosterError(
       upperSymbol,
       leaguePicks,
-      "crypto"
+      "crypto",
+      draftRules
     );
     if (cryptoDuplicate) return { error: cryptoDuplicate };
-
-    const cryptoAmount = allocation ?? summary.cryptoRemaining;
-    if (cryptoAmount <= 0 || cryptoAmount > summary.cryptoRemaining) {
-      return { error: "Invalid crypto allocation" };
-    }
 
     if (!priceAtPick || priceAtPick <= 0) {
       return { error: "Missing price for crypto pick" };
@@ -558,30 +590,43 @@ export async function makeDraftPickForLeague(
       };
     }
 
-    const buyerCount = buyerCounts[upperSymbol] ?? 0;
-    const computed = computeCryptoPick(cryptoAmount, priceAtPick, buyerCount);
+    if (sportsSimDraftRules) {
+      const computed = computeStockPick(priceAtPick);
+      pickType = "crypto";
+      budgetSpent = computed.budgetSpent;
+      shares = computed.shares;
+      effectiveValue = budgetSpent;
+    } else {
+      const cryptoAmount = allocation ?? summary.cryptoRemaining;
+      if (cryptoAmount <= 0 || cryptoAmount > summary.cryptoRemaining) {
+        return { error: "Invalid crypto allocation" };
+      }
 
-    pickType = "crypto";
-    budgetSpent = computed.budgetSpent;
-    shares = computed.shares;
-    surchargePercent = computed.surchargePercent;
-    effectiveValue = computed.effectiveValue;
+      const buyerCount = buyerCounts[upperSymbol] ?? 0;
+      const computed = computeCryptoPick(cryptoAmount, priceAtPick, buyerCount);
 
-    await incrementLeagueCryptoCount(
-      supabase,
-      leagueId,
-      upperSymbol,
-      buyerCount
-    );
+      pickType = "crypto";
+      budgetSpent = computed.budgetSpent;
+      shares = computed.shares;
+      surchargePercent = computed.surchargePercent;
+      effectiveValue = computed.effectiveValue;
 
-    if (draft.current_round <= OPEN_ROUNDS) {
-      const afterPick = [
-        ...getOpenPhaseCryptoPicks(leaguePicks),
-        { budget_spent: budgetSpent } as DraftPick,
-      ];
-      const newTotal = afterPick.reduce((s, p) => s + p.budget_spent, 0);
-      if (newTotal >= CRYPTO_POOL) {
-        pushbackDelta = calculatePushback(afterPick);
+      await incrementLeagueCryptoCount(
+        supabase,
+        leagueId,
+        upperSymbol,
+        buyerCount
+      );
+
+      if (draft.current_round <= OPEN_ROUNDS) {
+        const afterPick = [
+          ...getOpenPhaseCryptoPicks(leaguePicks),
+          { budget_spent: budgetSpent } as DraftPick,
+        ];
+        const newTotal = afterPick.reduce((s, p) => s + p.budget_spent, 0);
+        if (newTotal >= CRYPTO_POOL) {
+          pushbackDelta = calculatePushback(afterPick);
+        }
       }
     }
   } else if (turn.type === "bench") {
@@ -607,33 +652,40 @@ export async function makeDraftPickForLeague(
   } else if (turn.type === "crypto") {
     return { error: "Spend remaining crypto budget — stock picks are complete" };
   } else if (turn.type === "open") {
-    if (!turn.canPickStock) {
-      return { error: "All 10 stock picks are already made" };
-    }
-
-    const stockDuplicate = getDuplicateRosterError(
-      upperSymbol,
-      leaguePicks,
-      "stock"
-    );
-    if (stockDuplicate) return { error: stockDuplicate };
-
-    if (!isStockPickEligible(upperSymbol, priceAtPick)) {
+    if (!turn.canPickStock && !isCryptoPick) {
       return {
-        error: `Stock must trade at $${MIN_STOCK_PRICE_USD}+ per share`,
+        error: sportsSimDraftRules
+          ? "All 10 open picks are already made"
+          : "All 10 stock picks are already made",
       };
     }
-    if (leagueOffBoard.includes(upperSymbol)) {
-      return { error: `${upperSymbol} is off the board in this league` };
+
+    if (!isCryptoPick) {
+      const stockDuplicate = getDuplicateRosterError(
+        upperSymbol,
+        leaguePicks,
+        "stock",
+        draftRules
+      );
+      if (stockDuplicate) return { error: stockDuplicate };
+
+      if (!isStockPickEligible(upperSymbol, priceAtPick)) {
+        return {
+          error: `Stock must trade at $${MIN_STOCK_PRICE_USD}+ per share`,
+        };
+      }
+      if (leagueOffBoard.includes(upperSymbol)) {
+        return { error: `${upperSymbol} is off the board in this league` };
+      }
+      if (!(await isDraftPoolStock(upperSymbol)) && !isSearchPick) {
+        return { error: "Use search to draft stocks outside the S&P 500 pool" };
+      }
+      const computed = computeStockPick(priceAtPick);
+      pickType = "stock";
+      budgetSpent = computed.budgetSpent;
+      shares = computed.shares;
+      effectiveValue = budgetSpent;
     }
-    if (!(await isDraftPoolStock(upperSymbol)) && !isSearchPick) {
-      return { error: "Use search to draft stocks outside the S&P 500 pool" };
-    }
-    const computed = computeStockPick(priceAtPick);
-    pickType = "stock";
-    budgetSpent = computed.budgetSpent;
-    shares = computed.shares;
-    effectiveValue = budgetSpent;
   } else {
     return { error: "Invalid turn type for this pick" };
   }
@@ -676,8 +728,8 @@ export async function makeDraftPickForLeague(
     } as DraftPick,
   ];
 
-  const nextRound = getNextRoundAfterPick(draft, updatedPicks, pickType);
-  const complete = isDraftComplete(updatedPicks);
+  const nextRound = getNextRoundAfterPick(draft, updatedPicks, pickType, draftRules);
+  const complete = isDraftComplete(updatedPicks, draftRules);
 
   const { error: draftError } = await supabase
     .from("drafts")
@@ -736,7 +788,8 @@ export async function undoLastPick(userId: string) {
   const state = await loadDraftState(userId);
   if (!state) return { error: "Could not load draft" };
 
-  const { draft, picks } = state;
+  const { draft, picks, sportsSimDraftRules } = state;
+  const draftRules = draftRulesModeFromFlag(sportsSimDraftRules);
   if (draft.status === "complete") {
     return { error: "Cannot undo after draft is complete" };
   }
@@ -786,7 +839,7 @@ export async function undoLastPick(userId: string) {
   if (error) return { error: error.message };
 
   const earlyCrypto = getOpenPhaseCryptoPicks(cleaned);
-  const pushback = calculatePushback(earlyCrypto);
+  const pushback = sportsSimDraftRules ? 0 : calculatePushback(earlyCrypto);
   const usedSkips = cleaned.filter((p) => p.pick_type === "skip").length;
 
   await supabase

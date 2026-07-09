@@ -3,6 +3,7 @@ import { fetchDraftPool } from "@/lib/draft-pool/server";
 import { isCryptoSymbol, isStockPickEligible } from "@/lib/draft/engine";
 import { loadDraftStateDetailed, fetchBuyerCounts } from "@/lib/draft/server";
 import type { DraftPick } from "@/lib/draft/types";
+import { OPEN_ROUNDS } from "@/lib/draft/types";
 import {
   type AiLeague,
 } from "@/lib/league/ai-league";
@@ -423,7 +424,13 @@ export async function loadRosterView(
       isHistorical: false,
       availableWeeks: weekContext.availableWeeks,
       maxViewableWeek: weekContext.maxViewableWeek,
-      starters: withWeekMetrics.filter((p) => p.pick_type === "stock"),
+      starters: sportsSimIrEnabled
+        ? withWeekMetrics.filter(
+            (p) =>
+              (p.pick_type === "stock" || p.pick_type === "crypto") &&
+              p.round_number <= OPEN_ROUNDS
+          )
+        : withWeekMetrics.filter((p) => p.pick_type === "stock"),
       bench: withWeekMetrics.filter((p) => p.pick_type === "bench"),
       ir: withWeekMetrics.filter((p) => p.pick_type === "ir"),
       crypto: withWeekMetrics.filter((pick) => canonicalCryptoIds.has(pick.id)),

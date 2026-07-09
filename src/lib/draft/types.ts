@@ -114,6 +114,8 @@ export type DraftWaitingRoomMember = {
   teamName: string;
 };
 
+export type DraftRulesMode = "standard" | "sports_sim";
+
 export type DraftState = {
   draft: Draft;
   picks: DraftPick[];
@@ -123,6 +125,9 @@ export type DraftState = {
   leagueId: string;
   leagueOffBoard: string[];
   myStockSymbols: string[];
+  myCryptoSymbols: string[];
+  /** Sports-sim leagues: crypto uses flat $80K open slots (no flex pool / pushback). */
+  sportsSimDraftRules?: boolean;
   /** Human manager name for this league (league_members.display_name). */
   teamName: string;
   liveDraft?: LiveDraftView | null;

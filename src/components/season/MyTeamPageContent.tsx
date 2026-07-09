@@ -396,8 +396,12 @@ export function MyTeamPageContent() {
       )}
 
       <RosterBlock
-        title="Starting stocks"
-        subtitle="10 starters · scores in matchups"
+        title={roster.sportsSimIrEnabled ? "Starting lineup" : "Starting stocks"}
+        subtitle={
+          roster.sportsSimIrEnabled
+            ? "10 open slots · stocks or crypto · scores in matchups"
+            : "10 starters · scores in matchups"
+        }
         tone="starters"
         scoringMode={roster.scoringMode}
         picks={roster.starters}
@@ -467,7 +471,7 @@ export function MyTeamPageContent() {
             <h2 className="season-card-title">Move to IR</h2>
             <p className="text-sm text-muted">
               Select an injury-eligible starter and an empty IR slot. The active
-              spot opens for a free-agent add. IR stocks never score.
+              spot opens for a free-agent add. IR picks never score.
             </p>
           </div>
           <Button

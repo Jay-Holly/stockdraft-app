@@ -15,13 +15,17 @@ export function SalaryCapBar({
   summary,
   currentRound,
   picks,
+  sportsSimDraftRules = false,
 }: {
   summary: DraftSummary;
   currentRound: number;
   picks: DraftPick[];
+  sportsSimDraftRules?: boolean;
 }) {
   const stockPct = Math.min(100, (summary.stockSpent / STOCK_CAP) * 100);
-  const cryptoPct = Math.min(100, (summary.cryptoSpent / CRYPTO_POOL) * 100);
+  const cryptoPct = sportsSimDraftRules
+    ? Math.min(100, (summary.cryptoSpent / STOCK_CAP) * 100)
+    : Math.min(100, (summary.cryptoSpent / CRYPTO_POOL) * 100);
 
   const slots = Array.from({ length: TOTAL_ROUNDS }, (_, i) => {
     const round = i + 1;
@@ -94,9 +98,14 @@ export function SalaryCapBar({
         </div>
         <div>
           <div className="draft-cap-label draft-cap-label--crypto">
-            <span>Crypto flex pool (rounds 1–13)</span>
             <span>
-              {formatMoney(summary.cryptoSpent)} / {formatMoney(CRYPTO_POOL)}
+              {sportsSimDraftRules
+                ? "Crypto picks (10 × $80K open slots)"
+                : "Crypto flex pool (rounds 1–13)"}
+            </span>
+            <span>
+              {formatMoney(summary.cryptoSpent)} /{" "}
+              {formatMoney(sportsSimDraftRules ? STOCK_CAP : CRYPTO_POOL)}
             </span>
           </div>
           <div className="draft-cap-track">
@@ -109,7 +118,9 @@ export function SalaryCapBar({
       </div>
 
       <p className="text-xs text-muted px-4 pb-2">
-        R1–R{OPEN_ROUNDS} open (stock or crypto) · R{BENCH_START_ROUND}–R{TOTAL_ROUNDS} bench (crypto still available)
+        {sportsSimDraftRules
+          ? `R1–R${OPEN_ROUNDS} open (stock or crypto, 10 slots total) · R${BENCH_START_ROUND}–R${TOTAL_ROUNDS} bench`
+          : `R1–R${OPEN_ROUNDS} open (stock or crypto) · R${BENCH_START_ROUND}–R${TOTAL_ROUNDS} bench (crypto still available)`}
       </p>
 
       <div className="draft-cap-rounds">{slots}</div>
