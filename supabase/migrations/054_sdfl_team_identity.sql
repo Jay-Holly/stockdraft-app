@@ -31,6 +31,8 @@ comment on column public.league_members.franchise_logo_url is
   'Optional AI-generated logo URL (future feature).';
 
 -- Expose sports_league_id on invite previews for SDFL join routing.
+drop function if exists public.get_league_invite_preview(uuid);
+
 create or replace function public.get_league_invite_preview(p_token uuid)
 returns table (
   league_id uuid,
