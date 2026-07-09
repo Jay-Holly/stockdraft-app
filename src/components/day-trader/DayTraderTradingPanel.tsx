@@ -97,7 +97,6 @@ export function DayTraderTradingPanel({
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [buyAmount, setBuyAmount] = useState("");
-  const [sellShares, setSellShares] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -225,16 +224,6 @@ export function DayTraderTradingPanel({
     await submitTrade({ side: "sell", symbol, shares: null });
   }
 
-  async function handleSellPartial(symbol: string) {
-    const shares = Number(sellShares[symbol]);
-    if (!Number.isFinite(shares) || shares <= 0) {
-      setError("Enter a valid share amount to sell.");
-      return;
-    }
-
-    await submitTrade({ side: "sell", symbol, shares });
-  }
-
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-gold/30 bg-gold/5 p-4 space-y-3">
@@ -325,41 +314,15 @@ export function DayTraderTradingPanel({
                   </p>
                 </div>
                 <PositionGainStats position={position} />
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    placeholder="Shares to sell"
-                    value={sellShares[position.symbol] ?? ""}
-                    onChange={(event) =>
-                      setSellShares((current) => ({
-                        ...current,
-                        [position.symbol]: event.target.value,
-                      }))
-                    }
-                    disabled={tradingDisabled || busy !== null}
-                    className="flex-1 rounded-lg border border-dark-border bg-dark px-3 py-2 text-sm"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full sm:w-auto"
-                    disabled={tradingDisabled || busy !== null}
-                    onClick={() => void handleSellPartial(position.symbol)}
-                  >
-                    {busy === `sell:${position.symbol}` ? "Selling…" : "Sell"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="w-full sm:w-auto"
-                    disabled={tradingDisabled || busy !== null}
-                    onClick={() => void handleSellAll(position.symbol)}
-                  >
-                    Sell all
-                  </Button>
-                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  disabled={tradingDisabled || busy !== null}
+                  onClick={() => void handleSellAll(position.symbol)}
+                >
+                  {busy === `sell:${position.symbol}` ? "Selling…" : "Sell"}
+                </Button>
               </div>
             ))}
           </div>
