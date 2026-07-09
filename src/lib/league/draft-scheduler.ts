@@ -9,6 +9,8 @@ import {
 } from "@/lib/league/bot-fill";
 import { SPORTS_SIM_BOT_PROVISION_LEAD_MS } from "@/lib/draft/draft-constants";
 import { resolveDraftOrderForLeague } from "@/lib/league/draft-order-server";
+import { isSdflLeague } from "@/lib/league/sdfl-divisions";
+import { allSdflIdentitiesComplete } from "@/lib/league/team-identity";
 import {
   clearScheduledDraftError,
   recordScheduledDraftAttempt,
@@ -65,20 +67,23 @@ export async function ensureDraftRowsForAllMembers(
   return {};
 }
 
+export type MaybeStartHumanLeagueDraftResult = {
+  started?: boolean;
+  botFillInProgress?: boolean;
+  identityFillInProgress?: boolean;
+  error?: string;
+};
+
 export async function maybeStartHumanLeagueDraft(
   leagueId: string,
   options?: MaybeStartHumanLeagueDraftOptions
-): Promise<{
-  started?: boolean;
-  botFillInProgress?: boolean;
-  error?: string;
-}> {
+): Promise<MaybeStartHumanLeagueDraftResult> {
   const supabase = options?.supabase ?? (await createClient());
 
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
     .select(
-      "id, status, owner_user_id, player_count, visibility, opponent_type, scheduled_draft_at, pick_time_seconds, support_code"
+      "id, status, owner_user_id, player_count, visibility, opponent_type, scheduled_draft_at, pick_time_seconds, support_code, sports_league_id"
     )
     .eq("id", leagueId)
     .eq("league_type", "human")
@@ -168,6 +173,19 @@ export async function maybeStartHumanLeagueDraft(
     const message = `${leagueLabel}: waiting for ${playerCount - (finalCount ?? 0)} more player(s).`;
     await recordScheduledDraftAttempt(supabase, leagueId, message);
     return { error: message };
+  }
+
+  if (isSdflLeague(league.sports_league_id)) {
+    const identitiesReady = await allSdflIdentitiesComplete(
+      supabase,
+      leagueId,
+      playerCount
+    );
+    if (!identitiesReady) {
+      const message = `${leagueLabel}: waiting for all franchise identities before the draft can start.`;
+      await recordScheduledDraftAttempt(supabase, leagueId, message);
+      return { started: false, identityFillInProgress: true };
+    }
   }
 
   const standingsResult = await ensureStandingsForLeagueMembers(
@@ -303,6 +321,10 @@ export async function processDueScheduledDrafts(
       continue;
     }
     if (result.botFillInProgress) {
+      inProgress += 1;
+      continue;
+    }
+    if (result.identityFillInProgress) {
       inProgress += 1;
       continue;
     }

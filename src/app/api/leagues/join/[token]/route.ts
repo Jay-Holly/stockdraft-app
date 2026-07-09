@@ -84,6 +84,7 @@ export async function POST(request: Request, context: RouteContext) {
     {
       league: result.league,
       activeLeagueId: result.league.id,
+      redirectTo: result.redirectTo,
     },
     { headers: NO_STORE_HEADERS }
   );

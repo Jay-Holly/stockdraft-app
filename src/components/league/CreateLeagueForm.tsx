@@ -22,6 +22,7 @@ import {
   DRAFT_ORDER_METHOD_LABELS,
   type DraftOrderMethodSetting,
 } from "@/lib/league/draft-order";
+import { isSdflLeague } from "@/lib/league/sdfl-divisions";
 
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
@@ -146,6 +147,8 @@ export function CreateLeagueForm({
     config.visibility === "private" && config.opponentType === "all_human";
   const inviteSlotsRemaining = Math.max(playerCount - 1, 0);
   const allHumanLeague = config.opponentType === "all_human";
+  const isSdfl =
+    formatType === "sports_league" && isSdflLeague(sportsLeagueId);
   const playerCountOptions = playerCountsForFormat(formatType, sportsLeagueId);
   const requiredSportsPlayerCount = playerCountForSportsLeague(sportsLeagueId);
 
@@ -184,6 +187,11 @@ export function CreateLeagueForm({
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Could not create league.");
+        return;
+      }
+
+      if (typeof data.redirectTo === "string") {
+        router.push(data.redirectTo);
         return;
       }
 
@@ -404,15 +412,22 @@ export function CreateLeagueForm({
           <label className="block text-sm font-semibold mb-1.5" htmlFor="teamName">
             Your team name
           </label>
-          <input
-            id="teamName"
-            className={inputClass}
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            placeholder={defaultTeamName}
-            maxLength={40}
-            required
-          />
+          {!isSdfl ? (
+            <input
+              id="teamName"
+              className={inputClass}
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              placeholder={defaultTeamName}
+              maxLength={40}
+              required
+            />
+          ) : (
+            <p className="text-sm text-muted rounded-xl border border-dark-border bg-dark/40 px-4 py-3">
+              You&apos;ll set your franchise city, team name, and colors on the next
+              screen after creating the league.
+            </p>
+          )}
         </div>
 
         {needsSchedule && (

@@ -173,6 +173,7 @@ export async function loadDraftApiPayload(
         waitingRoomMembers,
         scheduledDraftError: scheduledDraftStatus?.lastError ?? null,
         scheduledDraftRosterFill: scheduledDraftStatus?.rosterFill ?? null,
+        scheduledDraftIdentityFill: scheduledDraftStatus?.identityFill ?? null,
       },
     };
   } catch (error) {

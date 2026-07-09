@@ -669,6 +669,7 @@ export function DraftRoom({
               members={state.waitingRoomMembers ?? []}
               myUserId={profile.id}
               rosterFill={state.scheduledDraftRosterFill}
+              identityFill={state.scheduledDraftIdentityFill}
               schedulerError={
                 state.scheduledDraftError ?? state.schedulerNudgeError ?? null
               }

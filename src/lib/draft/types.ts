@@ -147,6 +147,7 @@ export type DraftState = {
   scheduledDraftError?: string | null;
   /** Roster fill progress while bots are provisioning after scheduled time. */
   scheduledDraftRosterFill?: { current: number; target: number } | null;
+  scheduledDraftIdentityFill?: { complete: number; target: number } | null;
   /** Latest nudge error from GET /api/draft (same poll). */
   schedulerNudgeError?: string | null;
 };

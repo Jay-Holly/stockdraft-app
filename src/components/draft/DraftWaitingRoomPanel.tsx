@@ -17,12 +17,14 @@ export function DraftWaitingRoomPanel({
   members,
   myUserId,
   rosterFill,
+  identityFill,
   schedulerError,
 }: {
   scheduledDraftAt: string | null | undefined;
   members: DraftWaitingRoomMember[];
   myUserId: string;
   rosterFill?: { current: number; target: number } | null;
+  identityFill?: { complete: number; target: number } | null;
   schedulerError?: string | null;
 }) {
   const [msRemaining, setMsRemaining] = useState<number | null>(() =>
@@ -56,6 +58,12 @@ export function DraftWaitingRoomPanel({
         <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           Filling roster: {rosterFill.current} of {rosterFill.target} teams (adding bot
           managers…)
+        </div>
+      ) : null}
+
+      {identityFill && identityFill.complete < identityFill.target ? (
+        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Franchise identities: {identityFill.complete} of {identityFill.target} complete
         </div>
       ) : null}
 

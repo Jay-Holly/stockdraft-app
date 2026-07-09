@@ -5,9 +5,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { SPORTS_SIM_BOT_PROVISION_LEAD_MS } from "@/lib/draft/draft-constants";
 import { shouldFillEmptySlotsWithBots } from "@/lib/league/bot-fill";
 import type { LeagueOpponentType, LeagueVisibility } from "@/lib/league/league-config";
+import { isSdflLeague } from "@/lib/league/sdfl-divisions";
+import { getSdflIdentityFillStatus } from "@/lib/league/team-identity";
 
 export type ScheduledDraftRoomStatus = {
   rosterFill: { current: number; target: number } | null;
+  identityFill: { complete: number; target: number } | null;
   lastError: string | null;
   botFillExpected: boolean;
   pastDue: boolean;
@@ -20,7 +23,7 @@ export async function getScheduledDraftRoomStatus(
   const { data: league, error } = await supabase
     .from("leagues")
     .select(
-      "status, player_count, visibility, opponent_type, scheduled_draft_at, scheduled_draft_last_error"
+      "status, player_count, visibility, opponent_type, scheduled_draft_at, scheduled_draft_last_error, sports_league_id"
     )
     .eq("id", leagueId)
     .maybeSingle();
@@ -57,6 +60,7 @@ async function buildStatusFromLeague(
     visibility: string;
     opponent_type: string;
     scheduled_draft_at: string | null;
+    sports_league_id?: string | null;
   },
   supabase: SupabaseClient,
   leagueId: string,
@@ -95,8 +99,17 @@ async function buildStatusFromLeague(
       ? { current, target }
       : null;
 
+  let identityFill: { complete: number; target: number } | null = null;
+  if (isSdflLeague(league.sports_league_id) && target > 0) {
+    const fill = await getSdflIdentityFillStatus(supabase, leagueId, target);
+    if (fill.complete < fill.target) {
+      identityFill = fill;
+    }
+  }
+
   return {
     rosterFill,
+    identityFill,
     lastError,
     botFillExpected,
     pastDue,

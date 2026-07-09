@@ -7,6 +7,7 @@ import {
 } from "@/lib/league/bots";
 import { buildBotConfigForPersonality } from "@/lib/league/league-bots";
 import type { LeagueOpponentType, LeagueVisibility } from "@/lib/league/league-config";
+import { assignBotSdflIdentity, isSdflLeague } from "@/lib/league/sdfl-divisions";
 
 const SYNTHETIC_TEAM_NAMES = [
   "Northside Capital",
@@ -86,6 +87,13 @@ export async function fillEmptySlotsWithBots(
 ): Promise<FillEmptySlotsResult> {
   const supabase = options?.supabase ?? (await createClient());
 
+  const { data: leagueRow } = await supabase
+    .from("leagues")
+    .select("sports_league_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+  const sdflLeague = isSdflLeague(leagueRow?.sports_league_id);
+
   const { data: members, error: membersError } = await supabase
     .from("league_members")
     .select("user_id, display_name, draft_slot")
@@ -121,7 +129,7 @@ export async function fillEmptySlotsWithBots(
 
     const personality =
       ALL_BOT_PERSONALITIES[slot % ALL_BOT_PERSONALITIES.length] as BotPersonality;
-    const displayName = pickTeamName(usedNames, slot);
+    const displayName = sdflLeague ? "Pending" : pickTeamName(usedNames, slot);
     const botConfig = buildBotConfigForPersonality(personality);
 
     const { data: botId, error } = await supabase.rpc("provision_league_bot", {
@@ -139,6 +147,24 @@ export async function fillEmptySlotsWithBots(
         resumedFrom: existingCount,
         error: error?.message ?? "Could not provision league bot.",
       };
+    }
+
+    if (sdflLeague) {
+      const identityResult = await assignBotSdflIdentity(
+        supabase,
+        leagueId,
+        botId,
+        slot,
+        usedNames
+      );
+      if (identityResult.error) {
+        return {
+          filled,
+          remainingSlots: Math.max(0, playerCount - existingCount - filled),
+          resumedFrom: existingCount,
+          error: identityResult.error,
+        };
+      }
     }
 
     filled += 1;

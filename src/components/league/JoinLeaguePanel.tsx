@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import type { HumanLeagueInvitePreview } from "@/lib/league/human-league";
+import { isSdflLeague } from "@/lib/league/sdfl-divisions";
 
 function formatScheduledDraftAt(iso: string | null): string | null {
   if (!iso) return null;
@@ -68,6 +69,7 @@ export function JoinLeaguePanel({
   }, [refreshInviteState]);
 
   const { preview, isMember } = inviteState;
+  const isSdfl = isSdflLeague(preview.sportsLeagueId);
   const spotsLeft = preview.playerCount - preview.memberCount;
   const isFull = spotsLeft <= 0;
   const leagueStarted =
@@ -96,7 +98,7 @@ export function JoinLeaguePanel({
       const res = await fetch(`/api/leagues/join/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamName }),
+        body: JSON.stringify({ teamName: isSdfl ? "" : teamName }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -104,7 +106,13 @@ export function JoinLeaguePanel({
         await refreshInviteState();
         return;
       }
-      router.push("/draft");
+      router.push(
+        typeof data.redirectTo === "string"
+          ? data.redirectTo
+          : isSdfl
+            ? `/leagues/${data.activeLeagueId}/identity`
+            : "/draft"
+      );
     } catch {
       setError("Network error — try again.");
       await refreshInviteState();
@@ -174,9 +182,19 @@ export function JoinLeaguePanel({
       ) : isMember && preview.status === "waiting" ? (
         <div className="space-y-3">
           <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-sm text-muted">
-            You&apos;re already on the roster. Waiting for the league to fill and
-            reach the scheduled draft time.
+            {isSdfl
+              ? "You're on the roster. Set up your SDFL franchise identity while the league fills."
+              : "You're already on the roster. Waiting for the league to fill and reach the scheduled draft time."}
           </div>
+          {isSdfl ? (
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={() => router.push(`/leagues/${preview.leagueId}/identity`)}
+            >
+              Set up franchise
+            </Button>
+          ) : null}
           <Button
             variant="secondary"
             className="w-full"
@@ -225,19 +243,26 @@ export function JoinLeaguePanel({
         )
       ) : canJoin ? (
         <form onSubmit={handleJoin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold mb-1.5" htmlFor="teamName">
-              Your team name
-            </label>
-            <input
-              id="teamName"
-              className={inputClass}
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-              maxLength={40}
-              required
-            />
-          </div>
+          {!isSdfl ? (
+            <div>
+              <label className="block text-sm font-semibold mb-1.5" htmlFor="teamName">
+                Your team name
+              </label>
+              <input
+                id="teamName"
+                className={inputClass}
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                maxLength={40}
+                required
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted">
+              After joining, you&apos;ll pick your conference, division slot, and
+              franchise identity before the draft.
+            </p>
+          )}
           {error && <p className="text-sm text-red-400">{error}</p>}
           <Button
             type="submit"
@@ -245,7 +270,11 @@ export function JoinLeaguePanel({
             className="w-full"
             disabled={submitting}
           >
-            {submitting ? "Joining…" : "Join league & enter draft"}
+            {submitting
+              ? "Joining…"
+              : isSdfl
+                ? "Join league & set up franchise"
+                : "Join league & enter draft"}
           </Button>
         </form>
       ) : (

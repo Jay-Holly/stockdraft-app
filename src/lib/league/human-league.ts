@@ -15,6 +15,7 @@ import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import { isHumanLeagueSupported } from "@/lib/league/league-config";
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
 import { maybeStartHumanLeagueDraft } from "@/lib/league/draft-scheduler";
+import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
 import { buildInviteLink } from "@/lib/app-url";
 import {
   DEFAULT_LEAGUE_SCORING_MODE,
@@ -49,6 +50,7 @@ export type HumanLeagueInvitePreview = {
   opponentType: string;
   formatType: string;
   scheduledDraftAt: string | null;
+  sportsLeagueId: string | null;
 };
 
 export type PendingHumanLeagueInvite = {
@@ -156,6 +158,7 @@ export async function getLeagueInvitePreview(
     opponentType: row.opponent_type,
     formatType: row.format_type,
     scheduledDraftAt: row.scheduled_draft_at ?? null,
+    sportsLeagueId: row.sports_league_id ?? null,
   };
 }
 
@@ -217,6 +220,7 @@ export async function createHumanLeague(
   league?: HumanLeague;
   inviteToken?: string | null;
   inviteLink?: string | null;
+  redirectTo?: string;
   error?: string;
 }> {
   if (!isHumanLeagueSupported(config)) {
@@ -232,9 +236,14 @@ export async function createHumanLeague(
   if (leagueName.length > 60) {
     return { error: "League name must be 60 characters or fewer." };
   }
-  if (!teamName) return { error: "Team name is required." };
-  if (teamName.length > 40) {
-    return { error: "Team name must be 40 characters or fewer." };
+
+  const sdflLeague =
+    config.formatType === "sports_league" && isSdflLeague(config.sportsLeagueId);
+  if (!sdflLeague) {
+    if (!teamName) return { error: "Team name is required." };
+    if (teamName.length > 40) {
+      return { error: "Team name must be 40 characters or fewer." };
+    }
   }
 
   if (scheduledDraftAt) {
@@ -288,7 +297,7 @@ export async function createHumanLeague(
   const { error: memberError } = await supabase.from("league_members").insert({
     league_id: league.id,
     user_id: userId,
-    display_name: teamName,
+    display_name: sdflLeague ? "Pending" : teamName,
     draft_slot: 0,
   });
 
@@ -311,6 +320,7 @@ export async function createHumanLeague(
     inviteLink: inviteToken
       ? buildInviteLink(inviteToken, options?.inviteBaseUrl)
       : null,
+    redirectTo: sdflLeague ? sdflIdentityPath(league.id) : undefined,
   };
 }
 
@@ -427,12 +437,12 @@ export async function joinHumanLeagueByToken(
   userId: string,
   token: string,
   teamName: string
-): Promise<{ league?: HumanLeague; error?: string }> {
+): Promise<{
+  league?: HumanLeague;
+  error?: string;
+  redirectTo?: string;
+}> {
   const trimmedTeam = teamName.trim();
-  if (!trimmedTeam) return { error: "Team name is required." };
-  if (trimmedTeam.length > 40) {
-    return { error: "Team name must be 40 characters or fewer." };
-  }
 
   const preview = await getLeagueInvitePreview(token);
   if (!preview) return { error: "Invite link is invalid or expired." };
@@ -456,7 +466,7 @@ export async function joinHumanLeagueByToken(
   const { data: leagueRow, error: leagueRowError } = await service
     .from("leagues")
     .select(
-      "owner_user_id, status, player_count, visibility, opponent_type, scheduled_draft_at"
+      "owner_user_id, status, player_count, visibility, opponent_type, scheduled_draft_at, sports_league_id"
     )
     .eq("id", preview.leagueId)
     .maybeSingle();
@@ -488,11 +498,21 @@ export async function joinHumanLeagueByToken(
   }
 
   const nextDraftSlot = memberCount ?? 0;
+  const sdflLeague = isSdflLeague(
+    leagueRow.sports_league_id ?? preview.sportsLeagueId
+  );
+
+  if (!sdflLeague) {
+    if (!trimmedTeam) return { error: "Team name is required." };
+    if (trimmedTeam.length > 40) {
+      return { error: "Team name must be 40 characters or fewer." };
+    }
+  }
 
   const { error: memberError } = await supabase.from("league_members").insert({
     league_id: preview.leagueId,
     user_id: userId,
-    display_name: trimmedTeam,
+    display_name: sdflLeague ? "Pending" : trimmedTeam,
     draft_slot: nextDraftSlot,
   });
 
@@ -525,7 +545,11 @@ export async function joinHumanLeagueByToken(
     }
   }
 
-  return loadHumanLeagueById(preview.leagueId);
+  const loaded = await loadHumanLeagueById(preview.leagueId);
+  if (loaded.league && sdflLeague) {
+    return { ...loaded, redirectTo: sdflIdentityPath(preview.leagueId) };
+  }
+  return loaded;
 }
 
 export async function listHumanLeaguesForUser(

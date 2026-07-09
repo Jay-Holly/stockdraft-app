@@ -92,5 +92,6 @@ export async function POST(request: Request) {
     inviteToken: result.inviteToken,
     inviteLink: result.inviteLink,
     activeLeagueId: result.league.id,
+    redirectTo: result.redirectTo,
   });
 }
