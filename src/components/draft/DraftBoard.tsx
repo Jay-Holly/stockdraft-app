@@ -5,7 +5,12 @@ import {
   BENCH_START_ROUND,
   formatMoney,
   formatShares,
+  getDraftRuleConstants,
   OPEN_ROUNDS,
+  SPORTS_SIM_BENCH_START_ROUND,
+  SPORTS_SIM_STARTER_BUDGET,
+  SPORTS_SIM_STARTER_ROUNDS,
+  SPORTS_SIM_TOTAL_ROUNDS,
   STOCK_ROUNDS,
 } from "@/lib/draft/engine";
 import type { DraftPick, DraftSummary } from "@/lib/draft/types";
@@ -35,6 +40,8 @@ export function DraftBoard({
   subtitle?: string;
   emptyMessage?: string;
 }) {
+  const rules = sportsSimDraftRules ? "sports_sim" : "standard";
+  const c = getDraftRuleConstants(rules);
   const realPicks = picks.filter((p) => p.pick_type !== "skip");
   const rows: Array<{
     round: number;
@@ -43,27 +50,55 @@ export function DraftBoard({
     skipped?: boolean;
   }> = [];
 
-  for (let round = 1; round <= OPEN_ROUNDS; round++) {
-    const pick = realPicks.find((p) => p.round_number === round);
-    const skipped = picks.some(
-      (p) => p.pick_type === "skip" && p.round_number === round
-    );
-    rows.push({ round, type: "open", pick, skipped });
-  }
+  if (sportsSimDraftRules) {
+    for (let round = 1; round <= SPORTS_SIM_STARTER_ROUNDS; round++) {
+      const pick = realPicks.find((p) => p.round_number === round);
+      const skipped = picks.some(
+        (p) => p.pick_type === "skip" && p.round_number === round
+      );
+      rows.push({ round, type: "open", pick, skipped });
+    }
 
-  for (let i = 0; i < BENCH_ROUNDS; i++) {
-    const round = BENCH_START_ROUND + i;
-    const pick = realPicks.find(
-      (p) => p.pick_type === "bench" && p.round_number === round
-    );
-    rows.push({ round, type: "bench", pick });
+    for (let i = 0; i < c.benchRounds; i++) {
+      const round = SPORTS_SIM_BENCH_START_ROUND + i;
+      const pick = realPicks.find((p) => p.round_number === round);
+      rows.push({ round, type: "bench", pick });
+    }
+  } else {
+    for (let round = 1; round <= OPEN_ROUNDS; round++) {
+      const pick = realPicks.find((p) => p.round_number === round);
+      const skipped = picks.some(
+        (p) => p.pick_type === "skip" && p.round_number === round
+      );
+      rows.push({ round, type: "open", pick, skipped });
+    }
+
+    for (let i = 0; i < BENCH_ROUNDS; i++) {
+      const round = BENCH_START_ROUND + i;
+      const pick = realPicks.find(
+        (p) => p.pick_type === "bench" && p.round_number === round
+      );
+      rows.push({ round, type: "bench", pick });
+    }
   }
 
   const openSlotPicks = realPicks.filter(
     (p) =>
-      p.round_number <= OPEN_ROUNDS &&
+      p.round_number <= c.starterRounds &&
       (p.pick_type === "stock" || p.pick_type === "crypto")
   ).length;
+
+  const benchSlotPicks = sportsSimDraftRules
+    ? realPicks.filter((p) => {
+        if (
+          p.round_number < SPORTS_SIM_BENCH_START_ROUND ||
+          p.round_number > SPORTS_SIM_TOTAL_ROUNDS
+        ) {
+          return false;
+        }
+        return p.pick_type === "bench" || p.pick_type === "crypto";
+      }).length
+    : summary.benchPicks;
 
   return (
     <aside className="draft-board">
@@ -75,18 +110,18 @@ export function DraftBoard({
       <div className="draft-board-stats">
         <div>
           <p className="draft-stat-label">
-            {sportsSimDraftRules ? "Open slots" : "Stock picks"}
+            {sportsSimDraftRules ? "Starters" : "Stock picks"}
           </p>
           <p className="draft-stat-val text-primary-light">
             {sportsSimDraftRules
-              ? `${openSlotPicks} / ${STOCK_ROUNDS}`
+              ? `${openSlotPicks} / ${SPORTS_SIM_STARTER_ROUNDS}`
               : `${summary.stockPicks} / ${STOCK_ROUNDS}`}
           </p>
         </div>
         <div>
           <p className="draft-stat-label">Bench</p>
           <p className="draft-stat-val text-muted">
-            {summary.benchPicks} / {BENCH_ROUNDS}
+            {benchSlotPicks} / {c.benchRounds}
           </p>
         </div>
         {!sportsSimDraftRules && (
@@ -107,9 +142,9 @@ export function DraftBoard({
         )}
         {sportsSimDraftRules && (
           <div>
-            <p className="draft-stat-label">Crypto picks</p>
+            <p className="draft-stat-label">Crypto starters</p>
             <p className="draft-stat-val text-green-400">
-              {summary.cryptoPicks}
+              {realPicks.filter((p) => p.pick_type === "crypto" && p.round_number <= SPORTS_SIM_STARTER_ROUNDS).length}
             </p>
           </div>
         )}
@@ -123,7 +158,11 @@ export function DraftBoard({
           const isActive = showActions && round === currentRound;
           const isCrypto = pick?.pick_type === "crypto";
           let label = `Round ${round}`;
-          if (type === "bench") label = `Bench ${round - OPEN_ROUNDS}`;
+          if (type === "bench") {
+            label = sportsSimDraftRules
+              ? `Bench ${round - SPORTS_SIM_BENCH_START_ROUND + 1}`
+              : `Bench ${round - OPEN_ROUNDS}`;
+          }
 
           return (
             <div
@@ -144,7 +183,9 @@ export function DraftBoard({
                       {pick.pick_type === "bench"
                         ? "Free bench pick"
                         : pick.pick_type === "crypto"
-                          ? `${formatMoney(pick.budget_spent)} → ${formatShares(pick.shares)}${pick.surcharge_percent > 0 ? ` (${pick.surcharge_percent}% sur.)` : ""}`
+                          ? pick.budget_spent > 0
+                            ? `${formatMoney(pick.budget_spent)} → ${formatShares(pick.shares)}${pick.surcharge_percent > 0 ? ` (${pick.surcharge_percent}% sur.)` : ""}`
+                            : "Free bench crypto"
                           : `${formatShares(pick.shares)} @ ${formatMoney(pick.price_at_pick)}`}
                     </p>
                   </>
@@ -155,7 +196,7 @@ export function DraftBoard({
                       {type === "bench"
                         ? "Free"
                         : sportsSimDraftRules
-                          ? "Stock or crypto $80K"
+                          ? `Stock or crypto $${SPORTS_SIM_STARTER_BUDGET / 1000}K`
                           : "Stock $80K or crypto"}
                     </p>
                   </>

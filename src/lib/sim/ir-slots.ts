@@ -2,13 +2,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DraftPick } from "@/lib/draft/types";
 import { BENCH_START_ROUND, TOTAL_ROUNDS } from "@/lib/draft/types";
+import { postDraftIrBaseRound } from "@/lib/draft/draft-constants";
+import type { DraftRulesMode } from "@/lib/draft/types";
 import {
   IR_OPEN_SYMBOL,
   SPORTS_SIM_IR_SLOT_COUNT,
 } from "@/lib/sim/types";
 
-const IR_SLOT_BASE_ROUND = TOTAL_ROUNDS + 1;
 const IR_SLOT_BASE_ORDER = 200;
+
+export function getIrSlotBaseRound(rules: DraftRulesMode = "standard"): number {
+  return postDraftIrBaseRound(rules);
+}
 
 export function isOpenIrSlot(pick: DraftPick): boolean {
   return (
@@ -68,8 +73,11 @@ export function findAllOpenStarterSlots(picks: DraftPick[]): DraftPick[] {
 export async function ensureIrSlotsForDraft(
   supabase: SupabaseClient,
   userId: string,
-  draftId: string
+  draftId: string,
+  options?: { rules?: DraftRulesMode }
 ): Promise<{ created: number }> {
+  const irSlotBaseRound = getIrSlotBaseRound(options?.rules ?? "standard");
+
   const { data: existing, error } = await supabase
     .from("draft_picks")
     .select("id, pick_order, round_number")
@@ -95,7 +103,7 @@ export async function ensureIrSlotsForDraft(
   const inserts = Array.from({ length: missing }, (_, index) => ({
     draft_id: draftId,
     user_id: userId,
-    round_number: IR_SLOT_BASE_ROUND + irRows.length + index,
+    round_number: irSlotBaseRound + irRows.length + index,
     pick_type: "ir",
     symbol: IR_OPEN_SYMBOL,
     price_at_pick: 0,
@@ -117,7 +125,8 @@ export async function ensureIrSlotsForDraft(
 
 export async function ensureIrSlotsForLeague(
   supabase: SupabaseClient,
-  leagueId: string
+  leagueId: string,
+  options?: { rules?: DraftRulesMode }
 ): Promise<{ drafts: number; slotsCreated: number }> {
   const { data: drafts, error } = await supabase
     .from("drafts")
@@ -134,7 +143,8 @@ export async function ensureIrSlotsForLeague(
     const result = await ensureIrSlotsForDraft(
       supabase,
       draft.user_id,
-      draft.id
+      draft.id,
+      options
     );
     slotsCreated += result.created;
   }
@@ -143,6 +153,11 @@ export async function ensureIrSlotsForLeague(
 }
 
 /** Guard against accidental IR slot creation during live draft rounds. */
-export function irSlotRoundIsPostDraft(roundNumber: number): boolean {
-  return roundNumber >= BENCH_START_ROUND;
+export function irSlotRoundIsPostDraft(
+  roundNumber: number,
+  rules: DraftRulesMode = "standard"
+): boolean {
+  return roundNumber >= getIrSlotBaseRound(rules);
 }
+
+export { BENCH_START_ROUND, TOTAL_ROUNDS };

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { SPORTS_SIM_BOT_PROVISION_LEAD_MS } from "@/lib/draft/draft-constants";
 import { loadDraftApiPayload } from "@/lib/draft/api";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { resolveActiveLeagueId } from "@/lib/league/active-league";
@@ -52,10 +53,15 @@ export async function GET(request: Request) {
         const pastDue = Boolean(
           scheduledAt && scheduledAt.getTime() <= Date.now()
         );
+        const provisionWindowOpen = Boolean(
+          scheduledAt &&
+            scheduledAt.getTime() - SPORTS_SIM_BOT_PROVISION_LEAD_MS <=
+              Date.now()
+        );
 
-        if (league?.status === "waiting" && pastDue) {
+        if (league?.status === "waiting" && (provisionWindowOpen || pastDue)) {
           const nudge = await maybeStartHumanLeagueDraft(leagueId, {
-            force: true,
+            force: pastDue,
             maxBotsPerRun: DRAFT_POLL_MAX_BOTS_PER_RUN,
           });
           if (nudge.error) {

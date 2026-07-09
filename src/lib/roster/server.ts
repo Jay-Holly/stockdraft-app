@@ -4,6 +4,7 @@ import { isCryptoSymbol, isStockPickEligible } from "@/lib/draft/engine";
 import { loadDraftStateDetailed, fetchBuyerCounts } from "@/lib/draft/server";
 import type { DraftPick } from "@/lib/draft/types";
 import { OPEN_ROUNDS } from "@/lib/draft/types";
+import { SPORTS_SIM_STARTER_ROUNDS } from "@/lib/draft/draft-constants";
 import {
   type AiLeague,
 } from "@/lib/league/ai-league";
@@ -234,7 +235,8 @@ export async function loadRosterView(
     await ensureIrSlotsForDraft(
       supabase,
       userId,
-      state.state.draft.id
+      state.state.draft.id,
+      { rules: "sports_sim" }
     );
   }
 
@@ -428,7 +430,7 @@ export async function loadRosterView(
         ? withWeekMetrics.filter(
             (p) =>
               (p.pick_type === "stock" || p.pick_type === "crypto") &&
-              p.round_number <= OPEN_ROUNDS
+              p.round_number <= SPORTS_SIM_STARTER_ROUNDS
           )
         : withWeekMetrics.filter((p) => p.pick_type === "stock"),
       bench: withWeekMetrics.filter((p) => p.pick_type === "bench"),

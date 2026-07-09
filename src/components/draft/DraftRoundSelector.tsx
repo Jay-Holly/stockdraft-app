@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DraftFeedEvent, LiveDraftView } from "@/lib/draft/types";
 import { TOTAL_ROUNDS } from "@/lib/draft/types";
+import { SPORTS_SIM_TOTAL_ROUNDS } from "@/lib/draft/draft-constants";
 import {
   buildRoundRecap,
   getCurrentDraftRound,
@@ -13,11 +14,14 @@ export function DraftRoundSelector({
   feed,
   liveDraft,
   compact = false,
+  sportsSimDraftRules = false,
 }: {
   feed: DraftFeedEvent[];
   liveDraft: LiveDraftView | null;
   compact?: boolean;
+  sportsSimDraftRules?: boolean;
 }) {
+  const totalRounds = sportsSimDraftRules ? SPORTS_SIM_TOTAL_ROUNDS : TOTAL_ROUNDS;
   const draftOrder = liveDraft?.draftOrder ?? [];
   const teamCount = draftOrder.length;
   const draftComplete = liveDraft?.status === "complete";
@@ -39,10 +43,10 @@ export function DraftRoundSelector({
   useEffect(() => {
     if (!followLiveRound.current) return;
     const target = draftComplete
-      ? Math.max(maxRoundWithEvents, TOTAL_ROUNDS)
+      ? Math.max(maxRoundWithEvents, totalRounds)
       : currentRound;
     setSelectedRound(target);
-  }, [currentRound, maxRoundWithEvents, draftComplete]);
+  }, [currentRound, maxRoundWithEvents, draftComplete, totalRounds]);
 
   const recapLines = useMemo(
     () =>
@@ -54,8 +58,8 @@ export function DraftRoundSelector({
   );
 
   const rounds = useMemo(
-    () => Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
-    []
+    () => Array.from({ length: totalRounds }, (_, i) => i + 1),
+    [totalRounds]
   );
 
   function handleSelectRound(round: number) {

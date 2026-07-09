@@ -12,8 +12,10 @@ import { resolveActiveLeagueId } from "@/lib/league/active-league";
 import {
   calculatePushback,
   computeCryptoPick,
+  computeSportsSimStarterPick,
   computeStockPick,
   draftRulesModeFromFlag,
+  getDraftRuleConstants,
   getDuplicateRosterError,
   getMyCryptoSymbols,
   getMyStockSymbols,
@@ -306,9 +308,25 @@ export async function loadDraftStateDetailed(
 
   let draftRow = draft as Draft;
   const buyerCounts = await fetchBuyerCounts(supabase, league.id);
-  let summary = summarizePicks(pickList);
+  let summary = summarizePicks(pickList, draftRules);
 
-  if (
+  if (sportsSimDraftRules) {
+    const sim = getDraftRuleConstants("sports_sim");
+    if (
+      draftRow.status !== "complete" &&
+      isOpenPhaseComplete(pickList, draftRules) &&
+      draftRow.current_round < sim.benchStartRound
+    ) {
+      const { error: roundSyncError } = await supabase
+        .from("drafts")
+        .update({ current_round: sim.benchStartRound })
+        .eq("id", draftRow.id);
+
+      if (!roundSyncError) {
+        draftRow = { ...draftRow, current_round: sim.benchStartRound };
+      }
+    }
+  } else if (
     draftRow.status !== "complete" &&
     isOpenPhaseComplete(pickList, draftRules) &&
     summary.benchPicks < BENCH_ROUNDS &&
@@ -345,7 +363,7 @@ export async function loadDraftStateDetailed(
     draftRow = { ...draftRow, pushback_skips_remaining: 0 };
   }
 
-  summary = summarizePicks(pickList);
+  summary = summarizePicks(pickList, draftRules);
   const turn = getTurn(draftRow, pickList, draftRules);
   const leagueOffBoardSet = await getLeagueOffBoardSymbols(league.id);
   const myStockSymbols = [...getMyStockSymbols(pickList)];
@@ -553,7 +571,7 @@ export async function makeDraftPickForLeague(
   const isCryptoPick = isCryptoSymbol(upperSymbol);
 
   const supabase = await createClient();
-  const summary = summarizePicks(leaguePicks);
+  const summary = summarizePicks(leaguePicks, draftRules);
   const pickOrder = leaguePicks.length;
   let pickType: DraftPick["pick_type"] = "stock";
   let budgetSpent = 0;
@@ -563,13 +581,72 @@ export async function makeDraftPickForLeague(
   const priceAtPick = price ?? 0;
   let pushbackDelta = 0;
 
-  if (isCryptoPick) {
+  if (sportsSimDraftRules) {
+    const sim = getDraftRuleConstants("sports_sim");
+    const round = draft.current_round;
+
+    if (round > sim.totalRounds) {
+      return { error: "Draft is already complete" };
+    }
+
+    const duplicate = getDuplicateRosterError(
+      upperSymbol,
+      leaguePicks,
+      isCryptoPick ? "crypto" : "stock",
+      draftRules
+    );
+    if (duplicate) return { error: duplicate };
+
+    if (isCryptoPick) {
+      if (!turn.canPickCrypto) {
+        return { error: "Cannot draft crypto this round" };
+      }
+      if (!priceAtPick || priceAtPick <= 0) {
+        return { error: "Missing price for crypto pick" };
+      }
+      if (!isCryptoPickEligible(upperSymbol, priceAtPick)) {
+        return {
+          error:
+            "Symbol is not in the crypto draft pool or price is unavailable",
+        };
+      }
+
+      pickType = "crypto";
+      if (round <= sim.starterRounds) {
+        const computed = computeSportsSimStarterPick(priceAtPick);
+        budgetSpent = computed.budgetSpent;
+        shares = computed.shares;
+        effectiveValue = budgetSpent;
+      }
+    } else {
+      if (!turn.canPickStock) {
+        return { error: "Cannot draft stock this round" };
+      }
+      if (!isStockPickEligible(upperSymbol, priceAtPick)) {
+        return {
+          error: `Stock must trade at $${MIN_STOCK_PRICE_USD}+ per share`,
+        };
+      }
+      if (leagueOffBoard.includes(upperSymbol)) {
+        return { error: `${upperSymbol} is off the board in this league` };
+      }
+      if (!(await isDraftPoolStock(upperSymbol)) && !isSearchPick) {
+        return { error: "Use search to draft stocks outside the S&P 500 pool" };
+      }
+
+      if (round <= sim.starterRounds) {
+        const computed = computeSportsSimStarterPick(priceAtPick);
+        pickType = "stock";
+        budgetSpent = computed.budgetSpent;
+        shares = computed.shares;
+        effectiveValue = budgetSpent;
+      } else {
+        pickType = "bench";
+      }
+    }
+  } else if (isCryptoPick) {
     if (!turn.canPickCrypto) {
-      return {
-        error: sportsSimDraftRules
-          ? "All 10 open picks are already made"
-          : "No crypto budget remaining",
-      };
+      return { error: "No crypto budget remaining" };
     }
 
     const cryptoDuplicate = getDuplicateRosterError(
@@ -590,43 +667,35 @@ export async function makeDraftPickForLeague(
       };
     }
 
-    if (sportsSimDraftRules) {
-      const computed = computeStockPick(priceAtPick);
-      pickType = "crypto";
-      budgetSpent = computed.budgetSpent;
-      shares = computed.shares;
-      effectiveValue = budgetSpent;
-    } else {
-      const cryptoAmount = allocation ?? summary.cryptoRemaining;
-      if (cryptoAmount <= 0 || cryptoAmount > summary.cryptoRemaining) {
-        return { error: "Invalid crypto allocation" };
-      }
+    const cryptoAmount = allocation ?? summary.cryptoRemaining;
+    if (cryptoAmount <= 0 || cryptoAmount > summary.cryptoRemaining) {
+      return { error: "Invalid crypto allocation" };
+    }
 
-      const buyerCount = buyerCounts[upperSymbol] ?? 0;
-      const computed = computeCryptoPick(cryptoAmount, priceAtPick, buyerCount);
+    const buyerCount = buyerCounts[upperSymbol] ?? 0;
+    const computed = computeCryptoPick(cryptoAmount, priceAtPick, buyerCount);
 
-      pickType = "crypto";
-      budgetSpent = computed.budgetSpent;
-      shares = computed.shares;
-      surchargePercent = computed.surchargePercent;
-      effectiveValue = computed.effectiveValue;
+    pickType = "crypto";
+    budgetSpent = computed.budgetSpent;
+    shares = computed.shares;
+    surchargePercent = computed.surchargePercent;
+    effectiveValue = computed.effectiveValue;
 
-      await incrementLeagueCryptoCount(
-        supabase,
-        leagueId,
-        upperSymbol,
-        buyerCount
-      );
+    await incrementLeagueCryptoCount(
+      supabase,
+      leagueId,
+      upperSymbol,
+      buyerCount
+    );
 
-      if (draft.current_round <= OPEN_ROUNDS) {
-        const afterPick = [
-          ...getOpenPhaseCryptoPicks(leaguePicks),
-          { budget_spent: budgetSpent } as DraftPick,
-        ];
-        const newTotal = afterPick.reduce((s, p) => s + p.budget_spent, 0);
-        if (newTotal >= CRYPTO_POOL) {
-          pushbackDelta = calculatePushback(afterPick);
-        }
+    if (draft.current_round <= OPEN_ROUNDS) {
+      const afterPick = [
+        ...getOpenPhaseCryptoPicks(leaguePicks),
+        { budget_spent: budgetSpent } as DraftPick,
+      ];
+      const newTotal = afterPick.reduce((s, p) => s + p.budget_spent, 0);
+      if (newTotal >= CRYPTO_POOL) {
+        pushbackDelta = calculatePushback(afterPick);
       }
     }
   } else if (turn.type === "bench") {
@@ -652,12 +721,8 @@ export async function makeDraftPickForLeague(
   } else if (turn.type === "crypto") {
     return { error: "Spend remaining crypto budget — stock picks are complete" };
   } else if (turn.type === "open") {
-    if (!turn.canPickStock && !isCryptoPick) {
-      return {
-        error: sportsSimDraftRules
-          ? "All 10 open picks are already made"
-          : "All 10 stock picks are already made",
-      };
+    if (!turn.canPickStock) {
+      return { error: "All 10 stock picks are already made" };
     }
 
     if (!isCryptoPick) {

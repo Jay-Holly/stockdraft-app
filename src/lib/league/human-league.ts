@@ -276,7 +276,7 @@ export async function createHumanLeague(
         config.scoringMode ?? DEFAULT_LEAGUE_SCORING_MODE
       ),
       draft_format: "live",
-      pick_time_seconds: 120,
+      pick_time_seconds: config.formatType === "sports_league" ? 30 : 120,
     })
     .select(HUMAN_LEAGUE_FIELDS)
     .single();
@@ -642,7 +642,7 @@ export async function activateHumanLeagueSchedule(
       sportsLeagueId: leagueRow?.sports_league_id,
     })
   ) {
-    await ensureIrSlotsForLeague(supabase, leagueId);
+    await ensureIrSlotsForLeague(supabase, leagueId, { rules: "sports_sim" });
   }
 
   await captureWeekBaselinesForLeague(leagueId, 1);

@@ -956,7 +956,7 @@ export function StockPool({
             ? cryptoPoolLoading
               ? "Loading top crypto pool from database…"
               : sportsSimDraftRules
-                ? `Top ${cryptoPool.length} crypto · $80K per pick · once per manager`
+                ? `Top ${cryptoPool.length} crypto · $100K starters / free bench · once per manager`
                 : `Top ${cryptoPool.length} crypto by market cap · surcharge per coin`
             : isTop100View
               ? `Top 100 S&P 500 by market cap · showing ${poolVisible.length} of ${displayedPool.length} stocks`

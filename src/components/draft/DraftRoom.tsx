@@ -730,6 +730,7 @@ export function DraftRoom({
                   feed={state.draftFeed ?? []}
                   liveDraft={liveDraft}
                   compact
+                  sportsSimDraftRules={state.sportsSimDraftRules}
                 />
               </>
             )}

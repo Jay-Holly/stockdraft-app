@@ -2,6 +2,10 @@ import { MIN_STOCK_PRICE_USD } from "@/lib/market/draft-pool";
 import { isCryptoPoolSymbol } from "@/lib/crypto-pool/symbols";
 import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import {
+  getDraftRuleConstants,
+  SPORTS_SIM_STARTER_BUDGET,
+} from "@/lib/draft/draft-constants";
+import {
   BENCH_ROUNDS,
   BENCH_START_ROUND,
   CRYPTO_POOL,
@@ -35,28 +39,55 @@ export function draftRulesModeFromFlag(
   return sportsSimDraftRules ? "sports_sim" : "standard";
 }
 
+function countStarterSlotPicks(
+  picks: DraftPick[],
+  rules: DraftRulesMode
+): number {
+  const c = getDraftRuleConstants(rules);
+  return picks.filter(
+    (p) =>
+      p.pick_type !== "skip" &&
+      p.round_number <= c.starterRounds &&
+      (p.pick_type === "stock" || p.pick_type === "crypto")
+  ).length;
+}
+
+function countBenchSlotPicks(
+  picks: DraftPick[],
+  rules: DraftRulesMode
+): number {
+  const c = getDraftRuleConstants(rules);
+  return picks.filter((p) => {
+    if (p.pick_type === "skip") return false;
+    if (p.round_number < c.benchStartRound || p.round_number > c.totalRounds) {
+      return false;
+    }
+    return p.pick_type === "bench" || p.pick_type === "crypto";
+  }).length;
+}
+
 function countOpenSlotPicks(
   summary: DraftSummary,
   rules: DraftRulesMode
 ): number {
-  if (rules === "sports_sim") {
-    return summary.stockPicks + summary.cryptoPicks;
+  if (rules === "standard") {
+    return summary.stockPicks;
   }
-  return summary.stockPicks;
+  return summary.stockPicks + summary.cryptoPicks;
 }
 
 function openSlotsRemaining(
   summary: DraftSummary,
   rules: DraftRulesMode
 ): number {
-  return Math.max(0, STOCK_ROUNDS - countOpenSlotPicks(summary, rules));
+  const c = getDraftRuleConstants(rules);
+  return Math.max(0, c.starterRounds - countOpenSlotPicks(summary, rules));
 }
 
 export function isCryptoSymbol(symbol: string): boolean {
   return isCryptoPoolSymbol(symbol);
 }
 
-/** Crypto is eligible when it is in the pool and has a live price. No per-unit floor. */
 export function isCryptoPickEligible(symbol: string, price: number): boolean {
   return isCryptoPoolSymbol(symbol) && price > 0;
 }
@@ -94,8 +125,27 @@ export function computeStockPick(price: number) {
   return { shares, budgetSpent: STOCK_BUDGET };
 }
 
-export function summarizePicks(picks: DraftPick[]): DraftSummary {
+export function computeSportsSimStarterPick(price: number) {
+  const shares = price > 0 ? SPORTS_SIM_STARTER_BUDGET / price : 0;
+  return { shares, budgetSpent: SPORTS_SIM_STARTER_BUDGET };
+}
+
+export function summarizePicks(
+  picks: DraftPick[],
+  rules: DraftRulesMode = "standard"
+): DraftSummary {
   const realPicks = picks.filter((p) => p.pick_type !== "skip");
+  const c = getDraftRuleConstants(rules);
+
+  const starterPicks =
+    rules === "sports_sim"
+      ? realPicks.filter(
+          (p) =>
+            p.round_number <= c.starterRounds &&
+            (p.pick_type === "stock" || p.pick_type === "crypto")
+        )
+      : realPicks.filter((p) => p.pick_type === "stock");
+
   const stockSpent = realPicks
     .filter((p) => p.pick_type === "stock")
     .reduce((sum, p) => sum + p.budget_spent, 0);
@@ -103,15 +153,21 @@ export function summarizePicks(picks: DraftPick[]): DraftSummary {
     .filter((p) => p.pick_type === "crypto")
     .reduce((sum, p) => sum + p.budget_spent, 0);
 
+  const starterSpent =
+    rules === "sports_sim"
+      ? starterPicks.reduce((sum, p) => sum + p.budget_spent, 0)
+      : stockSpent;
+
   return {
-    stockSpent,
-    cryptoSpent,
-    totalSpent: stockSpent + cryptoSpent,
+    stockSpent: rules === "sports_sim" ? starterSpent : stockSpent,
+    cryptoSpent: rules === "sports_sim" ? 0 : cryptoSpent,
+    totalSpent: starterSpent + (rules === "sports_sim" ? 0 : cryptoSpent),
     stockPicks: realPicks.filter((p) => p.pick_type === "stock").length,
     benchPicks: realPicks.filter((p) => p.pick_type === "bench").length,
     cryptoPicks: realPicks.filter((p) => p.pick_type === "crypto").length,
     cryptoRemaining: CRYPTO_POOL - cryptoSpent,
-    stockRemaining: STOCK_CAP - stockSpent,
+    stockRemaining:
+      (rules === "sports_sim" ? c.starterCap : STOCK_CAP) - starterSpent,
   };
 }
 
@@ -148,17 +204,19 @@ export function getDuplicateRosterError(
   pickKind: "crypto" | "stock",
   rules: DraftRulesMode = "standard"
 ): string | null {
-  if (pickKind === "crypto") {
-    if (rules === "sports_sim") {
-      const upper = symbol.toUpperCase();
-      if (getMyCryptoSymbols(picks).has(upper)) {
-        return `${upper} is already on your roster`;
-      }
+  const upper = symbol.toUpperCase();
+
+  if (rules === "sports_sim") {
+    if (getMyDraftedSymbols(picks).has(upper)) {
+      return `${upper} is already on your roster`;
     }
     return null;
   }
 
-  const upper = symbol.toUpperCase();
+  if (pickKind === "crypto") {
+    return null;
+  }
+
   if (getMyStockSymbols(picks).has(upper)) {
     return `${upper} is already on your roster`;
   }
@@ -176,7 +234,11 @@ export function isOpenPhaseComplete(
   picks: DraftPick[],
   rules: DraftRulesMode = "standard"
 ): boolean {
-  const summary = summarizePicks(picks);
+  if (rules === "sports_sim") {
+    const c = getDraftRuleConstants(rules);
+    return countStarterSlotPicks(picks, rules) >= c.starterRounds;
+  }
+  const summary = summarizePicks(picks, rules);
   return countOpenSlotPicks(summary, rules) >= STOCK_ROUNDS;
 }
 
@@ -184,7 +246,14 @@ export function hasRosterStructureComplete(
   picks: DraftPick[],
   rules: DraftRulesMode = "standard"
 ): boolean {
-  const summary = summarizePicks(picks);
+  const c = getDraftRuleConstants(rules);
+  if (rules === "sports_sim") {
+    return (
+      countStarterSlotPicks(picks, rules) >= c.starterRounds &&
+      countBenchSlotPicks(picks, rules) >= c.benchRounds
+    );
+  }
+  const summary = summarizePicks(picks, rules);
   return (
     countOpenSlotPicks(summary, rules) >= STOCK_ROUNDS &&
     summary.benchPicks >= BENCH_ROUNDS
@@ -198,8 +267,10 @@ export function isDraftComplete(
   if (rules === "sports_sim") {
     return hasRosterStructureComplete(picks, rules);
   }
-  const summary = summarizePicks(picks);
-  return hasRosterStructureComplete(picks, rules) && summary.cryptoRemaining <= 0;
+  const summary = summarizePicks(picks, rules);
+  return (
+    hasRosterStructureComplete(picks, rules) && summary.cryptoRemaining <= 0
+  );
 }
 
 export function calculatePushback(cryptoPicksInOpenPhase: DraftPick[]): number {
@@ -216,18 +287,23 @@ export function calculatePushback(cryptoPicksInOpenPhase: DraftPick[]): number {
   return 0;
 }
 
+function sportsSimTurnLabel(round: number): string {
+  const c = getDraftRuleConstants("sports_sim");
+  if (round <= c.starterRounds) {
+    return `Round ${round} — starter (stock or crypto $${formatCompact(c.starterBudget)})`;
+  }
+  if (round <= c.totalRounds) {
+    return `Round ${round} — bench (stock or crypto, free)`;
+  }
+  return `Round ${round}`;
+}
+
 function openTurnLabel(
   round: number,
   canPickStock: boolean,
   canPickCrypto: boolean,
   rules: DraftRulesMode
 ): string {
-  if (rules === "sports_sim") {
-    if (canPickStock && canPickCrypto) {
-      return `Round ${round} — open pick (stock or crypto $${formatCompact(STOCK_BUDGET)})`;
-    }
-    return `Round ${round} — open pick`;
-  }
   if (canPickStock && canPickCrypto) {
     return `Round ${round} — open pick (stock $${formatCompact(STOCK_BUDGET)} or crypto)`;
   }
@@ -245,8 +321,9 @@ export function getTurn(
   picks: DraftPick[],
   rules: DraftRulesMode = "standard"
 ): DraftTurn {
-  const summary = summarizePicks(picks);
+  const summary = summarizePicks(picks, rules);
   const round = draft.current_round;
+  const c = getDraftRuleConstants(rules);
 
   if (draft.status === "complete" || isDraftComplete(picks, rules)) {
     return {
@@ -260,11 +337,47 @@ export function getTurn(
     };
   }
 
+  if (rules === "sports_sim") {
+    if (round <= c.starterRounds) {
+      return {
+        type: "open",
+        round,
+        label: sportsSimTurnLabel(round),
+        canPickStock: true,
+        canPickCrypto: true,
+        stockBudget: c.starterBudget,
+        cryptoRemaining: 0,
+      };
+    }
+
+    if (round <= c.totalRounds) {
+      return {
+        type: "bench",
+        round,
+        label: sportsSimTurnLabel(round),
+        canPickStock: true,
+        canPickCrypto: true,
+        stockBudget: 0,
+        cryptoRemaining: 0,
+      };
+    }
+
+    return {
+      type: "complete",
+      round,
+      label: "Draft complete",
+      canPickStock: false,
+      canPickCrypto: false,
+      stockBudget: 0,
+      cryptoRemaining: 0,
+    };
+  }
+
   const inOpenPhase =
     round <= OPEN_ROUNDS && !isOpenPhaseComplete(picks, rules);
 
   if (inOpenPhase) {
-    if (rules !== "sports_sim" && draft.pushback_skips_remaining > 0) {
+    if (draft.pushback_skips_remaining > 0) {
       return {
         type: "pushback_skip",
         round,
@@ -276,13 +389,8 @@ export function getTurn(
       };
     }
 
-    const openSlotsLeft = openSlotsRemaining(summary, rules);
-    const canPickStock =
-      rules === "sports_sim" ? openSlotsLeft > 0 : summary.stockPicks < STOCK_ROUNDS;
-    const canPickCrypto =
-      rules === "sports_sim"
-        ? openSlotsLeft > 0
-        : summary.cryptoRemaining > 0;
+    const canPickStock = summary.stockPicks < STOCK_ROUNDS;
+    const canPickCrypto = summary.cryptoRemaining > 0;
 
     return {
       type: "open",
@@ -297,8 +405,7 @@ export function getTurn(
 
   if (summary.benchPicks < BENCH_ROUNDS) {
     const benchRound = Math.max(round, BENCH_START_ROUND);
-    const canPickCrypto =
-      rules === "sports_sim" ? false : summary.cryptoRemaining > 0;
+    const canPickCrypto = summary.cryptoRemaining > 0;
     return {
       type: "bench",
       round: benchRound,
@@ -312,7 +419,7 @@ export function getTurn(
     };
   }
 
-  if (rules !== "sports_sim" && summary.cryptoRemaining > 0) {
+  if (summary.cryptoRemaining > 0) {
     const cryptoRound = Math.max(round, BENCH_START_ROUND);
     return {
       type: "crypto",
@@ -343,7 +450,12 @@ export function getNextRoundAfterPick(
   rules: DraftRulesMode = "standard"
 ): number {
   const round = draft.current_round;
-  const summary = summarizePicks(picks);
+  const summary = summarizePicks(picks, rules);
+  const c = getDraftRuleConstants(rules);
+
+  if (rules === "sports_sim") {
+    return Math.min(round + 1, c.totalRounds + 1);
+  }
 
   if (pickType === "skip") {
     if (round < OPEN_ROUNDS) {
@@ -353,18 +465,6 @@ export function getNextRoundAfterPick(
   }
 
   if (pickType === "crypto") {
-    if (rules === "sports_sim") {
-      if (!isOpenPhaseComplete(picks, rules)) {
-        if (round < OPEN_ROUNDS) {
-          return round + 1;
-        }
-      }
-      if (round >= BENCH_START_ROUND) {
-        return round + 1;
-      }
-      return BENCH_START_ROUND;
-    }
-
     if (summary.cryptoRemaining > 0) {
       return round;
     }
@@ -422,6 +522,18 @@ export function formatShares(shares: number): string {
   if (shares >= 0.0001) return `${shares.toFixed(4)} sh`;
   return `${shares.toExponential(2)} sh`;
 }
+
+export {
+  getDraftRuleConstants,
+  livePicksPerTeamForFormat,
+  SPORTS_SIM_BENCH_ROUNDS,
+  SPORTS_SIM_BENCH_START_ROUND,
+  SPORTS_SIM_PICKS_PER_TEAM,
+  SPORTS_SIM_STARTER_BUDGET,
+  SPORTS_SIM_STARTER_CAP,
+  SPORTS_SIM_STARTER_ROUNDS,
+  SPORTS_SIM_TOTAL_ROUNDS,
+} from "@/lib/draft/draft-constants";
 
 export {
   STOCK_ROUNDS,

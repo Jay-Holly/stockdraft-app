@@ -9,7 +9,10 @@ import {
   isDraftComplete,
   draftRulesModeFromFlag,
   getMyCryptoSymbols,
+  getMyDraftedSymbols,
   isStockPickEligible,
+  livePicksPerTeamForFormat,
+  SPORTS_SIM_STARTER_ROUNDS,
 } from "@/lib/draft/engine";
 import {
   loadDraftStateDetailed,
@@ -24,7 +27,6 @@ import type {
   DraftState,
   LiveDraftView,
 } from "@/lib/draft/types";
-import { STOCK_ROUNDS } from "@/lib/draft/types";
 import type { BotConfig, BotPersonality } from "@/lib/league/bots";
 import { BOT_BY_ID } from "@/lib/league/bots";
 import { getCryptoQuotesMap, getStockQuote } from "@/lib/roster/quotes";
@@ -281,7 +283,7 @@ async function repairHumanLiveDraftOrderIfNeeded(leagueId: string): Promise<void
   const supabase = await createClient();
   const { data: league } = await supabase
     .from("leagues")
-    .select("league_type, status")
+    .select("league_type, status, format_type")
     .eq("id", leagueId)
     .maybeSingle();
 
@@ -330,7 +332,8 @@ async function repairHumanLiveDraftOrderIfNeeded(leagueId: string): Promise<void
     }
   }
 
-  const totalPickSlots = newOrder.length * 15;
+  const totalPickSlots =
+    newOrder.length * livePicksPerTeamForFormat(league.format_type);
 
   await supabase
     .from("league_draft_state")
@@ -391,9 +394,15 @@ async function repairLiveDraftOrderIfNeeded(leagueId: string): Promise<void> {
   if (!humanId) return;
 
   const draftOrder = [humanId, ...botIds];
-  const totalPickSlots = draftOrder.length * 15;
-
   const supabase = await createClient();
+  const { data: leagueRow } = await supabase
+    .from("leagues")
+    .select("format_type")
+    .eq("id", leagueId)
+    .maybeSingle();
+  const totalPickSlots =
+    draftOrder.length * livePicksPerTeamForFormat(leagueRow?.format_type);
+
   await supabase
     .from("league_draft_state")
     .update({
@@ -434,7 +443,14 @@ export async function startLiveDraft(
     return {};
   }
 
-  const totalPickSlots = resolvedOrder.length * 15;
+  const { data: leagueMeta } = await supabase
+    .from("leagues")
+    .select("format_type")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  const totalPickSlots =
+    resolvedOrder.length * livePicksPerTeamForFormat(leagueMeta?.format_type);
 
   for (let i = 0; i < resolvedOrder.length; i++) {
     await supabase
@@ -448,12 +464,6 @@ export async function startLiveDraft(
     .from("leagues")
     .update({ draft_format: "live", pick_time_seconds: pickTimeSeconds })
     .eq("id", leagueId);
-
-  const { data: leagueMeta } = await supabase
-    .from("leagues")
-    .select("format_type")
-    .eq("id", leagueId)
-    .maybeSingle();
 
   const useSnakeOrder = leagueDraftUsesSnakeOrder(leagueMeta?.format_type);
 
@@ -1185,7 +1195,9 @@ async function resolveAutoCryptoPick(
   const { summary, picks, sportsSimDraftRules } = state;
 
   if (sportsSimDraftRules) {
-    if (summary.stockPicks + summary.cryptoPicks >= STOCK_ROUNDS) return null;
+    if (summary.stockPicks + summary.cryptoPicks >= SPORTS_SIM_STARTER_ROUNDS) {
+      return null;
+    }
   } else if (summary.cryptoRemaining <= 0) {
     return null;
   }
@@ -1213,7 +1225,9 @@ async function resolveAutoCryptoPick(
   const buyerCounts = sportsSimDraftRules
     ? {}
     : await fetchBuyerCounts(supabase, leagueId);
-  const myDraftedCrypto = getMyCryptoSymbols(picks);
+  const myDraftedCrypto = sportsSimDraftRules
+    ? getMyDraftedSymbols(picks)
+    : getMyCryptoSymbols(picks);
 
   type Candidate = { symbol: string; price: number; marketCapRank: number };
   const eligible: Candidate[] = [];

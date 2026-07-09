@@ -8,6 +8,7 @@ import {
 import { isHumanLeagueDraftFinished } from "@/lib/league/human-league";
 import { DraftRoom } from "@/components/draft/DraftRoom";
 import { Logo } from "@/components/Logo";
+import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import type { Draft } from "@/lib/draft/types";
 import type { Profile } from "@/lib/types";
 
@@ -59,8 +60,10 @@ export default async function DraftPage({
     preferredLeagueId
   );
 
+  let humanLeague: Awaited<ReturnType<typeof getHumanLeagueById>> = null;
+
   if (activeLeagueId) {
-    const humanLeague = await getHumanLeagueById(activeLeagueId);
+    humanLeague = await getHumanLeagueById(activeLeagueId);
     const draftFinished =
       humanLeague != null
         ? await isHumanLeagueDraftFinished(humanLeague, user.id)
@@ -89,12 +92,26 @@ export default async function DraftPage({
     draft = (data as Draft | null) ?? null;
   }
 
+  let leagueSupportCode = humanLeague?.support_code;
+
+  if (!leagueSupportCode && activeLeagueId) {
+    const { data: leagueRow } = await supabase
+      .from("leagues")
+      .select("support_code")
+      .eq("id", activeLeagueId)
+      .maybeSingle();
+    leagueSupportCode = leagueRow?.support_code ?? undefined;
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <Logo size="sm" />
           <div className="flex items-center gap-4">
+            {leagueSupportCode ? (
+              <LeagueSupportId code={leagueSupportCode} />
+            ) : null}
             <Link
               href="/dashboard"
               className="text-xs text-muted hover:text-gold transition-colors"

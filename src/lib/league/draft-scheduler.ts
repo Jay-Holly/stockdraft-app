@@ -7,6 +7,7 @@ import {
   fillEmptySlotsWithBots,
   shouldFillEmptySlotsWithBots,
 } from "@/lib/league/bot-fill";
+import { SPORTS_SIM_BOT_PROVISION_LEAD_MS } from "@/lib/draft/draft-constants";
 import { resolveDraftOrderForLeague } from "@/lib/league/draft-order-server";
 import {
   clearScheduledDraftError,
@@ -111,10 +112,11 @@ export async function maybeStartHumanLeagueDraft(
     ? new Date(league.scheduled_draft_at)
     : null;
   const now = new Date();
-
-  if (scheduledAt && scheduledAt > now && !options?.force) {
-    return { started: false };
-  }
+  const draftDue = Boolean(scheduledAt && scheduledAt <= now);
+  const botProvisionWindowOpen = Boolean(
+    scheduledAt &&
+      scheduledAt.getTime() - SPORTS_SIM_BOT_PROVISION_LEAD_MS <= now.getTime()
+  );
 
   const fillBots = shouldFillEmptySlotsWithBots({
     visibility: league.visibility as "private" | "public",
@@ -122,6 +124,10 @@ export async function maybeStartHumanLeagueDraft(
   });
 
   if (fillBots && humans < playerCount) {
+    if (!botProvisionWindowOpen && !draftDue && !options?.force) {
+      return { started: false };
+    }
+
     const fillResult = await fillEmptySlotsWithBots(leagueId, playerCount, {
       supabase,
       maxBotsPerRun: options?.maxBotsPerRun,
@@ -137,6 +143,14 @@ export async function maybeStartHumanLeagueDraft(
       await recordScheduledDraftAttempt(supabase, leagueId, null);
       return { started: false, botFillInProgress: true };
     }
+
+    if (!draftDue && !options?.force) {
+      return { started: false };
+    }
+  }
+
+  if (scheduledAt && scheduledAt > now && !options?.force) {
+    return { started: false };
   }
 
   const { count: finalCount } = await supabase
@@ -230,21 +244,29 @@ export async function processDueScheduledDrafts(
   attemptedLeagues: number;
 }> {
   const supabase = options?.supabase ?? (await createClient());
-  const nowIso = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const provisionDeadlineIso = new Date(
+    now.getTime() + SPORTS_SIM_BOT_PROVISION_LEAD_MS
+  ).toISOString();
 
-  const { data: dueLeagues } = await supabase
+  const { data: candidateLeagues } = await supabase
     .from("leagues")
-    .select("id")
+    .select("id, scheduled_draft_at")
     .eq("league_type", "human")
     .eq("status", "waiting")
     .not("scheduled_draft_at", "is", null)
-    .lte("scheduled_draft_at", nowIso);
+    .lte("scheduled_draft_at", provisionDeadlineIso);
 
   const errors: string[] = [];
   let processed = 0;
   let inProgress = 0;
 
-  for (const league of dueLeagues ?? []) {
+  for (const league of candidateLeagues ?? []) {
+    const scheduledAt = league.scheduled_draft_at
+      ? new Date(league.scheduled_draft_at)
+      : null;
+    const pastDue = Boolean(scheduledAt && scheduledAt <= now);
     const { data: leagueRow } = await supabase
       .from("leagues")
       .select("player_count, visibility, opponent_type")
@@ -271,7 +293,7 @@ export async function processDueScheduledDrafts(
     }
 
     const result = await maybeStartHumanLeagueDraft(league.id, {
-      force: true,
+      force: pastDue,
       supabase,
       maxBotsPerRun: options?.maxBotsPerLeaguePerRun,
     });
@@ -291,7 +313,7 @@ export async function processDueScheduledDrafts(
     processed,
     inProgress,
     errors,
-    attemptedLeagues: dueLeagues?.length ?? 0,
+    attemptedLeagues: candidateLeagues?.length ?? 0,
   };
 }
 

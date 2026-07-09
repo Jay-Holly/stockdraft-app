@@ -126,7 +126,7 @@ export type DraftState = {
   leagueOffBoard: string[];
   myStockSymbols: string[];
   myCryptoSymbols: string[];
-  /** Sports-sim leagues: crypto uses flat $80K open slots (no flex pool / pushback). */
+  /** Sports-sim leagues: 13 picks (10 starters + 3 bench), unified stock/crypto pool. */
   sportsSimDraftRules?: boolean;
   /** Human manager name for this league (league_members.display_name). */
   teamName: string;

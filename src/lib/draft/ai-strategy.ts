@@ -10,12 +10,14 @@ import { fetchCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoPickEligible } from "@/lib/draft/engine";
 import {
   getMyCryptoSymbols,
+  getMyDraftedSymbols,
   getMyStockSymbols,
   getTurn,
   isCryptoSymbol,
   isStockPickEligible,
   summarizePicks,
   draftRulesModeFromFlag,
+  getDraftRuleConstants,
 } from "@/lib/draft/engine";
 import type { DraftPick, DraftState } from "@/lib/draft/types";
 import { CRYPTO_POOL } from "@/lib/draft/types";
@@ -382,13 +384,18 @@ export async function decideAiPick(
   const { turn, picks, leagueOffBoard, sportsSimDraftRules } = state;
   if (turn.type === "complete" || turn.type === "pushback_skip") return null;
 
-  const summary = summarizePicks(picks);
+  const rules = draftRulesModeFromFlag(sportsSimDraftRules);
+  const summary = summarizePicks(picks, rules);
   const offBoard = new Set(leagueOffBoard);
-  const myDrafted = getMyStockSymbols(picks);
+  const myDrafted = sportsSimDraftRules
+    ? getMyDraftedSymbols(picks)
+    : getMyStockSymbols(picks);
   const myCrypto = getMyCryptoSymbols(picks);
 
   if (sportsSimDraftRules && turn.type === "open" && turn.canPickCrypto) {
-    const openSlotsLeft = 10 - summary.stockPicks - summary.cryptoPicks;
+    const sim = getDraftRuleConstants("sports_sim");
+    const openSlotsLeft =
+      sim.starterRounds - summary.stockPicks - summary.cryptoPicks;
     if (openSlotsLeft > 0) {
       const wantCrypto =
         personality === "crypto_king" ||
@@ -397,7 +404,7 @@ export async function decideAiPick(
 
       if (wantCrypto) {
         const symbol = "BTC";
-        if (!myCrypto.has(symbol)) {
+        if (!myDrafted.has(symbol)) {
           const price = await getCryptoPrice(symbol);
           if (price > 0) {
             return { symbol, price };

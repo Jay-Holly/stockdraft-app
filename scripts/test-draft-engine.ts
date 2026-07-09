@@ -9,6 +9,12 @@ import {
   isDraftComplete,
   isOpenPhaseComplete,
 } from "../src/lib/draft/engine";
+import {
+  SPORTS_SIM_BENCH_START_ROUND,
+  SPORTS_SIM_STARTER_BUDGET,
+  SPORTS_SIM_STARTER_ROUNDS,
+  SPORTS_SIM_TOTAL_ROUNDS,
+} from "../src/lib/draft/draft-constants";
 import type { Draft, DraftPick } from "../src/lib/draft/types";
 import { CRYPTO_POOL, STOCK_BUDGET } from "../src/lib/draft/types";
 
@@ -143,7 +149,7 @@ function cryptoSpend(amount: number, order: number, round = 5): DraftPick {
   assert(!isDraftComplete(picks), "draft not complete without bench+crypto");
 }
 
-// Sports-sim: crypto counts toward the same 10 open slots as stocks.
+// Sports-sim: 10 starters + 3 bench, unified stock/crypto pool, $100K starters.
 const SPORTS_SIM_RULES = "sports_sim" as const;
 
 function sevenStocksThreeCrypto(): DraftPick[] {
@@ -159,7 +165,7 @@ function sevenStocksThreeCrypto(): DraftPick[] {
     pick({
       pick_type: "crypto",
       symbol: `COIN${i}`,
-      budget_spent: STOCK_BUDGET,
+      budget_spent: SPORTS_SIM_STARTER_BUDGET,
       pick_order: 10 + i,
       round_number: 8 + i,
     })
@@ -167,20 +173,52 @@ function sevenStocksThreeCrypto(): DraftPick[] {
   return [...stocks, ...cryptos];
 }
 
-// 7 stock + 3 crypto + 2 bench → complete (no crypto flex phase)
-{
-  const picks = [...sevenStocksThreeCrypto(), ...twoBench(13)];
-  assert(isDraftComplete(picks, SPORTS_SIM_RULES), "sports sim 10 open + 2 bench is complete");
-  assert(getTurn(draft(15), picks, SPORTS_SIM_RULES).type === "complete", "sports sim turn complete");
+function threeBenchSportsSim(startOrder = 10): DraftPick[] {
+  return Array.from({ length: 3 }, (_, i) =>
+    pick({
+      pick_type: "bench",
+      symbol: `BNCH${i + 1}`,
+      budget_spent: 0,
+      pick_order: startOrder + i,
+      round_number: SPORTS_SIM_BENCH_START_ROUND + i,
+    })
+  );
 }
 
-// 7 stock + 2 crypto → open turn, both stock and crypto allowed
+// 7 stock + 3 crypto + 3 bench → complete (no crypto flex phase)
+{
+  const picks = [...sevenStocksThreeCrypto(), ...threeBenchSportsSim(13)];
+  assert(
+    isDraftComplete(picks, SPORTS_SIM_RULES),
+    "sports sim 10 starters + 3 bench is complete"
+  );
+  assert(
+    getTurn(draft(SPORTS_SIM_TOTAL_ROUNDS), picks, SPORTS_SIM_RULES).type ===
+      "complete",
+    "sports sim turn complete"
+  );
+}
+
+// 7 stock + 2 crypto → starter turn, both stock and crypto allowed
 {
   const picks = sevenStocksThreeCrypto().slice(0, 9);
   const turn = getTurn(draft(9), picks, SPORTS_SIM_RULES);
-  assert(turn.type === "open", "sports sim still in open phase");
+  assert(turn.type === "open", "sports sim still in starter phase");
   assert(turn.canPickStock, "sports sim can pick stock");
   assert(turn.canPickCrypto, "sports sim can pick crypto");
+  assert(turn.stockBudget === SPORTS_SIM_STARTER_BUDGET, "sports sim $100K starter");
+}
+
+// 10 starters done → bench turn at round 11
+{
+  const picks = sevenStocksThreeCrypto();
+  assert(
+    isOpenPhaseComplete(picks, SPORTS_SIM_RULES),
+    "sports sim open phase complete at 10 starters"
+  );
+  const turn = getTurn(draft(SPORTS_SIM_BENCH_START_ROUND), picks, SPORTS_SIM_RULES);
+  assert(turn.type === "bench", "sports sim bench turn after starters");
+  assert(turn.stockBudget === 0, "bench picks are free");
 }
 
 // Sports sim: duplicate crypto rejected
@@ -189,7 +227,7 @@ function sevenStocksThreeCrypto(): DraftPick[] {
     pick({
       pick_type: "crypto",
       symbol: "BTC",
-      budget_spent: STOCK_BUDGET,
+      budget_spent: SPORTS_SIM_STARTER_BUDGET,
       pick_order: 0,
     }),
   ];

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { SPORTS_SIM_BOT_PROVISION_LEAD_MS } from "@/lib/draft/draft-constants";
 import { shouldFillEmptySlotsWithBots } from "@/lib/league/bot-fill";
 import type { LeagueOpponentType, LeagueVisibility } from "@/lib/league/league-config";
 
@@ -66,6 +67,10 @@ async function buildStatusFromLeague(
     ? new Date(league.scheduled_draft_at)
     : null;
   const pastDue = Boolean(scheduledAt && scheduledAt.getTime() <= Date.now());
+  const provisionWindowOpen = Boolean(
+    scheduledAt &&
+      scheduledAt.getTime() - SPORTS_SIM_BOT_PROVISION_LEAD_MS <= Date.now()
+  );
   const botFillExpected = shouldFillEmptySlotsWithBots({
     visibility: league.visibility as LeagueVisibility,
     opponentType: league.opponent_type as LeagueOpponentType,
@@ -74,7 +79,7 @@ async function buildStatusFromLeague(
   const target = league.player_count ?? 0;
   let current = 0;
 
-  if (pastDue && botFillExpected && target > 0) {
+  if ((provisionWindowOpen || pastDue) && botFillExpected && target > 0) {
     const { count } = await supabase
       .from("league_members")
       .select("*", { count: "exact", head: true })
@@ -83,7 +88,10 @@ async function buildStatusFromLeague(
   }
 
   const rosterFill =
-    pastDue && botFillExpected && target > 0 && current < target
+    (provisionWindowOpen || pastDue) &&
+    botFillExpected &&
+    target > 0 &&
+    current < target
       ? { current, target }
       : null;
 
