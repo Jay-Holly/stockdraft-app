@@ -1,18 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import {
-  SDFL_CONFERENCE_LABELS,
-  SDFL_DIVISION_LABELS,
-  formatSdflSlotLabel,
   slotKey,
-  type SdflConference,
-  type SdflDivision,
   type SdflDivisionSlot,
 } from "@/lib/league/sdfl-divisions";
 import type { LeagueIdentityPayload } from "@/lib/league/team-identity";
+import { SdflFranchiseMap } from "@/components/league/SdflFranchiseMap";
 
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
@@ -25,17 +21,6 @@ const COLOR_PRESETS = [
   { primary: "#0369a1", secondary: "#94a3b8", label: "Navy / Silver" },
   { primary: "#be123c", secondary: "#e2e8f0", label: "Crimson / Ice" },
 ];
-
-const CONFERENCES: SdflConference[] = ["sdal", "sdnl"];
-const DIVISIONS: SdflDivision[] = ["north", "south", "east", "west"];
-
-function slotFromParts(
-  conference: SdflConference,
-  division: SdflDivision,
-  divisionSlot: number
-): SdflDivisionSlot {
-  return { conference, division, divisionSlot };
-}
 
 export function SdflIdentityForm({ leagueId }: { leagueId: string }) {
   const router = useRouter();
@@ -82,11 +67,6 @@ export function SdflIdentityForm({ leagueId }: { leagueId: string }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  const openSlotKeys = useMemo(
-    () => new Set((payload?.openSlots ?? []).map(slotKey)),
-    [payload?.openSlots]
-  );
 
   const mySlotKey =
     payload?.myIdentity?.conference &&
@@ -236,67 +216,17 @@ export function SdflIdentityForm({ leagueId }: { leagueId: string }) {
             <div>
               <h2 className="text-lg font-semibold text-white">1. Claim a division slot</h2>
               <p className="text-sm text-muted mt-1">
-                First come, first served — choose any open slot below.
+                First come, first served — tap any open marker on the map.
               </p>
             </div>
 
-            {CONFERENCES.map((conference) => (
-              <div
-                key={conference}
-                className="rounded-2xl border border-dark-border bg-dark/30 p-4 space-y-3"
-              >
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-gold">
-                  {SDFL_CONFERENCE_LABELS[conference]}
-                </h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {DIVISIONS.map((division) => (
-                    <div
-                      key={`${conference}-${division}`}
-                      className="rounded-xl border border-dark-border bg-dark-card p-3 space-y-2"
-                    >
-                      <p className="text-sm font-medium text-white">
-                        {SDFL_DIVISION_LABELS[division]}
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[1, 2, 3, 4].map((divisionSlot) => {
-                          const slot = slotFromParts(conference, division, divisionSlot);
-                          const key = slotKey(slot);
-                          const isOpen = openSlotKeys.has(key);
-                          const isMine = mySlotKey === key;
-                          const claimed = payload.claimedSlots.find(
-                            (entry) => slotKey(entry) === key
-                          );
-                          const disabled =
-                            !isOpen && !isMine && Boolean(claimed);
-
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              disabled={disabled || claimingKey === key}
-                              onClick={() => {
-                                if (isOpen || isMine) void handleClaimSlot(slot);
-                              }}
-                              className={[
-                                "rounded-lg px-2 py-2 text-xs font-medium transition-colors border",
-                                isMine
-                                  ? "border-gold bg-gold/10 text-gold"
-                                  : isOpen
-                                    ? "border-primary/40 bg-primary/10 text-white hover:border-gold"
-                                    : "border-dark-border bg-dark/50 text-muted cursor-not-allowed",
-                              ].join(" ")}
-                            >
-                              Slot {divisionSlot}
-                              {isMine ? " · Yours" : claimed ? " · Taken" : ""}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+            <SdflFranchiseMap
+              payload={payload}
+              mySlotKey={mySlotKey}
+              claimingKey={claimingKey}
+              previewColor={hasClaimedSlot ? primaryColor : null}
+              onClaimSlot={(slot) => void handleClaimSlot(slot)}
+            />
           </section>
 
           {hasClaimedSlot && payload.myIdentity?.slotLabel ? (
