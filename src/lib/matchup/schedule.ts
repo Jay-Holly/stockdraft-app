@@ -8,7 +8,13 @@ import {
 export const SEASON_FINAL_WEEK = 15;
 export const PLAYOFF_START_WEEK = 13;
 
-export type PlayoffRound = "semifinal" | "final" | "third_place";
+export type PlayoffRound =
+  | "semifinal"
+  | "final"
+  | "third_place"
+  | "wild_card"
+  | "divisional"
+  | "conference_championship";
 
 export { SDPL_FINALS_WEEK, SDPL_REGULAR_SEASON_WEEKS, SDPL_SEMIFINAL_WEEK };
 
@@ -18,6 +24,8 @@ export type ScheduledGame = {
   awayUserId: string;
   isPlayoff: boolean;
   playoffRound?: PlayoffRound;
+  /** Sports-sim only: explicit finalize timestamp for day-compressed pacing. */
+  finalizeAt?: string;
 };
 
 export type TeamStandingSeed = {
@@ -58,6 +66,9 @@ export function formatPlayoffRoundLabel(
   if (round === "final") return "Championship";
   if (round === "third_place") return "3rd Place";
   if (round === "semifinal") return "Semifinal";
+  if (round === "wild_card") return "Wild Card";
+  if (round === "divisional") return "Divisional";
+  if (round === "conference_championship") return "Conference Championship";
   return "";
 }
 

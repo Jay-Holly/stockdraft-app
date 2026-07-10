@@ -21,6 +21,19 @@ import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import { isSdplSeasonRulesLeague } from "@/lib/season/sdpl-league";
 import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 import {
+  SDFL_CONFERENCE_CHAMPIONSHIP_WEEK,
+  SDFL_DIVISIONAL_WEEK,
+  SDFL_REGULAR_SEASON_WEEKS,
+  SDFL_WILD_CARD_WEEK,
+} from "@/lib/matchup/sdfl-schedule";
+import {
+  isSportsSimRegularSeasonComplete,
+  seedSdflConferenceChampionshipIfNeeded,
+  seedSdflDivisionalIfNeeded,
+  seedSdflFinalIfNeeded,
+  seedSdflWildCardIfNeeded,
+} from "@/lib/matchup/sdfl-playoffs";
+import {
   usesSameDayCloseCapture,
   weekUsesWeekendExtension,
 } from "@/lib/season/finalize-times";
@@ -66,14 +79,15 @@ const SCORING_UNAVAILABLE_MESSAGE =
 const SCORING_DEGRADED_MESSAGE =
   "Week scoring used last-known crypto prices because CoinGecko was temporarily unavailable. Scores will refresh on your next visit.";
 
-async function insertScheduledGames(
+export async function insertScheduledGames(
   leagueId: string,
   games: ScheduledGame[],
-  ownerUserId?: string | null
+  ownerUserId?: string | null,
+  supabaseOverride?: SupabaseClient
 ): Promise<{ error?: string }> {
   if (games.length === 0) return {};
 
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const rows = await Promise.all(
     games.map(async (game) => {
       const homeName = await getLeagueMemberDisplayName(
@@ -105,6 +119,7 @@ async function insertScheduledGames(
             ? homeName
             : `${homeName} vs ${awayName}`,
         status: "scheduled" as const,
+        ...(game.finalizeAt ? { finalize_at: game.finalizeAt } : {}),
       };
     })
   );
@@ -457,7 +472,36 @@ async function advanceLeagueCalendar(
   const scheduledWeeks = await getScheduledWeekNumbers(leagueId, supabase);
   const { settings } = await loadSeasonCalendarForLeague(leagueId);
 
-  if (settings.rulesApply) {
+  const { data: leagueFormat } = await supabase
+    .from("leagues")
+    .select("format_type, sports_league_id")
+    .eq("id", leagueId)
+    .maybeSingle();
+  const isSportsSim = isSportsSimLeague({
+    formatType: leagueFormat?.format_type,
+    sportsLeagueId: leagueFormat?.sports_league_id,
+  });
+
+  if (isSportsSim) {
+    if (
+      isSportsSimRegularSeasonComplete(currentWeek) &&
+      !scheduledWeeks.some((week) => week > SDFL_REGULAR_SEASON_WEEKS)
+    ) {
+      await seedSdflWildCardIfNeeded(supabase, leagueId);
+    }
+
+    if (currentWeek === SDFL_WILD_CARD_WEEK) {
+      await seedSdflDivisionalIfNeeded(supabase, leagueId);
+    }
+
+    if (currentWeek === SDFL_DIVISIONAL_WEEK) {
+      await seedSdflConferenceChampionshipIfNeeded(supabase, leagueId);
+    }
+
+    if (currentWeek === SDFL_CONFERENCE_CHAMPIONSHIP_WEEK) {
+      await seedSdflFinalIfNeeded(supabase, leagueId);
+    }
+  } else if (settings.rulesApply) {
     const regularSeasonWeeks = settings.regularSeasonWeeks;
     const { semifinalWeek, finalsWeek } = getSdplPlayoffWeeks(regularSeasonWeeks);
 

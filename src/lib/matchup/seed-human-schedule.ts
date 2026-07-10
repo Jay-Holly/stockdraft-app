@@ -15,6 +15,8 @@ import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 import { backfillFinalizeAtForLeague } from "@/lib/matchup/finalize-week";
 import { isSdplSeasonRulesLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
 import { seedSportsLeaguePickInjuryMapIfMissing } from "@/lib/sim/pick-injury-map";
+import { generateSportsSimRegularSeasonSchedule } from "@/lib/matchup/sdfl-schedule";
+import { computeSportsSimFinalizeAt } from "@/lib/matchup/sdfl-playoffs";
 
 async function createSeedSupabase(): Promise<SupabaseClient> {
   try {
@@ -124,9 +126,16 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
     sportsLeagueId: league.sports_league_id ?? null,
     playerCount: league.player_count ?? null,
   });
+  const isSportsSim = isSportsSimLeague({
+    formatType: league.format_type ?? "standard",
+    sportsLeagueId: league.sports_league_id ?? null,
+  });
 
   let schedule;
-  if (isSdpl) {
+  const scheduleAnchor = new Date();
+  if (isSportsSim) {
+    schedule = await generateSportsSimRegularSeasonSchedule(supabase, leagueId);
+  } else if (isSdpl) {
     const settingsResult = await supabase
       .from("league_season_settings")
       .select("season_format, regular_season_weeks, week_calendar")
@@ -183,6 +192,9 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
           ? homeName
           : `${homeName} vs ${awayName}`,
       status: "scheduled" as const,
+      ...(isSportsSim
+        ? { finalize_at: computeSportsSimFinalizeAt(scheduleAnchor, game.weekNumber) }
+        : {}),
     };
   });
 
