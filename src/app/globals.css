@@ -3644,3 +3644,55 @@ body:has(.landing-screen) {
   }
 }
 
+/* Dashboard category bubbles — reuses the draft-filter-btn pill language
+   (rounded, subtle border, gold-accent hover/active) scaled up as primary
+   navigation. Tap-based on both desktop and mobile, no hover dependency. */
+
+.category-bubble-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.category-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  border-radius: 1rem;
+  border: 1px solid var(--color-dark-border);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1rem;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.category-bubble:hover,
+.category-bubble:focus-visible {
+  border-color: rgba(208, 171, 72, 0.4);
+  background: rgba(255, 255, 255, 0.07);
+  outline: none;
+}
+
+.category-bubble:active {
+  background: rgba(208, 171, 72, 0.1);
+}
+
+.category-bubble__label {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: white;
+}
+
+.category-bubble__subtitle {
+  font-size: 0.6875rem;
+  color: var(--color-muted);
+}
+
+.category-bubble__count {
+  margin-top: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--color-gold, #d0ab48);
+}
+

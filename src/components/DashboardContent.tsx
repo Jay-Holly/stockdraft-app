@@ -15,16 +15,13 @@ import type {
 import type { HumanLeagueListItem, PendingHumanLeagueInvite } from "@/lib/league/human-league";
 import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
 import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCountdown";
-import {
-  canEnterScheduledDraftRoom,
-  draftRoomHref,
-  isDraftCountdownVisible,
-} from "@/lib/league/scheduled-draft";
+import { isDraftCountdownVisible } from "@/lib/league/scheduled-draft";
 import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInviteBanner";
 import { DayTraderDashboardCard } from "@/components/day-trader/DayTraderDashboardCard";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
+import { CategoryBubbles } from "@/components/league/CategoryBubbles";
 import type { BotPersonality } from "@/lib/league/bots";
 import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
@@ -282,136 +279,6 @@ export function DashboardContent({
     (item) => item.league.format_type === "sports_league"
   );
 
-  function renderHumanLeagueCard(item: HumanLeagueListItem) {
-    const isActive = item.league.id === activeLeagueId;
-    const waiting = item.league.status === "waiting";
-    const enterDraft = !item.humanDraftComplete;
-    const busy = switchingLeagueId === item.league.id;
-    const isOwner = item.league.owner_user_id === profile.id;
-
-    return (
-      <div
-        key={item.league.id}
-        className={`rounded-xl border p-4 space-y-3 ${
-          isActive
-            ? "border-gold/50 bg-gold/5"
-            : "border-dark-border bg-dark/20"
-        }`}
-      >
-        <div>
-          <div className="mb-2">
-            <LeagueSupportId code={item.league.support_code} />
-          </div>
-          <p className="font-semibold truncate">{item.humanTeamName}</p>
-          <p className="text-xs text-muted truncate">{item.league.name}</p>
-          <p className="text-xs text-muted capitalize mt-1">
-            {leagueStatusLabel(item.league.status)} · {item.memberCount}/
-            {item.league.player_count} players
-            {isActive ? " · selected" : ""}
-          </p>
-        </div>
-
-        {waiting && (
-          <HumanLeagueInvitePanel
-            leagueId={item.league.id}
-            leagueName={item.league.name}
-            inviteLink={item.inviteLink}
-            inviteToken={item.inviteToken}
-            isCommissioner={isOwner}
-            memberCount={item.memberCount}
-            playerCount={item.league.player_count}
-            scheduledDraftAt={item.league.scheduled_draft_at}
-            compact
-          />
-        )}
-
-        {waiting && isDraftCountdownVisible(item.league.scheduled_draft_at) && (
-          <ScheduledDraftCountdown
-            scheduledDraftAt={item.league.scheduled_draft_at}
-            leagueId={item.league.id}
-            compact
-            onEnterDraft={(leagueId, href) =>
-              void setActiveLeague(leagueId, href)
-            }
-          />
-        )}
-
-        <div className="flex flex-wrap gap-2">
-          {!isActive && (
-            <Button
-              variant="secondary"
-              className="flex-1 text-sm"
-              disabled={busy}
-              onClick={() => void setActiveLeague(item.league.id)}
-            >
-              Select
-            </Button>
-          )}
-          {waiting ? (
-            canEnterScheduledDraftRoom(item.league.scheduled_draft_at) ? (
-              <Button
-                variant="primary"
-                className="flex-1 text-sm"
-                disabled={switchingLeagueId === item.league.id}
-                onClick={() =>
-                  void setActiveLeague(
-                    item.league.id,
-                    draftRoomHref(item.league.id)
-                  )
-                }
-              >
-                Enter Draft
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                className="flex-1 text-sm"
-                onClick={() => void setActiveLeague(item.league.id)}
-              >
-                View invite
-              </Button>
-            )
-          ) : enterDraft ? (
-            <Button
-              variant="primary"
-              className="flex-1 text-sm"
-              disabled={switchingLeagueId === item.league.id}
-              onClick={() =>
-                void setActiveLeague(item.league.id, "/draft")
-              }
-            >
-              Enter draft
-            </Button>
-          ) : (
-            <div className="flex flex-1 gap-2">
-              <Button
-                variant="primary"
-                className="flex-1 text-sm"
-                disabled={switchingLeagueId === item.league.id}
-                onClick={() =>
-                  void setActiveLeague(item.league.id, "/league")
-                }
-              >
-                Open league
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1 text-sm"
-                disabled={switchingLeagueId === item.league.id}
-                onClick={() =>
-                  void setActiveLeague(item.league.id, "/matchups")
-                }
-              >
-                Matchups
-              </Button>
-            </div>
-          )}
-          {renderOwnerDeleteButton(item.league, busy)}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <DeleteLeagueModal
@@ -466,14 +333,14 @@ export function DashboardContent({
         <div>
           <h2 className="text-lg font-semibold mb-1">Create New League</h2>
           <p className="text-muted text-sm">
-            Start a Squad League with friends, or spin up a Free Sim League against
-            three bot managers.
+            Start a Player League with friends, or spin up a Free Sim League
+            against three bot managers.
           </p>
         </div>
 
         <Link href="/leagues/create" className="block">
           <Button variant="primary" className="w-full">
-            Create Squad League
+            Create Player League
           </Button>
         </Link>
 
@@ -505,159 +372,12 @@ export function DashboardContent({
         )}
       </section>
 
-      {leagues.length > 0 && (
-        <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold">Free Sim Leagues</h2>
-            <p className="text-muted text-sm">
-              {leagues.length} league{leagues.length === 1 ? "" : "s"} · select
-              one to play
-            </p>
-          </div>
-
-          {leagues.map((item) => {
-            const isActive = item.league.id === activeLeagueId;
-            const busy = switchingLeagueId === item.league.id;
-
-            return (
-              <div
-                key={item.league.id}
-                className={`rounded-xl border p-4 space-y-3 ${
-                  isActive
-                    ? "border-gold/50 bg-gold/5"
-                    : "border-dark-border bg-dark/20"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="mb-2">
-                      <LeagueSupportId code={item.league.support_code} />
-                    </div>
-                    <p className="font-semibold truncate">{item.humanTeamName}</p>
-                    <p className="text-xs text-muted truncate">{item.league.name}</p>
-                    <p className="text-xs text-muted capitalize">
-                      {leagueStatusLabel(item.league.status)}
-                      {isActive ? " · selected" : ""}
-                    </p>
-                    <p className="text-xs text-muted mt-1 truncate">
-                      vs {item.botNames.join(", ")}
-                    </p>
-                  </div>
-                  {item.standings && (
-                    <div className="text-right shrink-0">
-                      <p className="text-xl font-black text-gold">
-                        {item.standings.wins}-{item.standings.losses}
-                      </p>
-                      <p className="text-[10px] text-muted uppercase tracking-wider">
-                        W-L
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {!isActive && (
-                    <Button
-                      variant="ghost"
-                      className="text-xs px-3"
-                      disabled={busy}
-                      onClick={() => void setActiveLeague(item.league.id)}
-                    >
-                      {busy ? "Selecting…" : "Select"}
-                    </Button>
-                  )}
-                  {item.league.status === "drafting" && (
-                    <Button
-                      variant="primary"
-                      className="text-xs px-3"
-                      disabled={busy}
-                      onClick={() =>
-                        void setActiveLeague(item.league.id, "/draft")
-                      }
-                    >
-                      Enter Draft Room
-                    </Button>
-                  )}
-                  {canEnterSeasonLeague(
-                    item.league.status,
-                    item.humanDraftComplete
-                  ) && (
-                    <>
-                      <Button
-                        variant="primary"
-                        className="text-xs px-3"
-                        disabled={busy}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/league")
-                        }
-                      >
-                        Open league
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="text-xs px-3"
-                        disabled={busy}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/matchups")
-                        }
-                      >
-                        Matchups
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="text-xs px-3"
-                        disabled={busy}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/my-team")
-                        }
-                      >
-                        My Team
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="text-xs px-3"
-                        disabled={busy}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/free-agents")
-                        }
-                      >
-                        Free Agents
-                      </Button>
-                    </>
-                  )}
-                  {renderOwnerDeleteButton(item.league, busy)}
-                </div>
-              </div>
-            );
-          })}
-        </section>
-      )}
-
-      {squadLeagues.length > 0 && (
-        <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold">Squad Leagues</h2>
-            <p className="text-muted text-sm">
-              {squadLeagues.length} league{squadLeagues.length === 1 ? "" : "s"}
-            </p>
-          </div>
-
-          {squadLeagues.map(renderHumanLeagueCard)}
-        </section>
-      )}
-
-      <section className="bg-dark-card border border-dark-border/80 rounded-2xl p-6 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">Sports Sim Leagues</h2>
-          <p className="text-muted text-sm">
-            {sportsSimLeagues.length > 0
-              ? `${sportsSimLeagues.length} league${sportsSimLeagues.length === 1 ? "" : "s"}`
-              : "Draft real players' stocks — injuries and all."}
-          </p>
-        </div>
-
-        {sportsSimLeagues.map(renderHumanLeagueCard)}
-      </section>
+      <CategoryBubbles
+        simLeagueCount={leagues.length}
+        playerLeagueCount={squadLeagues.length}
+        sportsSimLeagueCount={sportsSimLeagues.length}
+        dayTraderActive={Boolean(dayTrader)}
+      />
 
       {dayTrader ? <DayTraderDashboardCard summary={dayTrader} /> : null}
 
