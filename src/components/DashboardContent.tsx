@@ -17,7 +17,7 @@ import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePan
 import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCountdown";
 import { isDraftCountdownVisible } from "@/lib/league/scheduled-draft";
 import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInviteBanner";
-import { DayTraderDashboardCard } from "@/components/day-trader/DayTraderDashboardCard";
+import { DayTraderPromoCard } from "@/components/day-trader/DayTraderPromoCard";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
@@ -372,14 +372,17 @@ export function DashboardContent({
         )}
       </section>
 
-      <CategoryBubbles
-        simLeagueCount={leagues.length}
-        playerLeagueCount={squadLeagues.length}
-        sportsSimLeagueCount={sportsSimLeagues.length}
-        dayTraderActive={Boolean(dayTrader)}
-      />
+      <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold">My Leagues</h2>
+        <CategoryBubbles
+          simLeagueCount={leagues.length}
+          playerLeagueCount={squadLeagues.length}
+          sportsSimLeagueCount={sportsSimLeagues.length}
+          dayTraderActive={Boolean(dayTrader)}
+        />
+      </section>
 
-      {dayTrader ? <DayTraderDashboardCard summary={dayTrader} /> : null}
+      <DayTraderPromoCard />
 
       {activeHumanLeague?.league.status === "waiting" &&
         activeHumanLeague.league.owner_user_id === profile.id && (
