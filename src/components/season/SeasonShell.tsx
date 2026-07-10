@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/awards", label: "Awards" },
   { href: "/my-team", label: "My Team" },
   { href: "/free-agents", label: "Free Agents" },
+  { href: "/draft-recap", label: "Draft Recap" },
 ];
 
 export function SeasonShell({
