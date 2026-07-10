@@ -370,10 +370,24 @@ export async function loadDraftStateDetailed(
   const myCryptoSymbols = [...getMyCryptoSymbols(pickList)];
   const teamName = await getLeagueMemberTeamName(league.id, userId);
 
-  const safetyPickQueue = normalizeSafetyPickQueue(
+  const rawSafetyPickQueue = normalizeSafetyPickQueue(
     draftRow.safety_pick_queue,
     draftRow.safety_pick_symbol
   );
+  const myStockSymbolSet = new Set(myStockSymbols);
+  const safetyPickQueue = rawSafetyPickQueue.filter(
+    (symbol) => !leagueOffBoardSet.has(symbol) && !myStockSymbolSet.has(symbol)
+  );
+
+  if (safetyPickQueue.length !== rawSafetyPickQueue.length) {
+    await supabase
+      .from("drafts")
+      .update({
+        safety_pick_queue: safetyPickQueue,
+        safety_pick_symbol: safetyPickQueue[0] ?? null,
+      })
+      .eq("id", draftRow.id);
+  }
 
   return {
     ok: true,

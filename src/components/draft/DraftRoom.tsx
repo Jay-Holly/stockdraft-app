@@ -137,6 +137,7 @@ export function DraftRoom({
 
   const skipRecoveryAttempts = useRef(0);
   const loadDraftInFlight = useRef<Promise<void> | null>(null);
+  const lastSafetyQueueMutationAt = useRef(0);
   const lastPollOkAt = useRef(Date.now());
   const activeLeagueIdRef = useRef<string | null>(initialLeagueId);
   const [pollStale, setPollStale] = useState(false);
@@ -179,7 +180,7 @@ export function DraftRoom({
   );
 
   const applyDraftPayload = useCallback(
-    (data: Record<string, unknown>) => {
+    (data: Record<string, unknown>, requestStartedAt: number = Date.now()) => {
       setState((prev) => {
         const incoming = data as DraftState;
         const incomingFeed = incoming.draftFeed ?? [];
@@ -196,7 +197,23 @@ export function DraftRoom({
           activeLeagueIdRef.current = incoming.leagueId;
         }
 
-        return { ...incoming, draftFeed, draftChat };
+        // A poll that started before our last safety-queue toggle committed
+        // may carry a stale queue snapshot — keep the locally-mutated value
+        // rather than letting it clobber the just-updated priority numbers.
+        const staleSafetyQueue =
+          prev && requestStartedAt < lastSafetyQueueMutationAt.current;
+
+        return {
+          ...incoming,
+          draftFeed,
+          draftChat,
+          ...(staleSafetyQueue
+            ? {
+                safetyPickQueue: prev.safetyPickQueue,
+                safetyPickSymbol: prev.safetyPickSymbol,
+              }
+            : {}),
+        };
       });
       setBotDraftBoards(
         Array.isArray(data.botDraftBoards)
@@ -212,6 +229,7 @@ export function DraftRoom({
       return loadDraftInFlight.current;
     }
 
+    const requestStartedAt = Date.now();
     const run = (async () => {
       setError(null);
       try {
@@ -229,7 +247,7 @@ export function DraftRoom({
 
         if (!res.ok) {
           if (data.draft && data.turn) {
-            applyDraftPayload(data);
+            applyDraftPayload(data, requestStartedAt);
             lastPollOkAt.current = Date.now();
             setPollStale(false);
           }
@@ -239,7 +257,7 @@ export function DraftRoom({
           return;
         }
 
-        applyDraftPayload(data);
+        applyDraftPayload(data, requestStartedAt);
         lastPollOkAt.current = Date.now();
         setPollStale(false);
 
@@ -385,6 +403,7 @@ export function DraftRoom({
       setError(data.error ?? "Could not update safety queue");
       return;
     }
+    lastSafetyQueueMutationAt.current = Date.now();
     setState((prev) =>
       prev
         ? {
