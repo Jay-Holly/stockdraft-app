@@ -46,6 +46,7 @@ import {
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import { isSdplSeasonRulesLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
 import { resolveIrResolutionState } from "@/lib/sim/ir-enforcement";
+import { isStockIrEligibleForLeague } from "@/lib/sim/injury-status";
 import { ensureIrSlotsForDraft } from "@/lib/sim/ir-slots";
 import {
   computeGainPercent,
@@ -131,6 +132,15 @@ export async function requireSeasonLeague(
   }
 
   return { league };
+}
+
+/** Sports-sim leagues (SDFL/SDHL/SDBA/SDLB) are always human-type leagues. */
+export function isSeasonLeagueSportsSim(league: SeasonLeague): boolean {
+  if (league.league_type !== "human") return false;
+  return isSportsSimLeague({
+    formatType: league.format_type,
+    sportsLeagueId: league.sports_league_id,
+  });
 }
 
 async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
@@ -415,6 +425,37 @@ export async function loadRosterView(
     );
   }
 
+  const starters = sportsSimIrEnabled
+    ? withWeekMetrics.filter(
+        (p) =>
+          (p.pick_type === "stock" || p.pick_type === "crypto") &&
+          p.round_number <= SPORTS_SIM_STARTER_ROUNDS
+      )
+    : withWeekMetrics.filter((p) => p.pick_type === "stock");
+
+  if (sportsSimIrEnabled && league) {
+    const weekNumber = league.current_week ?? weekContext.currentWeek;
+    const eligibilityByPickId = new Map(
+      await Promise.all(
+        starters
+          .filter((pick) => pick.symbol.toUpperCase() !== "__OPEN__")
+          .map(async (pick) => {
+            const result = await isStockIrEligibleForLeague(
+              supabase,
+              leagueId,
+              league,
+              pick.symbol,
+              weekNumber
+            );
+            return [pick.id, result.eligible] as const;
+          })
+      )
+    );
+    for (const pick of starters) {
+      pick.irEligible = eligibilityByPickId.get(pick.id) ?? false;
+    }
+  }
+
   return {
     ok: true,
     roster: {
@@ -426,13 +467,7 @@ export async function loadRosterView(
       isHistorical: false,
       availableWeeks: weekContext.availableWeeks,
       maxViewableWeek: weekContext.maxViewableWeek,
-      starters: sportsSimIrEnabled
-        ? withWeekMetrics.filter(
-            (p) =>
-              (p.pick_type === "stock" || p.pick_type === "crypto") &&
-              p.round_number <= SPORTS_SIM_STARTER_ROUNDS
-          )
-        : withWeekMetrics.filter((p) => p.pick_type === "stock"),
+      starters,
       bench: withWeekMetrics.filter((p) => p.pick_type === "bench"),
       ir: withWeekMetrics.filter((p) => p.pick_type === "ir"),
       crypto: withWeekMetrics.filter((pick) => canonicalCryptoIds.has(pick.id)),

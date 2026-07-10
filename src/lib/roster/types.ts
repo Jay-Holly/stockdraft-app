@@ -16,6 +16,8 @@ export type RosterPickView = DraftPick & {
   seasonDollarGain: number;
   seasonOpenValue: number;
   scores: boolean;
+  /** Sports-sim starters only: whether this pick is IR-eligible this week. */
+  irEligible?: boolean;
 };
 
 export type RosterView = {

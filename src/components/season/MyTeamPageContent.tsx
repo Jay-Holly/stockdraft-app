@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { formatMoney, formatPct, formatSignedMoney } from "@/lib/format";
 import { useCryptoPool } from "@/hooks/useCryptoPool";
 import { computeCryptoPick, formatShares } from "@/lib/draft/engine";
 import type { RosterPickView, RosterView } from "@/lib/roster/types";
 import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
+import {
+  getOrderedPickGainStats,
+  type OrderedGainStat,
+} from "@/lib/roster/team-stats";
 import { Button } from "@/components/Button";
 import { StockDetailChartButton } from "@/components/market/StockDetailChartButton";
 import {
@@ -343,7 +347,11 @@ export function MyTeamPageContent() {
             }}
           />
         </div>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div
+          className={`mt-4 grid grid-cols-1 gap-3 ${
+            roster.sportsSimIrEnabled ? "" : "sm:grid-cols-2"
+          }`}
+        >
           <div className="rounded-lg border border-dark-border bg-dark/40 px-3 py-2">
             <p className="text-xs text-muted">Matchup gain (starters + crypto)</p>
             <p
@@ -365,19 +373,21 @@ export function MyTeamPageContent() {
                 : "Weekly % · bench excluded · matchup scoring"}
             </p>
           </div>
-          <div className="rounded-lg border border-dark-border bg-dark/40 px-3 py-2">
-            <p className="text-xs text-muted">Winner of the Week pace</p>
-            <p
-              className={`text-lg font-bold ${
-                roster.totalWeekDollarGain >= 0 ? "text-green-400" : "text-red-400"
-              }`}
-            >
-              {formatSignedMoney(roster.totalWeekDollarGain)}
-            </p>
-            <p className="text-[11px] text-muted mt-0.5">
-              Weekly $ · full roster incl. bench
-            </p>
-          </div>
+          {!roster.sportsSimIrEnabled && (
+            <div className="rounded-lg border border-dark-border bg-dark/40 px-3 py-2">
+              <p className="text-xs text-muted">Winner of the Week pace</p>
+              <p
+                className={`text-lg font-bold ${
+                  roster.totalWeekDollarGain >= 0 ? "text-green-400" : "text-red-400"
+                }`}
+              >
+                {formatSignedMoney(roster.totalWeekDollarGain)}
+              </p>
+              <p className="text-[11px] text-muted mt-0.5">
+                Weekly $ · full roster incl. bench
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -410,18 +420,48 @@ export function MyTeamPageContent() {
           !lineupLocked &&
           !roster.irResolution?.required
         }
-        selectedId={roster.sportsSimIrEnabled ? irMoveStarterId ?? irStarterId : irStarterId}
+        selectedId={irStarterId}
         onSelect={(id) => {
-          const pick = roster.starters.find((row) => row.id === id);
-          if (roster.sportsSimIrEnabled && pick?.symbol.toUpperCase() !== "__OPEN__") {
-            setIrMoveStarterId((prev) => (prev === id ? null : id));
-            setIrStarterId(null);
-            return;
-          }
           setIrStarterId((prev) => (prev === id ? null : id));
           setIrMoveStarterId(null);
         }}
-        selectLabel={roster.sportsSimIrEnabled ? "To IR" : "Bench"}
+        selectLabel="To Bench"
+        renderActions={
+          roster.sportsSimIrEnabled
+            ? (pick) => {
+                if (pick.symbol.toUpperCase() === "__OPEN__") return null;
+                if (viewingHistorical || lineupLocked || roster.irResolution?.required) {
+                  return null;
+                }
+                return (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={`season-select-btn ${irStarterId === pick.id ? "season-select-btn--active" : ""}`}
+                      onClick={() => {
+                        setIrStarterId((prev) => (prev === pick.id ? null : pick.id));
+                        setIrMoveStarterId(null);
+                      }}
+                    >
+                      {irStarterId === pick.id ? "Selected" : "To Bench"}
+                    </button>
+                    {pick.irEligible && (
+                      <button
+                        type="button"
+                        className={`season-select-btn ${irMoveStarterId === pick.id ? "season-select-btn--active" : ""}`}
+                        onClick={() => {
+                          setIrMoveStarterId((prev) => (prev === pick.id ? null : pick.id));
+                          setIrStarterId(null);
+                        }}
+                      >
+                        {irMoveStarterId === pick.id ? "Selected" : "To IR"}
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+            : undefined
+        }
       />
 
       <RosterBlock
@@ -539,19 +579,21 @@ export function MyTeamPageContent() {
       </section>
       )}
 
-      <RosterBlock
-        title="Crypto flex"
-        subtitle="Scores in matchups · tap Sell to rebalance · multiple coins OK"
-        tone="crypto"
-        scoringMode={roster.scoringMode}
-        picks={roster.crypto}
-        selectable={!viewingHistorical}
-        selectedId={cryptoPickId}
-        onSelect={(id) => setCryptoPickId((prev) => (prev === id ? null : id))}
-        selectLabel="Sell"
-      />
+      {!roster.sportsSimIrEnabled && (
+        <RosterBlock
+          title="Crypto flex"
+          subtitle="Scores in matchups · tap Sell to rebalance · multiple coins OK"
+          tone="crypto"
+          scoringMode={roster.scoringMode}
+          picks={roster.crypto}
+          selectable={!viewingHistorical}
+          selectedId={cryptoPickId}
+          onSelect={(id) => setCryptoPickId((prev) => (prev === id ? null : id))}
+          selectLabel="Sell"
+        />
+      )}
 
-      {!viewingHistorical && (
+      {!roster.sportsSimIrEnabled && !viewingHistorical && (
       <section className="season-card">
         <h2 className="season-card-title">Crypto rebalance</h2>
         <p className="text-sm text-muted mb-3">
@@ -691,48 +733,7 @@ export function MyTeamPageContent() {
   );
 }
 
-type PickGainStat = {
-  label: string;
-  value: number;
-  format: "money" | "pct";
-};
-
-function getOrderedPickGainStats(
-  pick: RosterPickView,
-  scoringMode: LeagueScoringMode
-): PickGainStat[] {
-  const stats: Record<string, PickGainStat> = {
-    weekDollar: {
-      label: "Weekly $",
-      value: pick.weekDollarGain,
-      format: "money",
-    },
-    weekPct: {
-      label: "Weekly %",
-      value: pick.weekGainPercent,
-      format: "pct",
-    },
-    seasonDollar: {
-      label: "Season $",
-      value: pick.seasonDollarGain,
-      format: "money",
-    },
-    seasonPct: {
-      label: "Season %",
-      value: pick.gainPercent,
-      format: "pct",
-    },
-  };
-
-  const order =
-    scoringMode === "dollar_gain"
-      ? (["weekDollar", "weekPct", "seasonDollar", "seasonPct"] as const)
-      : (["weekPct", "weekDollar", "seasonPct", "seasonDollar"] as const);
-
-  return order.map((key) => stats[key]);
-}
-
-function formatPickGainStat(stat: PickGainStat): string {
+function formatPickGainStat(stat: OrderedGainStat): string {
   return stat.format === "money"
     ? formatSignedMoney(stat.value)
     : formatPct(stat.value);
@@ -751,7 +752,7 @@ function PickGainStats({
     <div className="space-y-0.5">
       {stats.map((stat, index) => (
         <p
-          key={stat.label}
+          key={stat.key}
           className={`${
             index === 0 ? "text-sm font-semibold" : "text-[11px] font-medium"
           } ${stat.value >= 0 ? "text-green-400" : "text-red-400"}`}
@@ -774,6 +775,7 @@ function RosterBlock({
   selectedId,
   onSelect,
   selectLabel,
+  renderActions,
 }: {
   title: string;
   subtitle: string;
@@ -784,6 +786,8 @@ function RosterBlock({
   selectedId?: string | null;
   onSelect?: (id: string) => void;
   selectLabel?: string;
+  /** Overrides the default single-button action with custom per-row actions. */
+  renderActions?: (pick: RosterPickView) => ReactNode;
 }) {
   return (
     <section className="season-card overflow-hidden p-0">
@@ -831,15 +835,19 @@ function RosterBlock({
                   <PickGainStats pick={pick} scoringMode={scoringMode} />
                 )}
               </div>
-              {selectable && onSelect && selectLabel && (
-                <button
-                  type="button"
-                  className={`season-select-btn ${selectedId === pick.id ? "season-select-btn--active" : ""}`}
-                  onClick={() => onSelect(pick.id)}
-                >
-                  {selectedId === pick.id ? "Selected" : selectLabel}
-                </button>
-              )}
+              {renderActions
+                ? renderActions(pick)
+                : selectable &&
+                  onSelect &&
+                  selectLabel && (
+                    <button
+                      type="button"
+                      className={`season-select-btn ${selectedId === pick.id ? "season-select-btn--active" : ""}`}
+                      onClick={() => onSelect(pick.id)}
+                    >
+                      {selectedId === pick.id ? "Selected" : selectLabel}
+                    </button>
+                  )}
             </div>
           ))
         )}

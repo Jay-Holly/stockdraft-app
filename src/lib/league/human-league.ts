@@ -11,6 +11,7 @@ import { HUMAN_LEAGUE_FIELDS } from "@/lib/league/fields";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
 import { ensureIrSlotsForLeague } from "@/lib/sim/ir-slots";
 import { isSportsSimLeague } from "@/lib/season/sdpl-league";
+import { CURRENT_SIM_SEASON } from "@/lib/sim/sport";
 import type { CreateLeagueConfig } from "@/lib/league/league-config";
 import { isHumanLeagueSupported } from "@/lib/league/league-config";
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
@@ -271,6 +272,8 @@ export async function createHumanLeague(
       format_type: config.formatType,
       sports_league_id:
         config.formatType === "sports_league" ? config.sportsLeagueId ?? null : null,
+      sports_standings_season:
+        config.formatType === "sports_league" ? Number(CURRENT_SIM_SEASON) : null,
       player_count: config.playerCount,
       visibility: config.visibility,
       opponent_type: config.opponentType,

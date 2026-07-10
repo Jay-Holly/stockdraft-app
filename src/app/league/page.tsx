@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SeasonShell } from "@/components/season/SeasonShell";
 import { LeaguePageContent } from "@/components/season/LeaguePageContent";
+import { isSeasonLeagueSportsSim, resolveSeasonLeague } from "@/lib/roster/server";
 
 export default async function LeaguePage() {
   const supabase = await createClient();
@@ -11,8 +12,11 @@ export default async function LeaguePage() {
 
   if (!user) redirect("/auth?mode=login");
 
+  const league = await resolveSeasonLeague(user.id);
+  const isSportsSim = league ? isSeasonLeagueSportsSim(league) : false;
+
   return (
-    <SeasonShell title="League">
+    <SeasonShell title="League" isSportsSim={isSportsSim}>
       <LeaguePageContent />
     </SeasonShell>
   );

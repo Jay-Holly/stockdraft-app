@@ -20,11 +20,20 @@ export function simSportUsesWeekNumbers(sport: SimSport): boolean {
   return sport === "nfl";
 }
 
+/**
+ * All sports-sim leagues are currently anchored to the 2024-25 real season —
+ * the only season with seeded player/injury data. A calendar-year fallback
+ * would silently drift wrong once the real year moves past 2024, so this
+ * stays a fixed default until multi-season data (and a real per-league
+ * season selector) exists.
+ */
+export const CURRENT_SIM_SEASON = "2024";
+
 export function defaultSimSeason(
   sportsStandingsSeason: number | null | undefined
 ): string {
   if (sportsStandingsSeason != null && sportsStandingsSeason > 0) {
     return String(sportsStandingsSeason);
   }
-  return String(new Date().getFullYear());
+  return CURRENT_SIM_SEASON;
 }

@@ -16,11 +16,17 @@ const LINKS = [
 export function SeasonShell({
   title,
   children,
+  isSportsSim = false,
 }: {
   title: string;
   children: React.ReactNode;
+  /** Sports-sim leagues (SDFL/SDHL/SDBA/SDLB) have no Awards/bonus-pool page. */
+  isSportsSim?: boolean;
 }) {
   const pathname = usePathname();
+  const links = isSportsSim
+    ? LINKS.filter((link) => link.href !== "/awards")
+    : LINKS;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -33,7 +39,7 @@ export function SeasonShell({
             </span>
           </div>
           <nav className="season-nav" aria-label="Season navigation">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
