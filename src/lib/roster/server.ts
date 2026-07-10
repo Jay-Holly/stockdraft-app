@@ -502,8 +502,11 @@ export async function loadLeaguePageData(
     awardsEnabled
   );
   const bots = await getLeagueBotMembers(league.id);
+  const botIds = new Set(bots.map((bot) => bot.id));
   const humanMembers = isHumanLeague
-    ? await getHumanLeagueMembers(league.id)
+    ? (await getHumanLeagueMembers(league.id)).filter(
+        (member) => !botIds.has(member.userId)
+      )
     : [];
 
   const { data: matchups } = await supabase
@@ -530,6 +533,7 @@ export async function loadLeaguePageData(
         teamName: bot.displayName,
         isHuman: false,
         isBot: true,
+        isViewer: false,
         avatarColor: botProfile?.avatarColor ?? "blue",
         wins: row?.wins ?? 0,
         losses: row?.losses ?? 0,
@@ -555,6 +559,7 @@ export async function loadLeaguePageData(
           teamName: member.displayName,
           isHuman: true,
           isBot: false,
+          isViewer: false,
           avatarColor: memberProfile?.avatar_color ?? "blue",
           wins: row?.wins ?? 0,
           losses: row?.losses ?? 0,
@@ -568,6 +573,7 @@ export async function loadLeaguePageData(
     teamName: await getLeagueMemberTeamName(league.id, userId),
     isHuman: true,
     isBot: false,
+    isViewer: true,
     avatarColor: profile?.avatar_color ?? "blue",
     wins: standingsRow?.wins ?? 0,
     losses: standingsRow?.losses ?? 0,

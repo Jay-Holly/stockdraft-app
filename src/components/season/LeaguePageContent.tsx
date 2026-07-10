@@ -254,12 +254,12 @@ export function LeaguePageContent() {
               {data.standings.map((team, index) => (
                 <tr
                   key={team.userId}
-                  className={team.isHuman ? "season-standings-row--mine" : ""}
+                  className={team.isViewer ? "season-standings-row--mine" : ""}
                 >
                   <td>{index + 1}</td>
                   <td>
                     <span className="font-semibold">{team.teamName}</span>
-                    {team.isHuman && (
+                    {team.isViewer && (
                       <span className="text-xs text-gold ml-1">(you)</span>
                     )}
                   </td>

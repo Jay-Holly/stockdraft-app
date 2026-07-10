@@ -53,6 +53,7 @@ export type LeagueTeamStanding = {
   teamName: string;
   isHuman: boolean;
   isBot: boolean;
+  isViewer: boolean;
   avatarColor: string | null;
   wins: number;
   losses: number;
