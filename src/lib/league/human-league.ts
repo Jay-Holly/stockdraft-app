@@ -13,7 +13,11 @@ import { ensureIrSlotsForLeague } from "@/lib/sim/ir-slots";
 import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import { CURRENT_SIM_SEASON } from "@/lib/sim/sport";
 import type { CreateLeagueConfig } from "@/lib/league/league-config";
-import { isHumanLeagueSupported } from "@/lib/league/league-config";
+import {
+  isHumanLeagueSupported,
+  FAST_TIMER_MAX_SECONDS,
+  FAST_TIMER_MIN_SECONDS,
+} from "@/lib/league/league-config";
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
 import { maybeStartHumanLeagueDraft } from "@/lib/league/draft-scheduler";
 import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
@@ -213,6 +217,18 @@ async function loadHumanLeagueById(
   return { league: league as HumanLeague };
 }
 
+/** all_ai leagues may opt into a fast timer for bot-heavy test drafts. */
+function resolvePickTimeSeconds(config: CreateLeagueConfig): number {
+  const defaultValue = config.formatType === "sports_league" ? 30 : 120;
+  if (config.opponentType !== "all_ai" || !config.pickTimeSeconds) {
+    return defaultValue;
+  }
+  return Math.min(
+    FAST_TIMER_MAX_SECONDS,
+    Math.max(FAST_TIMER_MIN_SECONDS, Math.round(config.pickTimeSeconds))
+  );
+}
+
 export async function createHumanLeague(
   userId: string,
   config: CreateLeagueConfig,
@@ -288,7 +304,7 @@ export async function createHumanLeague(
         config.scoringMode ?? DEFAULT_LEAGUE_SCORING_MODE
       ),
       draft_format: "live",
-      pick_time_seconds: config.formatType === "sports_league" ? 30 : 120,
+      pick_time_seconds: resolvePickTimeSeconds(config),
     })
     .select(HUMAN_LEAGUE_FIELDS)
     .single();

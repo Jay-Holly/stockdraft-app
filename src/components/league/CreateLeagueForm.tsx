@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { buildInviteLinkPath } from "@/lib/app-url";
 import {
+  FAST_TIMER_PRESETS,
   isHumanLeagueSupported,
   playerCountsForFormat,
   playerCountForSportsLeague,
@@ -89,6 +90,7 @@ export function CreateLeagueForm({
   const [playerCount, setPlayerCount] = useState<LeaguePlayerCount>(4);
   const [visibility, setVisibility] = useState<LeagueVisibility>("private");
   const [opponentType, setOpponentType] = useState<LeagueOpponentType>("all_human");
+  const [pickTimeSeconds, setPickTimeSeconds] = useState<number>(120);
   const [scoringMode, setScoringMode] =
     useState<LeagueScoringMode>("percent_gain");
   const [leagueName, setLeagueName] = useState("");
@@ -127,6 +129,7 @@ export function CreateLeagueForm({
         : null,
       draftOrderMethod:
         formatType === "standard" ? draftOrderMethod : undefined,
+      pickTimeSeconds: opponentType === "all_ai" ? pickTimeSeconds : undefined,
     }),
     [
       formatType,
@@ -139,6 +142,7 @@ export function CreateLeagueForm({
       teamName,
       scheduledDraftAt,
       draftOrderMethod,
+      pickTimeSeconds,
     ]
   );
 
@@ -401,6 +405,20 @@ export function CreateLeagueForm({
           { value: "mixed", label: "Mixed", hint: "Humans + bots" },
         ]}
       />
+
+      {opponentType === "all_ai" && (
+        <OptionGroup<number>
+          label="Pick timer"
+          description="All-bot leagues can run faster for quick test drafts."
+          value={pickTimeSeconds}
+          onChange={setPickTimeSeconds}
+          options={FAST_TIMER_PRESETS.map((seconds) => ({
+            value: seconds,
+            label: `${seconds}s`,
+            hint: seconds <= 15 ? "Fast test draft" : undefined,
+          }))}
+        />
+      )}
 
       <OptionGroup<LeagueScoringMode>
         label="Weekly matchup scoring"

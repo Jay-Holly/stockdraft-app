@@ -45,7 +45,13 @@ export type CreateLeagueConfig = {
   scheduledDraftAt?: string | null;
   /** Standard leagues only — how live draft pick order is generated. */
   draftOrderMethod?: DraftOrderMethodSetting;
+  /** all_ai leagues only — fast-timer override for bot-heavy test drafts (10-600s). */
+  pickTimeSeconds?: number;
 };
+
+export const FAST_TIMER_MIN_SECONDS = 10;
+export const FAST_TIMER_MAX_SECONDS = 600;
+export const FAST_TIMER_PRESETS = [10, 15, 30, 60] as const;
 
 export function playerCountForSportsLeague(
   sportsLeagueId: string | undefined
