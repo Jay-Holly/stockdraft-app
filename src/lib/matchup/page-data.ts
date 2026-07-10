@@ -75,7 +75,9 @@ async function loadTeamSide(
   if (!rosterResult.ok) return null;
 
   const { roster } = rosterResult;
-  const allPicks = [...roster.starters, ...roster.crypto, ...roster.bench];
+  const starterIds = new Set(roster.starters.map((pick) => pick.id));
+  const standaloneCrypto = roster.crypto.filter((pick) => !starterIds.has(pick.id));
+  const allPicks = [...roster.starters, ...standaloneCrypto, ...roster.bench];
   const stats = computeTeamGainStats(allPicks);
   const botProfile = BOT_BY_ID.get(userId);
 

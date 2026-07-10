@@ -83,8 +83,8 @@ export function getOrderedGainStats(
 
   const order =
     scoringMode === "dollar_gain"
-      ? (["weekDollar", "weekPct", "seasonDollar", "seasonPct"] as const)
-      : (["weekPct", "weekDollar", "seasonPct", "seasonDollar"] as const);
+      ? (["weekDollar", "seasonDollar"] as const)
+      : (["weekPct", "seasonPct"] as const);
 
   return order.map((key) => byKey[key]);
 }

@@ -235,12 +235,14 @@ function RosterColumn({
         scoringMode={scoringMode}
       />
 
-      <RosterPickSection
-        title="Crypto"
-        variant="crypto"
-        picks={side.crypto}
-        scoringMode={scoringMode}
-      />
+      {side.crypto.length > 0 && (
+        <RosterPickSection
+          title="Crypto"
+          variant="crypto"
+          picks={side.crypto}
+          scoringMode={scoringMode}
+        />
+      )}
 
       {side.bench.some((pick) => pick.symbol.toUpperCase() !== "__OPEN__") && (
         <RosterPickSection
@@ -393,6 +395,7 @@ export function MatchupsPageContent() {
   const [loading, setLoading] = useState(true);
   const [focusedMatchupId, setFocusedMatchupId] = useState<string | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+  const [showAllMatchups, setShowAllMatchups] = useState(false);
 
   const load = useCallback(async (weekNumber?: number) => {
     try {
@@ -494,6 +497,7 @@ export function MatchupsPageContent() {
             onWeekChange={(week) => {
               setLoading(true);
               setSelectedWeek(week);
+              setShowAllMatchups(false);
             }}
           />
         </div>
@@ -505,6 +509,43 @@ export function MatchupsPageContent() {
         </div>
       )}
 
+      {otherMatchups.length > 0 && (
+        <section className="matchup-other-section space-y-4">
+          <h2 className="matchup-other-section__title">
+            {data.viewWeek === data.currentWeek
+              ? "Other matchups this week"
+              : `Other week ${data.viewWeek} matchups`}
+          </h2>
+          <div className="matchup-preview-grid">
+            {(showAllMatchups ? otherMatchups : otherMatchups.slice(0, 4)).map(
+              (matchup) => (
+                <MatchupPreviewCard
+                  key={matchup.id}
+                  matchup={matchup}
+                  scoringMode={data.scoringMode}
+                  selected={false}
+                  onSelect={() => {
+                    setFocusedMatchupId(matchup.id);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                />
+              )
+            )}
+          </div>
+          {otherMatchups.length > 4 && (
+            <button
+              type="button"
+              className="matchup-other-section__toggle"
+              onClick={() => setShowAllMatchups((current) => !current)}
+            >
+              {showAllMatchups
+                ? "Show fewer matchups"
+                : `Show all ${otherMatchups.length} matchups`}
+            </button>
+          )}
+        </section>
+      )}
+
       <div className="matchup-focus-block">
         <p className="matchup-focus-block__label">
           {focusedMatchup.includesViewer ? "Your matchup" : "Matchup detail"}
@@ -514,30 +555,6 @@ export function MatchupsPageContent() {
           scoringMode={data.scoringMode}
         />
       </div>
-
-      {otherMatchups.length > 0 && (
-        <section className="matchup-other-section space-y-4">
-          <h2 className="matchup-other-section__title">
-            {data.viewWeek === data.currentWeek
-              ? "Other matchups this week"
-              : `Other week ${data.viewWeek} matchups`}
-          </h2>
-          <div className="matchup-preview-grid">
-            {otherMatchups.map((matchup) => (
-              <MatchupPreviewCard
-                key={matchup.id}
-                matchup={matchup}
-                scoringMode={data.scoringMode}
-                selected={false}
-                onSelect={() => {
-                  setFocusedMatchupId(matchup.id);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-              />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

@@ -3163,6 +3163,18 @@ body:has(.landing-screen) {
   gap: 0.875rem;
 }
 
+.matchup-other-section__toggle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-gold, #d0ab48);
+  padding: 0.5rem 0;
+  cursor: pointer;
+}
+
+.matchup-other-section__toggle:hover {
+  text-decoration: underline;
+}
+
 .matchup-preview-card {
   text-align: left;
   padding: 0.875rem 1rem;
