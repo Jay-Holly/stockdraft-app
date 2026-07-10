@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { getLeagueDraftStateRow } from "@/lib/draft/live-draft";
-import { summarizePicks } from "@/lib/draft/engine";
+import { draftRulesModeFromFlag, summarizePicks } from "@/lib/draft/engine";
 import type { DraftPick, DraftSummary } from "@/lib/draft/types";
 import type { League } from "@/lib/league/server";
 import { getLeagueMemberTeamName } from "@/lib/league/server";
@@ -615,6 +615,15 @@ export async function listHumanLeaguesForUser(
   );
 }
 
+/**
+ * Opponent boards are read-only display data — picks, current round, and
+ * status — so this batches 2 queries for the whole league instead of
+ * running loadDraftStateDetailed() (~9 queries each, including league
+ * resolution and round-sync bookkeeping meant for the active drafter, not
+ * read-only viewers) once per opponent. That per-opponent fan-out was
+ * O(N) DB round trips on every draft-room poll — ~280 for a 32-team SDFL
+ * league — the likely cause of "other teams' picks" appearing stuck.
+ */
 export async function getHumanLeagueOpponentBoards(
   userId: string,
   leagueId: string
@@ -622,43 +631,61 @@ export async function getHumanLeagueOpponentBoards(
   const supabase = await createClient();
   const { data: league } = await supabase
     .from("leagues")
-    .select("league_type")
+    .select("league_type, format_type, sports_league_id")
     .eq("id", leagueId)
     .maybeSingle();
 
   if (!league || league.league_type !== "human") return null;
 
-  const members = await getHumanLeagueMembers(leagueId);
-  const opponents = members.filter((m) => m.userId !== userId);
-
-  const boards = await Promise.all(
-    opponents.map(async (opponent) => {
-      const state = await loadDraftStateDetailed(opponent.userId, {
-        leagueId,
-      });
-      if (!state.ok) {
-        return {
-          id: opponent.userId,
-          name: opponent.displayName,
-          picks: [] as DraftPick[],
-          summary: summarizePicks([]),
-          currentRound: 1,
-          draftComplete: false,
-        };
-      }
-
-      return {
-        id: opponent.userId,
-        name: opponent.displayName,
-        picks: state.state.picks,
-        summary: state.state.summary,
-        currentRound: state.state.draft.current_round,
-        draftComplete: state.state.draft.status === "complete",
-      };
+  const rules = draftRulesModeFromFlag(
+    isSportsSimLeague({
+      formatType: league.format_type,
+      sportsLeagueId: league.sports_league_id,
     })
   );
 
-  return boards;
+  const members = await getHumanLeagueMembers(leagueId);
+  const opponents = members.filter((m) => m.userId !== userId);
+  if (opponents.length === 0) return [];
+
+  const { data: draftRows } = await supabase
+    .from("drafts")
+    .select("id, user_id, current_round, status")
+    .eq("league_id", leagueId)
+    .in(
+      "user_id",
+      opponents.map((o) => o.userId)
+    );
+
+  const draftByUserId = new Map(
+    (draftRows ?? []).map((row) => [row.user_id, row])
+  );
+  const draftIds = (draftRows ?? []).map((row) => row.id);
+
+  const { data: pickRows } = draftIds.length
+    ? await supabase.from("draft_picks").select("*").in("draft_id", draftIds)
+    : { data: [] as DraftPick[] };
+
+  const picksByDraftId = new Map<string, DraftPick[]>();
+  for (const pick of (pickRows ?? []) as DraftPick[]) {
+    const list = picksByDraftId.get(pick.draft_id) ?? [];
+    list.push(pick);
+    picksByDraftId.set(pick.draft_id, list);
+  }
+
+  return opponents.map((opponent) => {
+    const draftRow = draftByUserId.get(opponent.userId);
+    const picks = draftRow ? picksByDraftId.get(draftRow.id) ?? [] : [];
+
+    return {
+      id: opponent.userId,
+      name: opponent.displayName,
+      picks,
+      summary: summarizePicks(picks, rules),
+      currentRound: draftRow?.current_round ?? 1,
+      draftComplete: draftRow?.status === "complete",
+    };
+  });
 }
 
 export async function activateHumanLeagueSchedule(
