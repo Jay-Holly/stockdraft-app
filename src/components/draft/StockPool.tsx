@@ -444,10 +444,16 @@ export function StockPool({
   }
 
   function clearSearch() {
+    setLocalFilter("");
     setSearchQuery("");
     setSearchResults([]);
     setSearchFeedback(null);
     setSearchLoading(false);
+  }
+
+  function handleUnifiedSearchChange(value: string) {
+    setLocalFilter(value);
+    setSearchQuery(value);
   }
 
   useEffect(() => {
@@ -789,10 +795,11 @@ export function StockPool({
 
       <div className="draft-pool-finnhub">
         <label className="draft-pool-field-label" htmlFor="draft-finnhub-search">
-          Find any NYSE/NASDAQ ticker
+          Search stocks
         </label>
         <p className="draft-pool-field-hint">
-          Live Finnhub search for stocks outside the S&P 500 pool ($5+ per share).
+          Searches the S&P 500 pool below, plus any other NYSE/NASDAQ ticker
+          ($5+ per share).
         </p>
         <div className="draft-pool-search-row">
           <input
@@ -800,7 +807,7 @@ export function StockPool({
             type="search"
             placeholder="Ticker or company name…"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleUnifiedSearchChange(e.target.value)}
             className="draft-input"
             autoComplete="off"
           />
@@ -808,7 +815,7 @@ export function StockPool({
             <button
               type="button"
               className="draft-search-clear"
-              aria-label="Clear ticker search"
+              aria-label="Clear search"
               onClick={clearSearch}
             >
               ×
@@ -830,7 +837,7 @@ export function StockPool({
       {displayedSearchResults.length > 0 && (
         <div className="draft-search-results">
           <p className="draft-search-label">
-            Search results ($5+ · outside S&P 500 pool)
+            Also found outside the S&P 500 pool ($5+)
           </p>
           <div className="draft-pool-list draft-pool-list--compact">
             {displayedSearchResults.map((item) =>
@@ -903,23 +910,6 @@ export function StockPool({
           Show drafted
         </button>
       </div>
-
-      {!isCryptoView && (
-        <div className="draft-pool-filter-row">
-          <label className="draft-pool-field-label" htmlFor="draft-pool-list-filter">
-            Filter S&P 500 list
-          </label>
-          <input
-            id="draft-pool-list-filter"
-            type="text"
-            placeholder="Narrow visible stocks by ticker or name…"
-            value={localFilter}
-            onChange={(e) => setLocalFilter(e.target.value)}
-            className="draft-input draft-input--filter"
-            autoComplete="off"
-          />
-        </div>
-      )}
 
       {onToggleSafetyPick && !isReferenceMode && turn.type !== "complete" && (
         <p className="draft-safety-hint">

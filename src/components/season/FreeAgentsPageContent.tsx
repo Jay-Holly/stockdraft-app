@@ -5,6 +5,7 @@ import { formatMoney, formatPct } from "@/lib/format";
 import type { FreeAgentsPageData } from "@/lib/roster/types";
 import { Button } from "@/components/Button";
 import { SeasonCalendarBanner } from "@/components/season/SeasonCalendarBanner";
+import { StockDetailChartButton } from "@/components/market/StockDetailChartButton";
 
 export function FreeAgentsPageContent() {
   const [data, setData] = useState<FreeAgentsPageData | null>(null);
@@ -177,20 +178,37 @@ export function FreeAgentsPageContent() {
           {filtered.length} available · {data.freeAgents.length} total unrostered
         </p>
         <div className="season-fa-list">
-          {filtered.slice(0, 100).map((stock) => (
-            <button
+          {filtered.map((stock) => (
+            <div
               key={stock.symbol}
-              type="button"
+              role="button"
+              tabIndex={faClosed || busy ? -1 : 0}
+              aria-pressed={selectedSymbol === stock.symbol}
+              aria-disabled={faClosed || busy}
               className={`season-fa-row ${selectedSymbol === stock.symbol ? "season-fa-row--selected" : ""}`}
-              disabled={faClosed || busy}
-              onClick={() =>
+              onClick={() => {
+                if (faClosed || busy) return;
                 setSelectedSymbol((prev) =>
                   prev === stock.symbol ? null : stock.symbol
-                )
-              }
+                );
+              }}
+              onKeyDown={(e) => {
+                if (faClosed || busy) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelectedSymbol((prev) =>
+                    prev === stock.symbol ? null : stock.symbol
+                  );
+                }
+              }}
             >
               <div className="min-w-0 flex-1 text-left">
-                <p className="font-bold">{stock.symbol}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold">{stock.symbol}</p>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <StockDetailChartButton symbol={stock.symbol} />
+                  </span>
+                </div>
                 <p className="text-xs text-muted truncate">
                   {stock.name} · {stock.sector}
                 </p>
@@ -205,7 +223,7 @@ export function FreeAgentsPageContent() {
                   {formatPct(stock.changePercent)}
                 </p>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </section>
