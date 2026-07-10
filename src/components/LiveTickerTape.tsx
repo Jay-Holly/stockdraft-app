@@ -25,14 +25,33 @@ function TickerItem({ quote }: { quote: MarketQuote }) {
   );
 }
 
+/**
+ * The scroll animation runs for a fixed duration regardless of track
+ * length, so a longer quote list (more rostered stocks) travels the same
+ * distance faster — a blur, not a bug in the animation itself. Scale the
+ * duration with quote count so the apparent pixel speed stays readable no
+ * matter how many quotes are on the dashboard.
+ */
+const SECONDS_PER_ITEM = 3.5;
+const MIN_SCROLL_DURATION_SECONDS = 40;
+
 export function LiveTickerTape() {
   const { quotes, session, loading, error } = useLiveMarketData();
   const loopQuotes = quotes.length > 0 ? [...quotes, ...quotes] : [];
+  const scrollDurationSeconds = Math.max(
+    MIN_SCROLL_DURATION_SECONDS,
+    quotes.length * SECONDS_PER_ITEM
+  );
 
   return (
     <section
       className="live-ticker-tape live-ticker-tape--embedded"
       aria-label="Live market ticker"
+      style={
+        {
+          "--live-ticker-scroll-duration": `${scrollDurationSeconds}s`,
+        } as React.CSSProperties
+      }
     >
       <div className="live-ticker-header">
         <span
