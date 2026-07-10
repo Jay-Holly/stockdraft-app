@@ -275,6 +275,143 @@ export function DashboardContent({
     (item) => item.league.id === activeLeagueId
   );
 
+  const squadLeagues = humanLeagues.filter(
+    (item) => item.league.format_type !== "sports_league"
+  );
+  const sportsSimLeagues = humanLeagues.filter(
+    (item) => item.league.format_type === "sports_league"
+  );
+
+  function renderHumanLeagueCard(item: HumanLeagueListItem) {
+    const isActive = item.league.id === activeLeagueId;
+    const waiting = item.league.status === "waiting";
+    const enterDraft = !item.humanDraftComplete;
+    const busy = switchingLeagueId === item.league.id;
+    const isOwner = item.league.owner_user_id === profile.id;
+
+    return (
+      <div
+        key={item.league.id}
+        className={`rounded-xl border p-4 space-y-3 ${
+          isActive
+            ? "border-gold/50 bg-gold/5"
+            : "border-dark-border bg-dark/20"
+        }`}
+      >
+        <div>
+          <div className="mb-2">
+            <LeagueSupportId code={item.league.support_code} />
+          </div>
+          <p className="font-semibold truncate">{item.humanTeamName}</p>
+          <p className="text-xs text-muted truncate">{item.league.name}</p>
+          <p className="text-xs text-muted capitalize mt-1">
+            {leagueStatusLabel(item.league.status)} · {item.memberCount}/
+            {item.league.player_count} players
+            {isActive ? " · selected" : ""}
+          </p>
+        </div>
+
+        {waiting && (
+          <HumanLeagueInvitePanel
+            leagueId={item.league.id}
+            leagueName={item.league.name}
+            inviteLink={item.inviteLink}
+            inviteToken={item.inviteToken}
+            isCommissioner={isOwner}
+            memberCount={item.memberCount}
+            playerCount={item.league.player_count}
+            scheduledDraftAt={item.league.scheduled_draft_at}
+            compact
+          />
+        )}
+
+        {waiting && isDraftCountdownVisible(item.league.scheduled_draft_at) && (
+          <ScheduledDraftCountdown
+            scheduledDraftAt={item.league.scheduled_draft_at}
+            leagueId={item.league.id}
+            compact
+            onEnterDraft={(leagueId, href) =>
+              void setActiveLeague(leagueId, href)
+            }
+          />
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {!isActive && (
+            <Button
+              variant="secondary"
+              className="flex-1 text-sm"
+              disabled={busy}
+              onClick={() => void setActiveLeague(item.league.id)}
+            >
+              Select
+            </Button>
+          )}
+          {waiting ? (
+            canEnterScheduledDraftRoom(item.league.scheduled_draft_at) ? (
+              <Button
+                variant="primary"
+                className="flex-1 text-sm"
+                disabled={switchingLeagueId === item.league.id}
+                onClick={() =>
+                  void setActiveLeague(
+                    item.league.id,
+                    draftRoomHref(item.league.id)
+                  )
+                }
+              >
+                Enter Draft
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                className="flex-1 text-sm"
+                onClick={() => void setActiveLeague(item.league.id)}
+              >
+                View invite
+              </Button>
+            )
+          ) : enterDraft ? (
+            <Button
+              variant="primary"
+              className="flex-1 text-sm"
+              disabled={switchingLeagueId === item.league.id}
+              onClick={() =>
+                void setActiveLeague(item.league.id, "/draft")
+              }
+            >
+              Enter draft
+            </Button>
+          ) : (
+            <div className="flex flex-1 gap-2">
+              <Button
+                variant="primary"
+                className="flex-1 text-sm"
+                disabled={switchingLeagueId === item.league.id}
+                onClick={() =>
+                  void setActiveLeague(item.league.id, "/league")
+                }
+              >
+                Open league
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1 text-sm"
+                disabled={switchingLeagueId === item.league.id}
+                onClick={() =>
+                  void setActiveLeague(item.league.id, "/matchups")
+                }
+              >
+                Matchups
+              </Button>
+            </div>
+          )}
+          {renderOwnerDeleteButton(item.league, busy)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <DeleteLeagueModal
@@ -496,152 +633,30 @@ export function DashboardContent({
         </section>
       )}
 
-      {humanLeagues.length > 0 && (
+      {squadLeagues.length > 0 && (
         <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
           <div>
             <h2 className="text-lg font-semibold">Squad Leagues</h2>
             <p className="text-muted text-sm">
-              {humanLeagues.length} league{humanLeagues.length === 1 ? "" : "s"}
+              {squadLeagues.length} league{squadLeagues.length === 1 ? "" : "s"}
             </p>
           </div>
 
-          {humanLeagues.map((item) => {
-            const isActive = item.league.id === activeLeagueId;
-            const waiting = item.league.status === "waiting";
-            const enterDraft = !item.humanDraftComplete;
-            const busy = switchingLeagueId === item.league.id;
-            const isOwner = item.league.owner_user_id === profile.id;
-
-            return (
-              <div
-                key={item.league.id}
-                className={`rounded-xl border p-4 space-y-3 ${
-                  isActive
-                    ? "border-gold/50 bg-gold/5"
-                    : "border-dark-border bg-dark/20"
-                }`}
-              >
-                <div>
-                  <div className="mb-2">
-                    <LeagueSupportId code={item.league.support_code} />
-                  </div>
-                  <p className="font-semibold truncate">{item.humanTeamName}</p>
-                  <p className="text-xs text-muted truncate">{item.league.name}</p>
-                  <p className="text-xs text-muted capitalize mt-1">
-                    {leagueStatusLabel(item.league.status)} · {item.memberCount}/
-                    {item.league.player_count} players
-                    {isActive ? " · selected" : ""}
-                  </p>
-                </div>
-
-                {waiting && (
-                  <HumanLeagueInvitePanel
-                    leagueId={item.league.id}
-                    leagueName={item.league.name}
-                    inviteLink={item.inviteLink}
-                    inviteToken={item.inviteToken}
-                    isCommissioner={isOwner}
-                    memberCount={item.memberCount}
-                    playerCount={item.league.player_count}
-                    scheduledDraftAt={item.league.scheduled_draft_at}
-                    compact
-                  />
-                )}
-
-                {waiting && isDraftCountdownVisible(item.league.scheduled_draft_at) && (
-                  <ScheduledDraftCountdown
-                    scheduledDraftAt={item.league.scheduled_draft_at}
-                    leagueId={item.league.id}
-                    compact
-                    onEnterDraft={(leagueId, href) =>
-                      void setActiveLeague(leagueId, href)
-                    }
-                  />
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                  {!isActive && (
-                    <Button
-                      variant="secondary"
-                      className="flex-1 text-sm"
-                      disabled={busy}
-                      onClick={() => void setActiveLeague(item.league.id)}
-                    >
-                      Select
-                    </Button>
-                  )}
-                  {waiting ? (
-                    canEnterScheduledDraftRoom(item.league.scheduled_draft_at) ? (
-                      <Button
-                        variant="primary"
-                        className="flex-1 text-sm"
-                        disabled={switchingLeagueId === item.league.id}
-                        onClick={() =>
-                          void setActiveLeague(
-                            item.league.id,
-                            draftRoomHref(item.league.id)
-                          )
-                        }
-                      >
-                        Enter Draft
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="primary"
-                        className="flex-1 text-sm"
-                        onClick={() => void setActiveLeague(item.league.id)}
-                      >
-                        View invite
-                      </Button>
-                    )
-                  ) : enterDraft ? (
-                    <Button
-                      variant="primary"
-                      className="flex-1 text-sm"
-                      disabled={switchingLeagueId === item.league.id}
-                      onClick={() =>
-                        void setActiveLeague(item.league.id, "/draft")
-                      }
-                    >
-                      Enter draft
-                    </Button>
-                  ) : (
-                    <div className="flex flex-1 gap-2">
-                      <Button
-                        variant="primary"
-                        className="flex-1 text-sm"
-                        disabled={switchingLeagueId === item.league.id}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/league")
-                        }
-                      >
-                        Open league
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="flex-1 text-sm"
-                        disabled={switchingLeagueId === item.league.id}
-                        onClick={() =>
-                          void setActiveLeague(item.league.id, "/matchups")
-                        }
-                      >
-                        Matchups
-                      </Button>
-                    </div>
-                  )}
-                  {renderOwnerDeleteButton(item.league, busy)}
-                </div>
-              </div>
-            );
-          })}
+          {squadLeagues.map(renderHumanLeagueCard)}
         </section>
       )}
 
-      <section className="bg-dark-card border border-dark-border/80 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold mb-1">Sports Sim Leagues</h2>
-        <p className="text-muted text-sm">
-          Draft real players&apos; stocks — injuries and all. Coming soon.
-        </p>
+      <section className="bg-dark-card border border-dark-border/80 rounded-2xl p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Sports Sim Leagues</h2>
+          <p className="text-muted text-sm">
+            {sportsSimLeagues.length > 0
+              ? `${sportsSimLeagues.length} league${sportsSimLeagues.length === 1 ? "" : "s"}`
+              : "Draft real players' stocks — injuries and all."}
+          </p>
+        </div>
+
+        {sportsSimLeagues.map(renderHumanLeagueCard)}
       </section>
 
       {dayTrader ? <DayTraderDashboardCard summary={dayTrader} /> : null}
