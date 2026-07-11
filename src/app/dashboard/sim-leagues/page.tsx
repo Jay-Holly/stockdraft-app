@@ -5,6 +5,7 @@ import { listAiLeagueListItems } from "@/lib/league/ai-league";
 import { ensureDashboardSession } from "@/lib/dashboard/session-setup";
 import { CategoryPageHeader } from "@/components/dashboard/CategoryPageHeader";
 import { SimLeaguesPageContent } from "@/components/dashboard/SimLeaguesPageContent";
+import { PageWatermark } from "@/components/PageWatermark";
 
 export default async function SimLeaguesPage() {
   const supabase = await createClient();
@@ -26,6 +27,7 @@ export default async function SimLeaguesPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <PageWatermark />
       <CategoryPageHeader title="Sim Leagues" />
       <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
         <SimLeaguesPageContent

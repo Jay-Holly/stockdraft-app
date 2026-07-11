@@ -347,6 +347,25 @@ export function MyTeamPageContent() {
             }}
           />
         </div>
+        <div className="mt-3 rounded-lg border border-dark-border/60 bg-dark/20 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-muted">
+            Want a custom team logo? Try Nano Banana with a prompt like{" "}
+            <span className="text-white">
+              &ldquo;Design a bold circular esports-style team logo for [team
+              name], a fantasy stock-draft team, dark background, no
+              text&rdquo;
+            </span>
+            .
+          </p>
+          <a
+            href="https://gemini.google.com/app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-[var(--color-league-primary)] shrink-0 hover:underline"
+          >
+            Create your own logo →
+          </a>
+        </div>
         <div
           className={`mt-4 grid grid-cols-1 gap-3 ${
             roster.sportsSimIrEnabled ? "" : "sm:grid-cols-2"

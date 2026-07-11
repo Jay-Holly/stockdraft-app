@@ -55,16 +55,7 @@ export function HumanLeagueCard({
       data-league-theme={themeId}
       className={`league-card space-y-3 ${isActive ? "league-card--active" : ""}`}
     >
-      <div className="flex items-start gap-3">
-        {sportsLeagueLogoSrc && (
-          <Image
-            src={sportsLeagueLogoSrc}
-            alt=""
-            width={40}
-            height={50}
-            className="shrink-0 rounded-md"
-          />
-        )}
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-2">
             <LeagueSupportId code={item.league.support_code} />
@@ -77,6 +68,15 @@ export function HumanLeagueCard({
             {isActive ? " · selected" : ""}
           </p>
         </div>
+        {sportsLeagueLogoSrc && (
+          <Image
+            src={sportsLeagueLogoSrc}
+            alt=""
+            width={88}
+            height={110}
+            className="shrink-0 rounded-lg"
+          />
+        )}
       </div>
 
       {waiting && (

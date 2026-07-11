@@ -531,6 +531,12 @@ export async function loadLeaguePageData(
     .maybeSingle();
 
   const isHumanLeague = leagueMeta?.league_type === "human";
+  const isSportsSim = leagueMeta
+    ? isSportsSimLeague({
+        formatType: leagueMeta.format_type,
+        sportsLeagueId: leagueMeta.sports_league_id,
+      })
+    : false;
   const awardsEnabled = leagueMeta
     ? isSdplSeasonRulesLeague({
         formatType: leagueMeta.format_type,
@@ -682,6 +688,8 @@ export async function loadLeaguePageData(
       leagueName: league.name,
       leagueStatus: league.status,
       isLeagueOwner: league.owner_user_id === userId,
+      isSportsSim,
+      sportsLeagueId: leagueMeta?.sports_league_id ?? null,
       scoringMode,
       currentWeek,
       humanRecord: {

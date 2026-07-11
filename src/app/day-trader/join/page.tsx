@@ -7,6 +7,7 @@ import {
 } from "@/lib/profile/day-trader";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/Button";
+import { PageWatermark } from "@/components/PageWatermark";
 
 export default async function DayTraderJoinPage() {
   const supabase = await createClient();
@@ -41,6 +42,7 @@ export default async function DayTraderJoinPage() {
 
   return (
     <div className="min-h-screen flex flex-col px-4 py-8" data-league-theme="day-trader">
+      <PageWatermark />
       <div className="max-w-md mx-auto w-full flex-1 flex flex-col">
         <div className="text-center mb-8">
           <Logo size="lg" />

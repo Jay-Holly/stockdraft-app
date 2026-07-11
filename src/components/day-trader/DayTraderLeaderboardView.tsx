@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
+import { PageWatermark } from "@/components/PageWatermark";
 import { formatPct, formatSignedMoney } from "@/lib/format";
 import type { DayTraderContestRow } from "@/lib/day-trader/types";
 import type {
@@ -46,6 +47,7 @@ export function DayTraderLeaderboardView({
 
   return (
     <div className="min-h-screen px-4 py-8" data-league-theme="day-trader">
+      <PageWatermark />
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="text-center">
           <Logo size="lg" />
@@ -99,7 +101,7 @@ export function DayTraderLeaderboardView({
           </div>
         ) : null}
 
-        <div className="rounded-xl border border-dark-border bg-dark/40 overflow-hidden">
+        <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 overflow-hidden">
           {rows.length === 0 ? (
             <p className="p-4 text-sm text-muted">No entries yet this week.</p>
           ) : (

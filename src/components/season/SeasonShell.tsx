@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import type { LeagueThemeId } from "@/lib/league/league-config";
+import { PageWatermark } from "@/components/PageWatermark";
+import { leagueThemeLogoSrc, type LeagueThemeId } from "@/lib/league/league-config";
 
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
@@ -35,6 +36,7 @@ export function SeasonShell({
 
   return (
     <div className="min-h-screen flex flex-col" data-league-theme={themeId}>
+      <PageWatermark logoSrc={leagueThemeLogoSrc(themeId)} />
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between gap-3 mb-3">

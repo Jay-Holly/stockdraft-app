@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { formatMoney, formatPct } from "@/lib/format";
@@ -11,6 +12,7 @@ import type { LeaguePageData } from "@/lib/roster/types";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import { Button } from "@/components/Button";
+import { SPORTS_LEAGUE_FORMATS } from "@/lib/league/league-config";
 
 export function LeaguePageContent() {
   const [data, setData] = useState<LeaguePageData | null>(null);
@@ -105,7 +107,22 @@ export function LeaguePageContent() {
               {scoringModeShortLabel(data.scoringMode)} matchups
             </p>
           </div>
-          {data.isLeagueOwner ? (
+          {data.isSportsSim ? (
+            (() => {
+              const logoSrc = SPORTS_LEAGUE_FORMATS.find(
+                (f) => f.id === data.sportsLeagueId
+              )?.logoSrc;
+              return logoSrc ? (
+                <Image
+                  src={logoSrc}
+                  alt=""
+                  width={96}
+                  height={120}
+                  className="shrink-0 rounded-lg"
+                />
+              ) : null;
+            })()
+          ) : data.isLeagueOwner ? (
             <Button
               variant="ghost"
               className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 shrink-0"

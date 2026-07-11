@@ -15,6 +15,7 @@ import {
 } from "@/lib/matchup/scoring";
 import { DashboardContent } from "@/components/DashboardContent";
 import { Logo } from "@/components/Logo";
+import { PageWatermark } from "@/components/PageWatermark";
 import { loadDayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
 import type { Profile } from "@/lib/types";
 
@@ -107,6 +108,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <PageWatermark />
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <Logo size="sm" />

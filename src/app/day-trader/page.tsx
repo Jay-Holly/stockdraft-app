@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/Button";
+import { PageWatermark } from "@/components/PageWatermark";
 import { DayTraderEnterForm } from "@/components/day-trader/DayTraderEnterForm";
 import { DayTraderLeaderboardLinks } from "@/components/day-trader/DayTraderLeaderboardLinks";
 import { DayTraderTradingPanel } from "@/components/day-trader/DayTraderTradingPanel";
@@ -51,6 +52,7 @@ export default async function DayTraderPage() {
 
     return (
       <div className="min-h-screen flex flex-col px-4 py-8" data-league-theme="day-trader">
+        <PageWatermark />
         <div className="max-w-md mx-auto w-full flex-1 flex flex-col">
           <div className="text-center mb-8">
             <Logo size="lg" />
@@ -95,6 +97,7 @@ export default async function DayTraderPage() {
 
   return (
     <div className="min-h-screen px-4 py-8" data-league-theme="day-trader">
+      <PageWatermark />
       <div className="max-w-lg mx-auto space-y-6">
         <div className="text-center">
           <Logo size="lg" />
@@ -116,7 +119,7 @@ export default async function DayTraderPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-dark-border bg-dark/40 p-4 space-y-2">
+        <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted">Entry</span>
             <span className={context.entryOpen ? "text-emerald-400" : "text-muted"}>
@@ -157,15 +160,15 @@ export default async function DayTraderPage() {
           !context.entry &&
           !context.entryOpen &&
           isDayTraderTradingWeekUnderway(now, context.contest) ? (
-          <div className="rounded-xl border border-dark-border p-4 text-sm text-red-400">
+          <div className="rounded-xl border border-[var(--color-league-accent)] p-4 text-sm text-red-400">
             {DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE}
           </div>
         ) : !context.entryOpen ? (
-          <div className="rounded-xl border border-dark-border p-4 text-sm text-muted">
+          <div className="rounded-xl border border-[var(--color-league-accent)] p-4 text-sm text-muted">
             {getDayTraderEntryBlockedMessage(now, context.contest)}
           </div>
         ) : eligibleLeagues.length === 0 ? (
-          <div className="rounded-xl border border-dark-border p-4 text-sm text-muted space-y-3">
+          <div className="rounded-xl border border-[var(--color-league-accent)] p-4 text-sm text-muted space-y-3">
             <p>
               Finish a league draft with 10 starter stocks to enter Day Trader.
             </p>
@@ -174,12 +177,12 @@ export default async function DayTraderPage() {
             </Button>
           </div>
         ) : (
-          <div className="rounded-xl border border-dark-border p-4 text-sm text-muted">
+          <div className="rounded-xl border border-[var(--color-league-accent)] p-4 text-sm text-muted">
             No contest accepting entries right now.
           </div>
         )}
 
-        <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-xs text-muted space-y-1">
+        <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 text-xs text-muted space-y-1">
           <p>
             Enter Fri 4:00 PM – Mon 9:30 AM ET (weekends included). Starters
             lock at entry using the latest available prices.

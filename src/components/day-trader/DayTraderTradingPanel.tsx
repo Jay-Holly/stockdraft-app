@@ -275,12 +275,12 @@ export function DayTraderTradingPanel({
       <DayTraderLeaderboardLinks />
 
       {tradingDisabled ? (
-        <div className="rounded-xl border border-dark-border p-4 text-sm text-muted">
+        <div className="rounded-xl border border-[var(--color-league-accent)] p-4 text-sm text-muted">
           {tradingBlockedMessage()}
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-dark-border bg-dark/40 p-4 space-y-3">
+      <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-3">
         <h2 className="text-sm font-semibold">Your positions</h2>
         {portfolio.positions.length === 0 ? (
           <p className="text-sm text-muted">No open stock positions.</p>
@@ -333,7 +333,7 @@ export function DayTraderTradingPanel({
         )}
       </div>
 
-      <div className="rounded-xl border border-dark-border bg-dark/40 p-4 space-y-3">
+      <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-3">
         <h2 className="text-sm font-semibold">Buy stock</h2>
         <p className="text-xs text-muted">
           Sells credit cash at the current market price. Buys spend available

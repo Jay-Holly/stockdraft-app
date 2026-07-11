@@ -83,6 +83,8 @@ export type LeaguePageData = {
   leagueName: string;
   leagueStatus: string;
   isLeagueOwner: boolean;
+  isSportsSim: boolean;
+  sportsLeagueId: string | null;
   scoringMode: LeagueScoringMode;
   currentWeek: number;
   humanRecord: { wins: number; losses: number };

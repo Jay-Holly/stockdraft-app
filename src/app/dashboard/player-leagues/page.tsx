@@ -5,6 +5,7 @@ import { listHumanLeaguesForUser } from "@/lib/league/human-league";
 import { ensureDashboardSession } from "@/lib/dashboard/session-setup";
 import { CategoryPageHeader } from "@/components/dashboard/CategoryPageHeader";
 import { PlayerLeaguesPageContent } from "@/components/dashboard/PlayerLeaguesPageContent";
+import { PageWatermark } from "@/components/PageWatermark";
 
 export default async function PlayerLeaguesPage() {
   const supabase = await createClient();
@@ -30,6 +31,7 @@ export default async function PlayerLeaguesPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <PageWatermark />
       <CategoryPageHeader title="Player Leagues" />
       <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
         <PlayerLeaguesPageContent

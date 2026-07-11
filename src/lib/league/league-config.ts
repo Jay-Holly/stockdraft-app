@@ -97,7 +97,7 @@ export type LeagueTheme = {
   onPrimary: "dark" | "white";
   /** Readable text color for content placed directly on `secondary`. */
   onSecondary: "dark" | "white";
-  /** Metallic sliver pulled from the sports-sim league's shield logo. */
+  /** Third color used for box outlines — a metallic sliver for sports-sim leagues. */
   accent?: string;
 };
 
@@ -109,6 +109,7 @@ export const LEAGUE_THEMES: Record<LeagueThemeId, LeagueTheme> = {
     secondary: "#0a3d8f",
     onPrimary: "dark",
     onSecondary: "white",
+    accent: "#b8ae96",
   },
   sdpl: {
     id: "sdpl",
@@ -117,6 +118,7 @@ export const LEAGUE_THEMES: Record<LeagueThemeId, LeagueTheme> = {
     secondary: "#c4611f",
     onPrimary: "white",
     onSecondary: "white",
+    accent: "#6e7f91",
   },
   sdba: {
     id: "sdba",
@@ -174,6 +176,11 @@ export function leagueThemeIdForSportsLeague(
     return sportsLeagueId as LeagueThemeId;
   }
   return "sdpl";
+}
+
+/** Sport-shield logo for a league theme's faded page watermark, if one exists yet. */
+export function leagueThemeLogoSrc(themeId: LeagueThemeId): string | null {
+  return SPORTS_LEAGUE_FORMATS.find((f) => f.id === themeId)?.logoSrc ?? null;
 }
 
 export function withAlpha(hex: string, alpha: number): string {

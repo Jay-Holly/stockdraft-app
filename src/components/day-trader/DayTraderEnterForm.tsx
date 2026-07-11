@@ -75,7 +75,7 @@ export function DayTraderEnterForm({ eligibleLeagues }: DayTraderEnterFormProps)
       </div>
 
       {selected ? (
-        <div className="rounded-xl border border-dark-border bg-dark/60 p-4">
+        <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/60 p-4">
           <p className="text-xs text-muted mb-3">
             Each starter resets to $50,000 at the current price (10 × $50K =
             $500K portfolio).

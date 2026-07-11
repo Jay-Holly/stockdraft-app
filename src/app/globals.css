@@ -24,7 +24,7 @@
   --color-league-secondary: var(--color-primary);
   --color-league-on-primary: var(--color-dark);
   --color-league-on-secondary: #ffffff;
-  --color-league-accent: var(--color-gold);
+  --color-league-accent: #b8ae96;
 }
 
 [data-league-theme="sdpl"] {
@@ -32,7 +32,7 @@
   --color-league-secondary: #c4611f;
   --color-league-on-primary: #ffffff;
   --color-league-on-secondary: #ffffff;
-  --color-league-accent: #2451c4;
+  --color-league-accent: #6e7f91;
 }
 
 [data-league-theme="sdba"] {
@@ -2721,7 +2721,7 @@ body:has(.landing-screen) {
 
 .season-card {
   background: var(--color-dark-card);
-  border: 1px solid var(--color-dark-border);
+  border: 1px solid var(--color-league-accent);
   border-radius: 1rem;
   padding: 1rem 1.125rem;
 }
@@ -2791,7 +2791,8 @@ body:has(.landing-screen) {
   text-align: center;
   padding: 0.75rem;
   border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--color-league-secondary) 18%, var(--color-dark-card));
+  border: 1px solid var(--color-league-primary);
 }
 
 .season-matchup-label {
@@ -3250,8 +3251,8 @@ body:has(.landing-screen) {
   text-align: left;
   padding: 0.875rem 1rem;
   border-radius: 0.875rem;
-  border: 1px solid var(--color-dark-border);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-league-primary);
+  background: color-mix(in srgb, var(--color-league-secondary) 18%, var(--color-dark-card));
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -3260,15 +3261,14 @@ body:has(.landing-screen) {
 }
 
 .matchup-preview-card:hover {
-  border-color: rgba(208, 171, 72, 0.35);
-  background: rgba(208, 171, 72, 0.05);
-  box-shadow: 0 0 18px rgba(208, 171, 72, 0.08);
+  background: color-mix(in srgb, var(--color-league-secondary) 28%, var(--color-dark-card));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-league-primary) 20%, transparent);
 }
 
 .matchup-preview-card--selected {
-  border-color: rgba(208, 171, 72, 0.5);
-  background: rgba(208, 171, 72, 0.08);
-  box-shadow: 0 0 20px rgba(208, 171, 72, 0.12);
+  border-color: var(--color-league-primary);
+  background: color-mix(in srgb, var(--color-league-secondary) 34%, var(--color-dark-card));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-league-primary) 28%, transparent);
 }
 
 .matchup-preview-card__teams {
@@ -3291,7 +3291,7 @@ body:has(.landing-screen) {
 }
 
 .matchup-preview-card__score--leading {
-  color: var(--color-gold, #d0ab48);
+  color: var(--color-league-primary);
 }
 
 .matchup-preview-card__dash {
@@ -3512,14 +3512,14 @@ body:has(.landing-screen) {
   width: 100%;
   padding: 0.625rem 0.75rem;
   border-radius: 0.625rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-league-primary);
+  background: color-mix(in srgb, var(--color-league-secondary) 14%, var(--color-dark-card));
   cursor: pointer;
 }
 
 .season-fa-row--selected {
-  border-color: rgba(208, 171, 72, 0.55);
-  background: rgba(208, 171, 72, 0.08);
+  border-color: var(--color-league-primary);
+  background: color-mix(in srgb, var(--color-league-secondary) 30%, var(--color-dark-card));
 }
 
 @media (max-width: 640px) {
