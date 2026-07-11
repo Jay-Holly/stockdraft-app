@@ -85,8 +85,57 @@ export type { DraftFeedEvent, LiveDraftView };
 
 const BOT_PICK_DELAY_MS = 1500;
 
+/**
+ * Auto-pick resolution (deciding a symbol, then inserting) can take a while
+ * (bot heuristics, price lookups) and every connected client polls
+ * GET /api/draft independently every ~2.5s. Without a claim, two concurrent
+ * pollers can both observe "deadline expired, X on clock" before either one
+ * finishes, and both insert a pick for the same slot. This lease window
+ * needs to comfortably outlast the slowest realistic auto-pick resolution
+ * (see botWorkBudgetMs in ensureLiveDraftProgress) — if a claim holder dies
+ * mid-resolution, the lease just expires and the next poll retries.
+ */
+const AUTO_PICK_CLAIM_LEASE_MS = 60_000;
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Atomically claim the right to resolve and commit userId's current pick via
+ * a conditional UPDATE (compare-and-swap on pick_deadline_at): only a caller
+ * that still observes the deadline as expired can push it forward, so any
+ * concurrent or backgrounded-past-timeout caller sees a future deadline next
+ * time it checks and skips re-resolving. Returns false if someone else has
+ * already claimed it (or the turn moved on).
+ */
+async function claimAutoPickTurn(
+  leagueId: string,
+  userId: string
+): Promise<boolean> {
+  const supabase = await createClient();
+  const nowIso = new Date().toISOString();
+  const leaseUntil = new Date(Date.now() + AUTO_PICK_CLAIM_LEASE_MS).toISOString();
+
+  const { data, error } = await supabase
+    .from("league_draft_state")
+    .update({ pick_deadline_at: leaseUntil, updated_at: nowIso })
+    .eq("league_id", leagueId)
+    .eq("on_clock_user_id", userId)
+    .eq("status", "in_progress")
+    .or(`pick_deadline_at.is.null,pick_deadline_at.lte.${nowIso}`)
+    .select("league_id")
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      `claimAutoPickTurn failed league=${leagueId} user=${userId}:`,
+      error.message
+    );
+    return false;
+  }
+
+  return Boolean(data);
 }
 
 /** PostgREST occasionally deserializes uuid[] as null — always normalize before use. */
@@ -1387,6 +1436,10 @@ async function executeAutoPick(
   userId: string,
   reason: "timer"
 ): Promise<{ expired?: boolean; error?: string }> {
+  if (!(await claimAutoPickTurn(leagueId, userId))) {
+    return {};
+  }
+
   const resolved = await resolveAutoPick(leagueId, userId);
 
   if ("kind" in resolved && resolved.kind === "pushback_skip") {
@@ -1465,6 +1518,10 @@ export async function runBotTurn(
     refreshed.on_clock_user_id !== botUserId ||
     refreshed.status !== "in_progress"
   ) {
+    return {};
+  }
+
+  if (!(await claimAutoPickTurn(leagueId, botUserId))) {
     return {};
   }
 

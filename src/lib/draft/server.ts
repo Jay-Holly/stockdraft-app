@@ -594,6 +594,7 @@ export async function makeDraftPickForLeague(
   let effectiveValue = 0;
   const priceAtPick = price ?? 0;
   let pushbackDelta = 0;
+  let pendingCryptoIncrement: (() => Promise<unknown>) | null = null;
 
   if (sportsSimDraftRules) {
     const sim = getDraftRuleConstants("sports_sim");
@@ -695,12 +696,12 @@ export async function makeDraftPickForLeague(
     surchargePercent = computed.surchargePercent;
     effectiveValue = computed.effectiveValue;
 
-    await incrementLeagueCryptoCount(
-      supabase,
-      leagueId,
-      upperSymbol,
-      buyerCount
-    );
+    // Deferred until after the draft_picks insert succeeds (below) — bumping
+    // the buyer count here, before the insert, would leave it incremented
+    // even if the insert is later rejected (e.g. a unique constraint
+    // violation from a losing racer in a concurrent auto-pick).
+    pendingCryptoIncrement = () =>
+      incrementLeagueCryptoCount(supabase, leagueId, upperSymbol, buyerCount);
 
     if (draft.current_round <= OPEN_ROUNDS) {
       const afterPick = [
@@ -790,11 +791,25 @@ export async function makeDraftPickForLeague(
     .single();
 
   if (pickError || !insertedPick) {
+    // 23505 here means another concurrent request (e.g. the same user
+    // double-submitting from two tabs, or a retried request) already took
+    // this pick_order slot — draft_picks_draft_id_pick_order_key rejected the
+    // duplicate. Surface a clear message instead of the raw constraint error.
+    if (pickError?.code === "23505") {
+      return {
+        error:
+          "This pick was already recorded by another request — refresh the draft room to see the latest picks.",
+      };
+    }
     return {
       error:
         pickError?.message ??
         "Pick insert failed (0 rows). Confirm draft_picks RLS policies allow insert.",
     };
+  }
+
+  if (pendingCryptoIncrement) {
+    await pendingCryptoIncrement();
   }
 
   const updatedPicks = [
