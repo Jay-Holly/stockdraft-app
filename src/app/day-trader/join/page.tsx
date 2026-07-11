@@ -40,7 +40,7 @@ export default async function DayTraderJoinPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col px-4 py-8">
+    <div className="min-h-screen flex flex-col px-4 py-8" data-league-theme="day-trader">
       <div className="max-w-md mx-auto w-full flex-1 flex flex-col">
         <div className="text-center mb-8">
           <Logo size="lg" />

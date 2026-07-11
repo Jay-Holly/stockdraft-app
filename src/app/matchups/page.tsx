@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SeasonShell } from "@/components/season/SeasonShell";
 import { MatchupsPageContent } from "@/components/season/MatchupsPageContent";
-import { isSeasonLeagueSportsSim, resolveSeasonLeague } from "@/lib/roster/server";
+import { isSeasonLeagueSportsSim, resolveSeasonLeague, seasonLeagueThemeId } from "@/lib/roster/server";
 
 export default async function MatchupsPage() {
   const supabase = await createClient();
@@ -16,7 +16,7 @@ export default async function MatchupsPage() {
   const isSportsSim = league ? isSeasonLeagueSportsSim(league) : false;
 
   return (
-    <SeasonShell title="Matchups" isSportsSim={isSportsSim}>
+    <SeasonShell title="Matchups" isSportsSim={isSportsSim} themeId={seasonLeagueThemeId(league)}>
       <MatchupsPageContent />
     </SeasonShell>
   );

@@ -183,7 +183,7 @@ function FragmentRow({
     <>
       {showRoundHeader && (
         <tr>
-          <td colSpan={4} className="text-xs text-gold font-semibold uppercase tracking-wide pt-4">
+          <td colSpan={4} className="text-xs text-[var(--color-league-primary)] font-semibold uppercase tracking-wide pt-4">
             Round {pick.roundNumber}
           </td>
         </tr>

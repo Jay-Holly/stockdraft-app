@@ -184,7 +184,7 @@ export function AwardsPageContent() {
       )}
 
       {data.awardsEnabled && (
-        <section className="season-card border-gold/35 bg-gold/5 space-y-3">
+        <section className="season-card border-[var(--color-league-primary)]/35 bg-[var(--color-league-primary)]/5 space-y-3">
           <div>
             <h2 className="season-card-title">Playoff bonus pool</h2>
             <p className="text-sm text-muted mt-1">
@@ -193,7 +193,7 @@ export function AwardsPageContent() {
                 : "Allocated to top-4 seeds at the start of playoffs."}
             </p>
           </div>
-          <p className="text-3xl font-black text-gold">
+          <p className="text-3xl font-black text-[var(--color-league-primary)]">
             {formatMoney(data.pool.playoffPoolBalance)}
           </p>
           {poolAccumulating ? (
@@ -251,7 +251,7 @@ export function AwardsPageContent() {
       )}
 
       {data.pendingPlayoff.length > 0 && (
-        <section className="season-card border-gold/30 bg-gold/5 space-y-4">
+        <section className="season-card border-[var(--color-league-primary)]/30 bg-[var(--color-league-primary)]/5 space-y-4">
           <div>
             <h2 className="season-card-title">Your playoff bonus</h2>
             <p className="text-sm text-muted mt-1">
@@ -261,7 +261,7 @@ export function AwardsPageContent() {
           {data.pendingPlayoff.map((payout) => (
             <div
               key={payout.id}
-              className="rounded-xl border border-gold/25 bg-dark/40 p-4 space-y-3"
+              className="rounded-xl border border-[var(--color-league-primary)]/25 bg-dark/40 p-4 space-y-3"
             >
               <div>
                 <p className="font-bold">
@@ -305,7 +305,7 @@ export function AwardsPageContent() {
       )}
 
       {data.pending.length > 0 && (
-        <section className="season-card border-gold/30 bg-gold/5 space-y-4">
+        <section className="season-card border-[var(--color-league-primary)]/30 bg-[var(--color-league-primary)]/5 space-y-4">
           <div>
             <h2 className="season-card-title">Your pending claims</h2>
             <p className="text-sm text-muted mt-1">
@@ -316,7 +316,7 @@ export function AwardsPageContent() {
             {data.pending.map((payout) => (
               <div
                 key={payout.id}
-                className="rounded-xl border border-gold/25 bg-dark/40 p-4 space-y-3"
+                className="rounded-xl border border-[var(--color-league-primary)]/25 bg-dark/40 p-4 space-y-3"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -366,7 +366,7 @@ export function AwardsPageContent() {
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-dark-border bg-dark/40 px-3 py-2">
               <p className="text-xs text-muted">This week&apos;s pool</p>
-              <p className="text-lg font-bold text-gold">
+              <p className="text-lg font-bold text-[var(--color-league-primary)]">
                 {formatMoney(data.pool.weeklyPoolAmount)}
               </p>
               <p className="text-[11px] text-muted mt-0.5">
@@ -401,7 +401,7 @@ export function AwardsPageContent() {
                 key={row.id}
                 className={`rounded-xl border px-3 py-3 flex flex-wrap items-center justify-between gap-2 ${
                   row.isViewer
-                    ? "border-gold/40 bg-gold/5"
+                    ? "border-[var(--color-league-primary)]/40 bg-[var(--color-league-primary)]/5"
                     : "border-dark-border bg-dark/30"
                 }`}
               >
@@ -409,7 +409,7 @@ export function AwardsPageContent() {
                   <p className="font-bold">
                     #{row.seedRank} · {row.teamName}
                     {row.isViewer && (
-                      <span className="text-gold text-sm ml-1">(you)</span>
+                      <span className="text-[var(--color-league-primary)] text-sm ml-1">(you)</span>
                     )}
                   </p>
                   <p className="text-xs text-muted">
@@ -421,7 +421,7 @@ export function AwardsPageContent() {
                         : row.status}
                   </p>
                 </div>
-                <p className="text-sm font-bold text-gold">
+                <p className="text-sm font-bold text-[var(--color-league-primary)]">
                   {formatMoney(row.amountUsd)}
                 </p>
               </div>
@@ -456,7 +456,7 @@ export function AwardsPageContent() {
                   key={award.id}
                   className={`rounded-xl border px-3 py-3 flex flex-wrap items-start justify-between gap-2 ${
                     award.isViewerWinner
-                      ? "border-gold/40 bg-gold/5"
+                      ? "border-[var(--color-league-primary)]/40 bg-[var(--color-league-primary)]/5"
                       : "border-dark-border bg-dark/30"
                   }`}
                 >
@@ -468,7 +468,7 @@ export function AwardsPageContent() {
                       <p className="text-sm mt-0.5">
                         {award.winnerTeamName}
                         {award.isViewerWinner && (
-                          <span className="text-gold font-semibold"> · You</span>
+                          <span className="text-[var(--color-league-primary)] font-semibold"> · You</span>
                         )}
                         {award.qualifyingSymbol && (
                           <span className="text-muted">
@@ -483,7 +483,7 @@ export function AwardsPageContent() {
                       </p>
                     )}
                   </div>
-                  <p className="text-sm font-bold text-gold shrink-0">
+                  <p className="text-sm font-bold text-[var(--color-league-primary)] shrink-0">
                     {formatMoney(award.amountUsd)}
                   </p>
                 </div>

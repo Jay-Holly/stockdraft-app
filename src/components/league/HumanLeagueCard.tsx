@@ -10,7 +10,7 @@ import {
   draftRoomHref,
   isDraftCountdownVisible,
 } from "@/lib/league/scheduled-draft";
-import { SPORTS_LEAGUE_FORMATS } from "@/lib/league/league-config";
+import { SPORTS_LEAGUE_FORMATS, leagueThemeIdForSportsLeague } from "@/lib/league/league-config";
 import type { HumanLeagueListItem } from "@/lib/league/human-league";
 
 export function leagueStatusLabel(status: string): string {
@@ -48,12 +48,12 @@ export function HumanLeagueCard({
   const sportsLeagueLogoSrc = SPORTS_LEAGUE_FORMATS.find(
     (f) => f.id === item.league.sports_league_id
   )?.logoSrc;
+  const themeId = leagueThemeIdForSportsLeague(item.league.sports_league_id);
 
   return (
     <div
-      className={`rounded-xl border p-4 space-y-3 ${
-        isActive ? "border-gold/50 bg-gold/5" : "border-dark-border bg-dark/20"
-      }`}
+      data-league-theme={themeId}
+      className={`league-card space-y-3 ${isActive ? "league-card--active" : ""}`}
     >
       <div className="flex items-start gap-3">
         {sportsLeagueLogoSrc && (

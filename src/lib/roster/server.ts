@@ -20,6 +20,7 @@ import {
   isHumanLeagueDraftFinished,
   type HumanLeague,
 } from "@/lib/league/human-league";
+import { leagueThemeIdForSportsLeague, type LeagueThemeId } from "@/lib/league/league-config";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
 import { getLeagueMemberTeamName, getLeagueOffBoardSymbols } from "@/lib/league/server";
 import {
@@ -141,6 +142,12 @@ export function isSeasonLeagueSportsSim(league: SeasonLeague): boolean {
     formatType: league.format_type,
     sportsLeagueId: league.sports_league_id,
   });
+}
+
+/** Resolves which color theme a season page should render in. */
+export function seasonLeagueThemeId(league: SeasonLeague | null): LeagueThemeId {
+  if (!league || league.league_type !== "human") return "sdai";
+  return leagueThemeIdForSportsLeague(league.sports_league_id);
 }
 
 async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {

@@ -38,9 +38,8 @@ export function AiLeagueCard({
 
   return (
     <div
-      className={`rounded-xl border p-4 space-y-3 ${
-        isActive ? "border-gold/50 bg-gold/5" : "border-dark-border bg-dark/20"
-      }`}
+      data-league-theme="sdai"
+      className={`league-card space-y-3 ${isActive ? "league-card--active" : ""}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">

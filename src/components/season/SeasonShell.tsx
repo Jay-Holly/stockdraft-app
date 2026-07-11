@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import type { LeagueThemeId } from "@/lib/league/league-config";
 
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
@@ -18,11 +19,14 @@ export function SeasonShell({
   title,
   children,
   isSportsSim = false,
+  themeId = "sdai",
 }: {
   title: string;
   children: React.ReactNode;
   /** Sports-sim leagues (SDFL/SDHL/SDBA/SDLB) have no Awards/bonus-pool page. */
   isSportsSim?: boolean;
+  /** Drives the league color identity — buttons, tabs, header — for this page. */
+  themeId?: LeagueThemeId;
 }) {
   const pathname = usePathname();
   const links = isSportsSim
@@ -30,12 +34,12 @@ export function SeasonShell({
     : LINKS;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col" data-league-theme={themeId}>
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between gap-3 mb-3">
             <Logo size="sm" />
-            <span className="text-xs text-gold font-semibold uppercase tracking-wider">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-league-primary)]">
               {title}
             </span>
           </div>

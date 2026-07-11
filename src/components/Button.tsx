@@ -13,11 +13,11 @@ type ButtonProps = {
 
 const variants = {
   primary:
-    "bg-gold text-dark font-bold hover:bg-gold-dark active:scale-[0.98]",
+    "bg-[var(--color-league-primary)] text-[var(--color-league-on-primary)] font-bold hover:brightness-110 active:scale-[0.98]",
   secondary:
-    "bg-primary text-white font-semibold hover:bg-primary-light active:scale-[0.98]",
+    "bg-[var(--color-league-secondary)] text-[var(--color-league-on-secondary)] font-semibold hover:brightness-110 active:scale-[0.98]",
   ghost:
-    "bg-transparent text-white border border-dark-border hover:border-gold/50",
+    "bg-transparent text-white border border-dark-border hover:border-[var(--color-league-primary)]",
 };
 
 export function Button({

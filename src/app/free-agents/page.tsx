@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SeasonShell } from "@/components/season/SeasonShell";
 import { FreeAgentsPageContent } from "@/components/season/FreeAgentsPageContent";
-import { isSeasonLeagueSportsSim, resolveSeasonLeague } from "@/lib/roster/server";
+import { isSeasonLeagueSportsSim, resolveSeasonLeague, seasonLeagueThemeId } from "@/lib/roster/server";
 
 export default async function FreeAgentsPage() {
   const supabase = await createClient();
@@ -16,7 +16,7 @@ export default async function FreeAgentsPage() {
   const isSportsSim = league ? isSeasonLeagueSportsSim(league) : false;
 
   return (
-    <SeasonShell title="Free Agents" isSportsSim={isSportsSim}>
+    <SeasonShell title="Free Agents" isSportsSim={isSportsSim} themeId={seasonLeagueThemeId(league)}>
       <FreeAgentsPageContent />
     </SeasonShell>
   );

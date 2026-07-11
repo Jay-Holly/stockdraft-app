@@ -13,6 +13,76 @@
   --color-muted: #a89880;
 }
 
+/* ── League color theming ──
+   Single source of truth lives in src/lib/league/league-config.ts
+   (LEAGUE_THEMES) — keep these hex values in sync by hand. Scoped via
+   [data-league-theme] on a wrapping element (dashboard bubble, league
+   card, or SeasonShell/Day Trader page root). Never used for gain/loss
+   (%, $) colors — those stay green/red everywhere, unaffected. */
+:root {
+  --color-league-primary: var(--color-gold);
+  --color-league-secondary: var(--color-primary);
+  --color-league-on-primary: var(--color-dark);
+  --color-league-on-secondary: #ffffff;
+  --color-league-accent: var(--color-gold);
+}
+
+[data-league-theme="sdpl"] {
+  --color-league-primary: #2451c4;
+  --color-league-secondary: #c4611f;
+  --color-league-on-primary: #ffffff;
+  --color-league-on-secondary: #ffffff;
+  --color-league-accent: #2451c4;
+}
+
+[data-league-theme="sdba"] {
+  --color-league-primary: #ff7a0f;
+  --color-league-secondary: #122040;
+  --color-league-on-primary: #0d0a06;
+  --color-league-on-secondary: #ffffff;
+  --color-league-accent: #9ca3af;
+}
+
+[data-league-theme="sdfl"] {
+  --color-league-primary: #e8332a;
+  --color-league-secondary: #33517f;
+  --color-league-on-primary: #ffffff;
+  --color-league-on-secondary: #ffffff;
+  --color-league-accent: #9ca3af;
+}
+
+[data-league-theme="sdhl"] {
+  --color-league-primary: #5fb8d9;
+  --color-league-secondary: #2e4e7d;
+  --color-league-on-primary: #0d0a06;
+  --color-league-on-secondary: #ffffff;
+  --color-league-accent: #9ca3af;
+}
+
+[data-league-theme="sdlb"] {
+  --color-league-primary: #1f5e3c;
+  --color-league-secondary: #8c2f26;
+  --color-league-on-primary: #ffffff;
+  --color-league-on-secondary: #ffffff;
+  --color-league-accent: #a9772f;
+}
+
+[data-league-theme="sports-sim"] {
+  --color-league-primary: #9ca3af;
+  --color-league-secondary: #6b7280;
+  --color-league-on-primary: #0d0a06;
+  --color-league-on-secondary: #ffffff;
+  --color-league-accent: #9ca3af;
+}
+
+[data-league-theme="day-trader"] {
+  --color-league-primary: #4b2c82;
+  --color-league-secondary: #f2d311;
+  --color-league-on-primary: #ffffff;
+  --color-league-on-secondary: #0d0a06;
+  --color-league-accent: #4b2c82;
+}
+
 body {
   background-color: var(--color-dark);
   color: #f9fafb;
@@ -2644,9 +2714,9 @@ body:has(.landing-screen) {
 }
 
 .season-nav-link--active {
-  color: var(--color-gold);
-  border-color: rgba(208, 171, 72, 0.35);
-  background: rgba(208, 171, 72, 0.08);
+  color: var(--color-league-primary);
+  border-color: color-mix(in srgb, var(--color-league-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-league-primary) 8%, transparent);
 }
 
 .season-card {
@@ -3644,6 +3714,20 @@ body:has(.landing-screen) {
   }
 }
 
+.league-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-dark-border);
+  border-left: 4px solid var(--color-league-primary);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 1rem;
+}
+
+.league-card--active {
+  border-color: color-mix(in srgb, var(--color-league-primary) 50%, transparent);
+  border-left-color: var(--color-league-primary);
+  background: color-mix(in srgb, var(--color-league-primary) 5%, transparent);
+}
+
 /* Dashboard category bubbles — reuses the draft-filter-btn pill language
    (rounded, subtle border, gold-accent hover/active) scaled up as primary
    navigation. Tap-based on both desktop and mobile, no hover dependency. */
@@ -3655,6 +3739,7 @@ body:has(.landing-screen) {
 }
 
 .category-bubble {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
@@ -3662,6 +3747,7 @@ body:has(.landing-screen) {
   border: 1px solid var(--color-dark-border);
   background: rgba(255, 255, 255, 0.04);
   padding: 1rem;
+  overflow: hidden;
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
@@ -3669,13 +3755,21 @@ body:has(.landing-screen) {
 
 .category-bubble:hover,
 .category-bubble:focus-visible {
-  border-color: rgba(208, 171, 72, 0.4);
+  border-color: color-mix(in srgb, var(--color-league-primary) 40%, transparent);
   background: rgba(255, 255, 255, 0.07);
   outline: none;
 }
 
 .category-bubble:active {
-  background: rgba(208, 171, 72, 0.1);
+  background: color-mix(in srgb, var(--color-league-primary) 10%, transparent);
+}
+
+.category-bubble__strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
 }
 
 .category-bubble__label {
@@ -3693,6 +3787,6 @@ body:has(.landing-screen) {
   margin-top: 0.5rem;
   font-size: 0.6875rem;
   font-weight: 700;
-  color: var(--color-gold, #d0ab48);
+  color: var(--color-league-primary);
 }
 

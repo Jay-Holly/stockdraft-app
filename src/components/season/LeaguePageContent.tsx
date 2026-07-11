@@ -115,18 +115,18 @@ export function LeaguePageContent() {
             </Button>
           ) : null}
         </div>
-        <p className="text-2xl font-black text-gold mt-3">
+        <p className="text-2xl font-black text-[var(--color-league-primary)] mt-3">
           {data.humanRecord.wins}-{data.humanRecord.losses}
           <span className="text-sm font-semibold text-muted ml-2">Your record</span>
         </p>
       </section>
 
       {data.bonusPool.awardsEnabled && (
-        <section className="season-card border-gold/30 bg-gold/5">
+        <section className="season-card border-[var(--color-league-primary)]/30 bg-[var(--color-league-primary)]/5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
               <h2 className="season-card-title">Bonus pool</h2>
-              <p className="text-2xl font-black text-gold">
+              <p className="text-2xl font-black text-[var(--color-league-primary)]">
                 {formatMoney(data.bonusPool.totalBonusPool)}
               </p>
               <p className="text-xs text-muted">
@@ -154,7 +154,7 @@ export function LeaguePageContent() {
             </Link>
           </div>
           {data.bonusPool.pendingClaimCount > 0 && (
-            <p className="text-sm mt-3 text-gold font-semibold">
+            <p className="text-sm mt-3 text-[var(--color-league-primary)] font-semibold">
               You won {formatMoney(data.bonusPool.pendingClaimTotalUsd)} — claim
               it on the Awards page.
             </p>
@@ -260,7 +260,7 @@ export function LeaguePageContent() {
                   <td>
                     <span className="font-semibold">{team.teamName}</span>
                     {team.isViewer && (
-                      <span className="text-xs text-gold ml-1">(you)</span>
+                      <span className="text-xs text-[var(--color-league-primary)] ml-1">(you)</span>
                     )}
                   </td>
                   <td>

@@ -45,7 +45,7 @@ export function DayTraderLeaderboardView({
   const prize = prizeText(contest, metric);
 
   return (
-    <div className="min-h-screen px-4 py-8">
+    <div className="min-h-screen px-4 py-8" data-league-theme="day-trader">
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="text-center">
           <Logo size="lg" />
@@ -72,7 +72,7 @@ export function DayTraderLeaderboardView({
             href="/day-trader/leaderboard/dollar-gainer"
             className={`flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition-colors ${
               metric === "dollar"
-                ? "bg-gold text-dark"
+                ? "bg-[var(--color-league-primary)] text-[var(--color-league-on-primary)]"
                 : "text-muted hover:text-white"
             }`}
           >
@@ -82,7 +82,7 @@ export function DayTraderLeaderboardView({
             href="/day-trader/leaderboard/percent-gainer"
             className={`flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition-colors ${
               metric === "percent"
-                ? "bg-gold text-dark"
+                ? "bg-[var(--color-league-primary)] text-[var(--color-league-on-primary)]"
                 : "text-muted hover:text-white"
             }`}
           >
@@ -91,7 +91,7 @@ export function DayTraderLeaderboardView({
         </div>
 
         {prize ? (
-          <div className="rounded-xl border border-gold/30 bg-gold/5 p-4 text-sm">
+          <div className="rounded-xl border border-[var(--color-league-primary)]/30 bg-[var(--color-league-primary)]/5 p-4 text-sm">
             <p className="text-xs text-muted uppercase tracking-wide mb-1">
               Prize
             </p>
@@ -123,7 +123,7 @@ export function DayTraderLeaderboardView({
                     <tr
                       key={row.entryId}
                       className={`border-b border-dark-border/60 last:border-b-0 ${
-                        isMe ? "bg-gold/10" : ""
+                        isMe ? "bg-[var(--color-league-primary)]/10" : ""
                       }`}
                     >
                       <td className="px-4 py-3 font-semibold">{row.rank}</td>
@@ -131,7 +131,7 @@ export function DayTraderLeaderboardView({
                         <p className="font-semibold">
                           {row.username}
                           {isMe ? (
-                            <span className="ml-2 text-xs text-gold">You</span>
+                            <span className="ml-2 text-xs text-[var(--color-league-primary)]">You</span>
                           ) : null}
                         </p>
                         <p className="text-xs text-muted">{row.teamName}</p>
