@@ -6,6 +6,10 @@ import { useCryptoPool } from "@/hooks/useCryptoPool";
 import { useCryptoQuotes } from "@/hooks/useCryptoQuotes";
 import { useDraftPool } from "@/hooks/useDraftPool";
 import { useLiveDraftFeed } from "@/hooks/useLiveDraftFeed";
+import {
+  useLiveDraftClock,
+  type LiveDraftStateRow,
+} from "@/hooks/useLiveDraftClock";
 import { usePoolQuotes } from "@/hooks/usePoolQuotes";
 import { getTop100PoolSymbols } from "@/lib/market/draft-pool";
 import {
@@ -34,7 +38,8 @@ import type { BotDraftBoard } from "@/lib/league/ai-league";
 import { DRAFT_COUNTDOWN_TICK_MS } from "@/lib/league/scheduled-draft";
 
 const POOL_QUOTE_BATCH = 80;
-const POLL_STALE_MS = 10000;
+const POLL_STALE_MS = 30000;
+const LIVE_POLL_SAFETY_NET_MS = 20000;
 const DRAFT_LOAD_TIMEOUT_MS = 45_000;
 
 function postDraftRedirectKey(leagueId: string | undefined): string | null {
@@ -330,7 +335,11 @@ export function DraftRoom({
 
   useEffect(() => {
     if (!liveInProgress && !isWaitingRoom) return;
-    const intervalMs = isWaitingRoom ? DRAFT_COUNTDOWN_TICK_MS : 2500;
+    // Realtime pushes (clock + feed hooks below) drive sync while in progress;
+    // this interval is just a safety net in case an event is ever missed.
+    const intervalMs = isWaitingRoom
+      ? DRAFT_COUNTDOWN_TICK_MS
+      : LIVE_POLL_SAFETY_NET_MS;
     const id = window.setInterval(() => {
       void loadDraft();
     }, intervalMs);
@@ -365,6 +374,36 @@ export function DraftRoom({
     void loadDraft();
   }, [loadDraft]);
 
+  const applyClockUpdate = useCallback(
+    (row: LiveDraftStateRow) => {
+      lastPollOkAt.current = Date.now();
+      setPollStale(false);
+      setState((prev) => {
+        if (!prev?.liveDraft) return prev;
+        const onClockTeamName = row.on_clock_user_id
+          ? (prev.liveDraft.draftOrder.find(
+              (member) => member.userId === row.on_clock_user_id
+            )?.teamName ?? null)
+          : null;
+        return {
+          ...prev,
+          liveDraft: {
+            ...prev.liveDraft,
+            status: row.status,
+            onClockUserId: row.on_clock_user_id,
+            onClockTeamName,
+            pickDeadlineAt: row.pick_deadline_at,
+            isMyTurn: row.on_clock_user_id === profile.id,
+            currentPickIndex: row.current_pick_index,
+            totalPickSlots: row.total_pick_slots,
+            globalPickNumber: row.global_pick_number,
+          },
+        };
+      });
+    },
+    [profile.id]
+  );
+
   const feedConnection = useLiveDraftFeed(
     state?.leagueId,
     state?.draftFeed ?? [],
@@ -372,13 +411,19 @@ export function DraftRoom({
     { onDisconnected: triggerDraftPoll }
   );
 
+  const clockConnection = useLiveDraftClock(state?.leagueId, applyClockUpdate, {
+    onDisconnected: triggerDraftPoll,
+  });
+
   const feedSyncStatus = useMemo((): LiveDraftFeedSyncStatus => {
     if (!liveInProgress) return "live";
-    if (feedConnection === "connected" && !pollStale) return "live";
+    const realtimeConnected =
+      feedConnection === "connected" && clockConnection === "connected";
+    if (realtimeConnected && !pollStale) return "live";
     if (!pollStale) return "reconnecting";
-    if (feedConnection === "connected") return "polling";
+    if (realtimeConnected) return "polling";
     return "offline";
-  }, [feedConnection, liveInProgress, pollStale]);
+  }, [feedConnection, clockConnection, liveInProgress, pollStale]);
 
   const feedSyncDetail = useMemo(() => {
     if (!liveInProgress || feedSyncStatus === "live") return null;
