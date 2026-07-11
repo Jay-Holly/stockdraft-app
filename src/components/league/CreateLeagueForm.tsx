@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Button } from "@/components/Button";
 import { buildInviteLinkPath } from "@/lib/app-url";
 import {
@@ -71,6 +72,55 @@ function OptionGroup<T extends string | number>({
                   {option.hint}
                 </span>
               )}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+function SportsLeaguePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-semibold text-white">Sports league</legend>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {SPORTS_LEAGUE_FORMATS.map((format) => {
+          const selected = value === format.id;
+          return (
+            <button
+              key={format.id}
+              type="button"
+              onClick={() => onChange(format.id)}
+              className={`rounded-xl border p-2.5 text-center transition-colors ${
+                selected
+                  ? "border-gold/60 bg-gold/10 text-white"
+                  : "border-dark-border bg-dark/40 text-muted hover:border-dark-border hover:text-white"
+              }`}
+            >
+              {format.logoSrc ? (
+                <Image
+                  src={format.logoSrc}
+                  alt=""
+                  width={56}
+                  height={70}
+                  className="mx-auto mb-1.5 rounded"
+                />
+              ) : (
+                <span className="mx-auto mb-1.5 flex h-[70px] w-[56px] items-center justify-center rounded border border-dashed border-dark-border text-[0.6875rem] text-muted">
+                  {format.label}
+                </span>
+              )}
+              <span className="block text-sm font-semibold">{format.label}</span>
+              <span className="block text-[0.6875rem] mt-0.5 opacity-80">
+                {format.description}
+              </span>
             </button>
           );
         })}
@@ -328,19 +378,13 @@ export function CreateLeagueForm({
       />
 
       {formatType === "sports_league" && (
-        <OptionGroup<string>
-          label="Sports league"
+        <SportsLeaguePicker
           value={sportsLeagueId}
           onChange={(value) => {
             setSportsLeagueId(value);
             const required = playerCountForSportsLeague(value);
             if (required != null) setPlayerCount(required);
           }}
-          options={SPORTS_LEAGUE_FORMATS.map((f) => ({
-            value: f.id,
-            label: f.label,
-            hint: f.description,
-          }))}
         />
       )}
 

@@ -25,10 +25,30 @@ export const SPORTS_LEAGUE_REQUIRED_PLAYER_COUNT: Record<
 };
 
 export const SPORTS_LEAGUE_FORMATS = [
-  { id: "sdfl", label: "SDFL", description: "StockDraft Football League" },
-  { id: "sdhl", label: "SDHL", description: "StockDraft Hockey League" },
-  { id: "sdba", label: "SDBA", description: "StockDraft Basketball Association" },
-  { id: "sdlb", label: "SDLB", description: "StockDraft League Baseball" },
+  {
+    id: "sdfl",
+    label: "SDFL",
+    description: "StockDraft Football League",
+    logoSrc: "/images/leagues/sdfl.png",
+  },
+  {
+    id: "sdhl",
+    label: "SDHL",
+    description: "StockDraft Hockey League",
+    logoSrc: null,
+  },
+  {
+    id: "sdba",
+    label: "SDBA",
+    description: "StockDraft Basketball Association",
+    logoSrc: "/images/leagues/sdba.png",
+  },
+  {
+    id: "sdlb",
+    label: "SDLB",
+    description: "StockDraft League Baseball",
+    logoSrc: null,
+  },
 ] as const;
 
 export type CreateLeagueConfig = {

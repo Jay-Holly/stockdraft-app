@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Button } from "@/components/Button";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
@@ -9,6 +10,7 @@ import {
   draftRoomHref,
   isDraftCountdownVisible,
 } from "@/lib/league/scheduled-draft";
+import { SPORTS_LEAGUE_FORMATS } from "@/lib/league/league-config";
 import type { HumanLeagueListItem } from "@/lib/league/human-league";
 
 export function leagueStatusLabel(status: string): string {
@@ -43,6 +45,9 @@ export function HumanLeagueCard({
   const enterDraft = !item.humanDraftComplete;
   const busy = switchingLeagueId === item.league.id;
   const isOwner = item.league.owner_user_id === currentUserId;
+  const sportsLeagueLogoSrc = SPORTS_LEAGUE_FORMATS.find(
+    (f) => f.id === item.league.sports_league_id
+  )?.logoSrc;
 
   return (
     <div
@@ -50,17 +55,28 @@ export function HumanLeagueCard({
         isActive ? "border-gold/50 bg-gold/5" : "border-dark-border bg-dark/20"
       }`}
     >
-      <div>
-        <div className="mb-2">
-          <LeagueSupportId code={item.league.support_code} />
+      <div className="flex items-start gap-3">
+        {sportsLeagueLogoSrc && (
+          <Image
+            src={sportsLeagueLogoSrc}
+            alt=""
+            width={40}
+            height={50}
+            className="shrink-0 rounded-md"
+          />
+        )}
+        <div className="min-w-0">
+          <div className="mb-2">
+            <LeagueSupportId code={item.league.support_code} />
+          </div>
+          <p className="font-semibold truncate">{item.humanTeamName}</p>
+          <p className="text-xs text-muted truncate">{item.league.name}</p>
+          <p className="text-xs text-muted capitalize mt-1">
+            {leagueStatusLabel(item.league.status)} · {item.memberCount}/
+            {item.league.player_count} players
+            {isActive ? " · selected" : ""}
+          </p>
         </div>
-        <p className="font-semibold truncate">{item.humanTeamName}</p>
-        <p className="text-xs text-muted truncate">{item.league.name}</p>
-        <p className="text-xs text-muted capitalize mt-1">
-          {leagueStatusLabel(item.league.status)} · {item.memberCount}/
-          {item.league.player_count} players
-          {isActive ? " · selected" : ""}
-        </p>
       </div>
 
       {waiting && (
