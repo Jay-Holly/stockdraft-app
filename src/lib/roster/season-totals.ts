@@ -158,7 +158,10 @@ export function computePickSeasonMetrics(
   if (baselineByWeek) {
     for (let week = 1; week < throughWeek; week++) {
       const row = baselineByWeek.get(week);
-      if (!row || row.valueAtClose == null) continue;
+      // A $0 close/open means the quote fetch failed when the snapshot was
+      // taken — treat the week as unscored rather than a total wipeout.
+      if (!row || row.valueAtClose == null || row.valueAtClose <= 0) continue;
+      if (row.valueAtOpen <= 0) continue;
       seasonDollarGain += computeWeekDollarGain(row.valueAtClose, row.valueAtOpen);
     }
   }

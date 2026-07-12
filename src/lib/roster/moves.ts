@@ -169,6 +169,28 @@ async function insertDraftPick(
   return { error: error?.message ?? "Could not insert pick." };
 }
 
+/**
+ * A pick row changing symbols (waiver claim, drop) or roles (IR promote)
+ * must not keep the previous symbol's week-baseline history — season math
+ * walks baselines by pick_id, so stale rows produce nonsense gains.
+ */
+async function clearPickWeekBaselines(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  pickId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("roster_week_baselines")
+    .delete()
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .eq("pick_id", pickId);
+  if (error) {
+    console.error("roster_week_baselines cleanup failed:", error.message);
+  }
+}
+
 async function logRosterMove(
   supabase: SupabaseClient,
   entry: {
@@ -260,6 +282,10 @@ export async function applyIrSwap(
     shares: promotedShares,
   });
   if (promoteResult.error) return promoteResult;
+
+  // Wipe the promoted slot's bench-era baseline history so season math
+  // starts it at the transferred value instead of mixing symbols.
+  await clearPickWeekBaselines(supabase, league.id, userId, bench.id);
 
   await applyIrSwapWeekBaselines(
     supabase,
@@ -535,6 +561,10 @@ export async function applyWaiverClaim(
   });
   if (patchResult.error) return patchResult;
 
+  // Fresh slate: the slot now holds a different symbol at $0 — the old
+  // symbol's baselines would otherwise show phantom losses/gains.
+  await clearPickWeekBaselines(supabase, league.id, userId, targetPick.id);
+
   const addedCount = await countLeagueRosteredSymbol(league.id, upper);
   if (addedCount < 1) {
     return {
@@ -625,6 +655,8 @@ export async function applyBenchDrop(
     acquired_via: "waiver",
   });
   if (patchResult.error) return patchResult;
+
+  await clearPickWeekBaselines(supabase, league.id, userId, benchPick.id);
 
   const droppedCount = await countLeagueRosteredSymbol(league.id, droppedSymbol);
   if (droppedCount > 0) {

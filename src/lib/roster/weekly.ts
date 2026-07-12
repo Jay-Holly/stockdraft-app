@@ -49,6 +49,16 @@ export function pickMarketValue(pick: DraftPick, price: number): number {
   return pick.shares * price;
 }
 
+/**
+ * A $0 market value for a pick that actually holds shares means the quote
+ * fetch failed — persisting it as a baseline poisons weekly/season math with
+ * fake -100% weeks. Empty slots (__OPEN__, 0-share bench) genuinely are $0.
+ */
+function isTrustworthyBaselineValue(pick: DraftPick, value: number): boolean {
+  if (value > 0) return true;
+  return pick.shares <= 0 || pick.symbol.toUpperCase() === "__OPEN__";
+}
+
 async function fetchPricesForPicks(
   picks: DraftPick[]
 ): Promise<Map<string, number>> {
@@ -84,7 +94,11 @@ async function fetchPricesForPicks(
         livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
       );
     } else {
-      prices.set(symbol, stockQuotes.get(symbol)?.price ?? 0);
+      const livePrice = stockQuotes.get(symbol)?.price ?? 0;
+      prices.set(
+        symbol,
+        livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
+      );
     }
   }
 
@@ -284,6 +298,7 @@ async function computeScoringWeekInputs(
       const currentValue =
         !useHybrid &&
         baseline?.valueAtClose != null &&
+        baseline.valueAtClose > 0 &&
         (pick.pick_type === "stock" || pick.pick_type === "crypto")
           ? baseline.valueAtClose
           : resolveHybridScoringValue(
@@ -325,6 +340,8 @@ export async function captureFridayStockCloseForUser(
       pick,
       livePrices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
     );
+
+    if (!isTrustworthyBaselineValue(pick, closeValue)) continue;
 
     const { data: existing } = await supabase
       .from("roster_week_baselines")
@@ -403,16 +420,22 @@ export async function captureWeekBaselinesForUser(
 
   const prices = await fetchPricesForPicks(picks);
 
-  const rows = picks.map((pick) => ({
-    league_id: leagueId,
-    user_id: userId,
-    week_number: weekNumber,
-    pick_id: pick.id,
-    value_at_open: pickMarketValue(
+  const rows = picks.flatMap((pick) => {
+    const value = pickMarketValue(
       pick,
       prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
-    ),
-  }));
+    );
+    if (!isTrustworthyBaselineValue(pick, value)) return [];
+    return [
+      {
+        league_id: leagueId,
+        user_id: userId,
+        week_number: weekNumber,
+        pick_id: pick.id,
+        value_at_open: value,
+      },
+    ];
+  });
 
   if (rows.length === 0) return;
 
@@ -493,6 +516,8 @@ export async function captureWeekCloseSnapshots(
         pick,
         prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
       );
+
+      if (!isTrustworthyBaselineValue(pick, closeValue)) continue;
 
       const { data: existing } = await supabase
         .from("roster_week_baselines")

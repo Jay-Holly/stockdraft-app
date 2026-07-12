@@ -48,7 +48,11 @@ export async function fetchLivePricesForPicks(
         livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
       );
     } else {
-      prices.set(symbol, stockQuotes.get(symbol)?.price ?? 0);
+      const livePrice = stockQuotes.get(symbol)?.price ?? 0;
+      prices.set(
+        symbol,
+        livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
+      );
     }
   }
 
@@ -67,7 +71,8 @@ export function resolveHybridScoringValue(
   if (
     useHybrid &&
     pick.pick_type === "stock" &&
-    baseline?.stockValueAtFridayClose != null
+    baseline?.stockValueAtFridayClose != null &&
+    baseline.stockValueAtFridayClose > 0
   ) {
     return baseline.stockValueAtFridayClose;
   }
