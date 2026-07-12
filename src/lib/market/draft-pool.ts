@@ -61,24 +61,32 @@ export function filterDraftPoolStocks(
   options: {
     filter?: DraftPoolFilter;
     query?: string;
+    /**
+     * Symbols already drafted/off-board. "Top 100" re-ranks live against
+     * these so it always shows the 100 best-cap stocks still available,
+     * instead of a static rank<=100 slice that drains as picks happen.
+     */
+    excludeSymbols?: Set<string>;
   }
 ): DraftPoolStock[] {
   const q = options.query?.trim().toLowerCase() ?? "";
   const filter = options.filter ?? "All";
+  const exclude = options.excludeSymbols;
 
   let result = stocks;
 
   if (filter === "Top 100") {
     result = stocks
       .filter((stock) => {
-        const rank = getMarketCapRank(stock);
-        return rank != null && rank <= 100;
+        if (exclude?.has(stock.symbol.toUpperCase())) return false;
+        return getMarketCapRank(stock) != null;
       })
       .sort(
         (a, b) =>
           (getMarketCapRank(a) ?? Number.MAX_SAFE_INTEGER) -
           (getMarketCapRank(b) ?? Number.MAX_SAFE_INTEGER)
-      );
+      )
+      .slice(0, 100);
   } else if (filter === "Crypto") {
     result = [];
   } else {
@@ -97,8 +105,14 @@ export function filterDraftPoolStocks(
   );
 }
 
-export function getTop100PoolSymbols(stocks: DraftPoolStock[]): string[] {
-  return filterDraftPoolStocks(stocks, { filter: "Top 100" }).map((s) => s.symbol);
+export function getTop100PoolSymbols(
+  stocks: DraftPoolStock[],
+  excludeSymbols?: Set<string>
+): string[] {
+  return filterDraftPoolStocks(stocks, {
+    filter: "Top 100",
+    excludeSymbols,
+  }).map((s) => s.symbol);
 }
 
 export const CRYPTO_DISPLAY_NAMES: Record<string, string> = {

@@ -338,10 +338,21 @@ export function StockPool({
 
   const getQuotePrice = (symbol: string) => quoteMap.get(symbol)?.price ?? 0;
 
+  const draftedSymbols = useMemo(() => {
+    if (showDraftedStocks) return undefined;
+    return new Set(
+      [...myDrafted, ...leagueOffBoard].map((s) => s.toUpperCase())
+    );
+  }, [showDraftedStocks, myDrafted, leagueOffBoard]);
+
   const filteredPool = useMemo(
     () =>
-      filterDraftPoolStocks(enrichedPool, { filter: poolFilter, query: localFilter }),
-    [enrichedPool, poolFilter, localFilter]
+      filterDraftPoolStocks(enrichedPool, {
+        filter: poolFilter,
+        query: localFilter,
+        excludeSymbols: draftedSymbols,
+      }),
+    [enrichedPool, poolFilter, localFilter, draftedSymbols]
   );
 
   const sortedPool = useMemo(
@@ -949,7 +960,7 @@ export function StockPool({
                 ? `Top ${cryptoPool.length} crypto · $100K starters / free bench · once per manager`
                 : `Top ${cryptoPool.length} crypto by market cap · surcharge per coin`
             : isTop100View
-              ? `Top 100 S&P 500 by market cap · showing ${poolVisible.length} of ${displayedPool.length} stocks`
+              ? `Top ${poolVisible.length} available by market cap · re-ranks as picks come off the board`
               : `Showing ${poolVisible.length} of ${displayedPool.length} S&P 500 stocks`}
         {isReferenceMode && !poolLoading && " · Browse anytime after your draft is complete"}
       </p>

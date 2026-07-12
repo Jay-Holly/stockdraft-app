@@ -107,24 +107,6 @@ export function DraftRoom({
     [cryptoPool]
   );
 
-  const poolSymbols = useMemo(() => {
-    const top100 = getTop100PoolSymbols(poolStocks);
-    const batch = poolStocks.slice(0, POOL_QUOTE_BATCH).map((s) => s.symbol);
-    return [...new Set([...top100, ...batch, ...cryptoSymbols])];
-  }, [poolStocks, cryptoSymbols]);
-
-  const { orderedQuotes: poolQuotes, loading: poolQuotesLoading } =
-    usePoolQuotes(poolSymbols);
-  const { orderedQuotes: cryptoQuotes } = useCryptoQuotes(cryptoSymbols);
-
-  const quotes = useMemo(() => {
-    const map = new Map<string, MarketQuote>();
-    for (const q of [...poolQuotes, ...cryptoQuotes]) {
-      map.set(q.symbol, q);
-    }
-    return [...map.values()];
-  }, [poolQuotes, cryptoQuotes]);
-
   const leagueOffBoard = useMemo(
     () => new Set(state?.leagueOffBoard ?? []),
     [state?.leagueOffBoard]
@@ -139,6 +121,29 @@ export function DraftRoom({
     }
     return stock;
   }, [state?.myStockSymbols, state?.myCryptoSymbols, state?.sportsSimDraftRules]);
+
+  const poolSymbols = useMemo(() => {
+    // Top 100 re-ranks live as picks come off the board, so quote coverage
+    // has to follow the current 100, not the static rank<=100 set.
+    const drafted = new Set(
+      [...myDrafted, ...leagueOffBoard].map((s) => s.toUpperCase())
+    );
+    const top100 = getTop100PoolSymbols(poolStocks, drafted);
+    const batch = poolStocks.slice(0, POOL_QUOTE_BATCH).map((s) => s.symbol);
+    return [...new Set([...top100, ...batch, ...cryptoSymbols])];
+  }, [poolStocks, cryptoSymbols, myDrafted, leagueOffBoard]);
+
+  const { orderedQuotes: poolQuotes, loading: poolQuotesLoading } =
+    usePoolQuotes(poolSymbols);
+  const { orderedQuotes: cryptoQuotes } = useCryptoQuotes(cryptoSymbols);
+
+  const quotes = useMemo(() => {
+    const map = new Map<string, MarketQuote>();
+    for (const q of [...poolQuotes, ...cryptoQuotes]) {
+      map.set(q.symbol, q);
+    }
+    return [...map.values()];
+  }, [poolQuotes, cryptoQuotes]);
 
   const skipRecoveryAttempts = useRef(0);
   const loadDraftInFlight = useRef<Promise<void> | null>(null);
