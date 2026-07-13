@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isSportsSimLeague } from "@/lib/season/sdpl-league";
+import { isCryptoSymbol } from "@/lib/draft/engine";
 
 export type PickInjuryMapRow = {
   league_id: string;
@@ -126,12 +127,19 @@ export async function seedSportsLeaguePickInjuryMapIfMissing(
   }
 
   const rows: PickInjuryMapRow[] = [];
+  const seenSymbols = new Set<string>();
   for (const event of events ?? []) {
     const globalPickNumber = event.global_pick_number;
     const symbol = event.symbol?.trim().toUpperCase();
     if (!globalPickNumber || !symbol) continue;
     if (symbol === "SKIP" || symbol === "__OPEN__") continue;
     if (event.pick_type === "skip") continue;
+    // Crypto isn't athlete-mapped and the same coin can be drafted by many
+    // managers — including it here creates duplicate (league_id, symbol)
+    // rows, which breaks the .maybeSingle() lookup by symbol.
+    if (isCryptoSymbol(symbol)) continue;
+    if (seenSymbols.has(symbol)) continue;
+    seenSymbols.add(symbol);
 
     const { injury_rank, cycle_group, week_offset } =
       computePickInjuryFields(globalPickNumber);

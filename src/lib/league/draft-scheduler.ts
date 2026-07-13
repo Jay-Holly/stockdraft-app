@@ -9,7 +9,7 @@ import {
 } from "@/lib/league/bot-fill";
 import { SPORTS_SIM_BOT_PROVISION_LEAD_MS } from "@/lib/draft/draft-constants";
 import { resolveDraftOrderForLeague } from "@/lib/league/draft-order-server";
-import { isSdflLeague } from "@/lib/league/sdfl-divisions";
+import { backfillMissingSdflBotIdentities, isSdflLeague } from "@/lib/league/sdfl-divisions";
 import { allSdflIdentitiesComplete } from "@/lib/league/team-identity";
 import {
   clearScheduledDraftError,
@@ -176,11 +176,23 @@ export async function maybeStartHumanLeagueDraft(
   }
 
   if (isSdflLeague(league.sports_league_id)) {
-    const identitiesReady = await allSdflIdentitiesComplete(
+    let identitiesReady = await allSdflIdentitiesComplete(
       supabase,
       leagueId,
       playerCount
     );
+    if (!identitiesReady) {
+      // A bot can be stuck at display_name "Pending" if identity assignment
+      // failed after its member row was already created — retry those.
+      const backfill = await backfillMissingSdflBotIdentities(supabase, leagueId);
+      if (backfill.backfilled > 0) {
+        identitiesReady = await allSdflIdentitiesComplete(
+          supabase,
+          leagueId,
+          playerCount
+        );
+      }
+    }
     if (!identitiesReady) {
       const message = `${leagueLabel}: waiting for all franchise identities before the draft can start.`;
       await recordScheduledDraftAttempt(supabase, leagueId, message);

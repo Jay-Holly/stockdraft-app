@@ -376,6 +376,46 @@ export function generateBotSdflIdentity(
   return { city, teamName, colors };
 }
 
+/**
+ * Bots get their league_members row created and their SDFL identity
+ * assigned in the same step (see fillEmptySlotsWithBots). If the identity
+ * half fails — transient error, no retry there — the row is left stuck at
+ * display_name "Pending" forever, since once all 32 rows exist the fill
+ * loop never runs again. This finds and retries just those stuck rows.
+ */
+export async function backfillMissingSdflBotIdentities(
+  supabase: SupabaseClient,
+  leagueId: string
+): Promise<{ backfilled: number; error?: string }> {
+  const rows = await loadSdflMemberIdentityRows(supabase, leagueId);
+
+  const usedTeamNames = new Set(
+    rows
+      .map((row) => row.display_name?.trim().toLowerCase())
+      .filter((name): name is string => Boolean(name) && name !== "pending")
+  );
+
+  const pending = rows.filter(
+    (row) =>
+      row.display_name?.trim() === "Pending" && !isIdentityRowComplete(row)
+  );
+
+  let backfilled = 0;
+  for (const row of pending) {
+    const result = await assignBotSdflIdentity(
+      supabase,
+      leagueId,
+      row.user_id,
+      backfilled,
+      usedTeamNames
+    );
+    if (result.error) return { backfilled, error: result.error };
+    backfilled++;
+  }
+
+  return { backfilled };
+}
+
 export async function assignBotSdflIdentity(
   supabase: SupabaseClient,
   leagueId: string,
