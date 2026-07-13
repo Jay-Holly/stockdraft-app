@@ -107,11 +107,23 @@ export type FreeAgentStock = {
   sector: string;
   price: number;
   changePercent: number;
+  /** 1 = largest market cap in the S&P 500 pool; null if unranked. */
+  marketCapRank: number | null;
+};
+
+export type FreeAgentCrypto = {
+  symbol: string;
+  name: string;
+  price: number;
+  changePercent: number;
 };
 
 export type FreeAgentsPageData = {
   leagueId: string;
   freeAgents: FreeAgentStock[];
+  cryptoFreeAgents: FreeAgentCrypto[];
+  /** Remaining league-wide crypto budget available to this team. */
+  cryptoRemaining: number;
   benchSlots: Array<{ pickId: string; symbol: string; isOpen?: boolean }>;
   /** Sports-sim open active slots (from IR moves). */
   openActiveSlots?: Array<{ pickId: string; symbol: string; isOpen?: boolean }>;

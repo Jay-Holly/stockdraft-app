@@ -619,6 +619,129 @@ export async function applyWaiverClaim(
   return {};
 }
 
+export async function applyCryptoFreeAgentClaim(
+  userId: string,
+  droppedPickId: string,
+  addSymbol: string,
+  allocation: number
+): Promise<RosterMoveResult> {
+  const season = await requireSeasonLeague(userId);
+  if ("error" in season) return { error: season.error };
+
+  const { league } = season;
+  const irGate = await enforceSportsSimIrMoveAllowed(league.id, userId, "other");
+  if (irGate) return irGate;
+  const gate = await enforceFreeAgencyOpenForLeague(league.id);
+  if (gate) return gate;
+
+  const upper = addSymbol.toUpperCase();
+  if (!isCryptoSymbol(upper)) {
+    return { error: `${upper} is not in the crypto pool.` };
+  }
+
+  if (!Number.isFinite(allocation) || allocation <= 0) {
+    return { error: "Choose an allocation amount greater than $0." };
+  }
+
+  const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
+  if (!state.ok) return { error: state.error };
+
+  if (allocation > state.state.summary.cryptoRemaining + 0.01) {
+    return {
+      error: `Only $${state.state.summary.cryptoRemaining.toFixed(2)} of crypto budget remains.`,
+    };
+  }
+
+  const targetPick = state.state.picks.find((p) => p.id === droppedPickId);
+  if (!targetPick || targetPick.pick_type !== "bench") {
+    return { error: "Select a bench slot to convert to crypto." };
+  }
+
+  if (findActiveCryptoPick(state.state.picks, upper)) {
+    return {
+      error: `You already hold ${upper} — use crypto rebalance on My Team to adjust it instead.`,
+    };
+  }
+
+  const droppedSymbol = targetPick.symbol.toUpperCase();
+  const isOpenSlot = droppedSymbol === "__OPEN__";
+
+  const quote = await getCryptoQuote(upper);
+  if (quote.price <= 0) {
+    return { error: `Could not fetch a price for ${upper}.` };
+  }
+
+  const supabase = await createClient();
+  const buyerCounts =
+    state.state.buyerCounts ?? (await fetchBuyerCounts(supabase, league.id));
+  const buyerCount = buyerCounts[upper] ?? 0;
+  const computed = computeCryptoPick(allocation, quote.price, buyerCount);
+
+  const patchResult = await patchDraftPick(supabase, userId, targetPick.id, {
+    pick_type: "crypto",
+    symbol: upper,
+    price_at_pick: quote.price,
+    budget_spent: computed.budgetSpent,
+    shares: computed.shares,
+    surcharge_percent: computed.surchargePercent,
+    effective_value: computed.effectiveValue,
+    acquired_via: "waiver",
+  });
+  if (patchResult.error) return patchResult;
+
+  await incrementLeagueCryptoCount(supabase, league.id, upper, buyerCount);
+  await clearPickWeekBaselines(supabase, league.id, userId, targetPick.id);
+  await syncCryptoBaselinesAfterRebalance(supabase, league.id, userId);
+
+  if (!isOpenSlot) {
+    const droppedCount = await countLeagueRosteredSymbol(league.id, droppedSymbol);
+    if (droppedCount === 0) {
+      const offAfter = await getLeagueOffBoardSymbols(league.id);
+      if (offAfter.has(droppedSymbol)) {
+        return {
+          error: `${droppedSymbol} was dropped but is still off-board. Run migration 022 in Supabase.`,
+        };
+      }
+
+      await logRosterMove(supabase, {
+        league_id: league.id,
+        user_id: userId,
+        move_type: "waiver_drop",
+        pick_id: targetPick.id,
+        symbol: droppedSymbol,
+        prior_pick_type: "bench",
+        budget_before: targetPick.budget_spent,
+        budget_after: 0,
+        notes: `Released ${droppedSymbol} to league free agency`,
+      });
+    }
+  }
+
+  await logRosterMove(supabase, {
+    league_id: league.id,
+    user_id: userId,
+    move_type: "waiver_add",
+    pick_id: targetPick.id,
+    symbol: upper,
+    prior_symbol: isOpenSlot ? undefined : droppedSymbol,
+    prior_pick_type: "bench",
+    new_pick_type: "crypto",
+    budget_before: targetPick.budget_spent,
+    budget_after: computed.budgetSpent,
+    price_at_move: quote.price,
+    shares_after: computed.shares,
+    notes: isOpenSlot
+      ? `Added FA ${upper} (crypto) to open bench slot — $${computed.budgetSpent.toFixed(2)}${
+          computed.surchargePercent > 0 ? ` (${computed.surchargePercent}% surcharge)` : ""
+        }`
+      : `Dropped ${droppedSymbol}, added FA ${upper} (crypto) to bench — $${computed.budgetSpent.toFixed(2)}${
+          computed.surchargePercent > 0 ? ` (${computed.surchargePercent}% surcharge)` : ""
+        }`,
+  });
+
+  return {};
+}
+
 export async function applyBenchDrop(
   userId: string,
   benchPickId: string

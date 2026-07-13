@@ -1,9 +1,11 @@
 import { loadLeagueBonusSummary } from "@/lib/awards/page-data";
 import { fetchDraftPool } from "@/lib/draft-pool/server";
+import { fetchCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoSymbol, isStockPickEligible } from "@/lib/draft/engine";
 import { loadDraftStateDetailed, fetchBuyerCounts } from "@/lib/draft/server";
 import type { DraftPick } from "@/lib/draft/types";
-import { OPEN_ROUNDS } from "@/lib/draft/types";
+import { CRYPTO_POOL, OPEN_ROUNDS } from "@/lib/draft/types";
+import { getMarketCapRank } from "@/lib/market/draft-pool";
 import { SPORTS_SIM_STARTER_ROUNDS } from "@/lib/draft/draft-constants";
 import {
   type AiLeague,
@@ -76,6 +78,7 @@ import {
   pickMarketValue,
 } from "@/lib/roster/weekly";
 import type {
+  FreeAgentCrypto,
   FreeAgentStock,
   FreeAgentsPageData,
   LeaguePageData,
@@ -733,10 +736,26 @@ export async function loadFreeAgentsPageData(
       sector: stock.sector,
       price,
       changePercent,
+      marketCapRank: getMarketCapRank(stock),
     });
   }
 
   freeAgents.sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+  const cryptoPool = await fetchCryptoPool();
+  const cryptoQuotes = await getCryptoQuotesMap();
+  const cryptoFreeAgents: FreeAgentCrypto[] = cryptoPool.map((coin) => ({
+    symbol: coin.symbol,
+    name: coin.name,
+    price: cryptoQuotes[coin.symbol]?.price ?? 0,
+    changePercent: cryptoQuotes[coin.symbol]?.changePercent ?? 0,
+  }));
+
+  const cryptoSpent = roster.roster.crypto.reduce(
+    (sum, p) => sum + p.budget_spent,
+    0
+  );
+  const cryptoRemaining = Math.max(0, CRYPTO_POOL - cryptoSpent);
 
   const { calendar } = await loadSeasonCalendarForLeague(league.id);
 
@@ -745,6 +764,8 @@ export async function loadFreeAgentsPageData(
     data: {
       leagueId: league.id,
       freeAgents,
+      cryptoFreeAgents,
+      cryptoRemaining,
       benchSlots: roster.roster.bench.map((p) => ({
         pickId: p.id,
         symbol: p.symbol,
