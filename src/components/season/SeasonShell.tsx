@@ -9,10 +9,10 @@ import { leagueThemeLogoSrc, type LeagueThemeId } from "@/lib/league/league-conf
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/league", label: "League" },
-  { href: "/matchups", label: "Matchups" },
-  { href: "/awards", label: "Awards" },
   { href: "/my-team", label: "My Team" },
+  { href: "/matchups", label: "Matchups" },
   { href: "/free-agents", label: "Free Agents" },
+  { href: "/awards", label: "Awards" },
   { href: "/draft-recap", label: "Draft Recap" },
 ];
 
