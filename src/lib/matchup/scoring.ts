@@ -304,6 +304,44 @@ async function seedLegacyChampionshipIfNeeded(
   return { seeded: true };
 }
 
+/**
+ * Winner on the league's primary scoring metric; if that's a true tie
+ * within epsilon, break it on the OTHER metric ($ gain decides a % league,
+ * % gain decides a $ league) before falling back to a genuine tie.
+ */
+export async function resolveMatchupWinner(
+  homeUserId: string,
+  awayUserId: string,
+  leagueId: string,
+  scoringMode: ReturnType<typeof parseLeagueScoringMode>,
+  homeScore: number,
+  awayScore: number,
+  options?: {
+    forceHybrid?: boolean;
+    weekNumber?: number;
+    at?: Date;
+    supabase?: SupabaseClient;
+  }
+): Promise<string | null> {
+  const epsilon = matchupScoreEpsilon(scoringMode);
+  if (Math.abs(homeScore - awayScore) >= epsilon) {
+    return homeScore > awayScore ? homeUserId : awayUserId;
+  }
+
+  const tiebreakMode: ReturnType<typeof parseLeagueScoringMode> =
+    scoringMode === "percent_gain" ? "dollar_gain" : "percent_gain";
+  const [homeTiebreak, awayTiebreak] = await Promise.all([
+    computeWeeklyScoreForUser(homeUserId, leagueId, tiebreakMode, options),
+    computeWeeklyScoreForUser(awayUserId, leagueId, tiebreakMode, options),
+  ]);
+
+  const tiebreakEpsilon = matchupScoreEpsilon(tiebreakMode);
+  if (Math.abs(homeTiebreak - awayTiebreak) < tiebreakEpsilon) {
+    return null;
+  }
+  return homeTiebreak > awayTiebreak ? homeUserId : awayUserId;
+}
+
 async function scoreSingleMatchup(
   matchup: LeagueMatchupRow,
   scoringMode: ReturnType<typeof parseLeagueScoringMode>,
@@ -357,15 +395,15 @@ async function scoreSingleMatchup(
     return { error: SCORING_UNAVAILABLE_MESSAGE };
   }
 
-  const epsilon = matchupScoreEpsilon(scoringMode);
-  let winnerUserId: string | null;
-  if (Math.abs(homeScore - awayScore) < epsilon) {
-    winnerUserId = null;
-  } else if (homeScore > awayScore) {
-    winnerUserId = matchup.home_user_id;
-  } else {
-    winnerUserId = matchup.away_user_id;
-  }
+  const winnerUserId = await resolveMatchupWinner(
+    matchup.home_user_id,
+    matchup.away_user_id,
+    matchup.league_id,
+    scoringMode,
+    homeScore,
+    awayScore,
+    { weekNumber: options?.weekNumber ?? matchup.week_number, forceHybrid: options?.forceHybrid, supabase }
+  );
 
   const { data: league } = await supabase
     .from("leagues")
@@ -414,51 +452,59 @@ async function scoreSingleMatchup(
   return {};
 }
 
+/**
+ * Sets (not increments) each affected user's wins/losses by deriving them
+ * from every completed league_matchups row. This function gets called from
+ * two independent paths (finalizeMatchupsForLeagueWeek and
+ * scoreMatchupForLeague) that can both process the same newly-completed
+ * week under normal traffic — a read-increment-write here would double
+ * (or triple) count. Deriving from the matchup rows every time makes
+ * repeated calls idempotent regardless of how many times/paths trigger it.
+ */
 async function applyStandingsForCompletedWeek(
   leagueId: string,
   weekNumber: number,
   supabaseOverride?: SupabaseClient
 ): Promise<void> {
   const supabase = supabaseOverride ?? (await createClient());
-  const { data: completed } = await supabase
+  const { data: weekMatchups } = await supabase
     .from("league_matchups")
-    .select("home_user_id, away_user_id, winner_user_id")
+    .select("home_user_id, away_user_id")
     .eq("league_id", leagueId)
     .eq("week_number", weekNumber)
     .eq("status", "complete");
 
-  for (const matchup of completed ?? []) {
-    if (!matchup.home_user_id || !matchup.away_user_id) continue;
+  const affectedUserIds = new Set<string>();
+  for (const matchup of weekMatchups ?? []) {
+    if (matchup.home_user_id) affectedUserIds.add(matchup.home_user_id);
+    if (matchup.away_user_id) affectedUserIds.add(matchup.away_user_id);
+  }
+  if (affectedUserIds.size === 0) return;
 
-    for (const userId of [matchup.home_user_id, matchup.away_user_id]) {
-      const { data: row } = await supabase
-        .from("league_standings")
-        .select("wins, losses")
-        .eq("league_id", leagueId)
-        .eq("user_id", userId)
-        .maybeSingle();
+  const { data: allCompleted } = await supabase
+    .from("league_matchups")
+    .select("home_user_id, away_user_id, winner_user_id")
+    .eq("league_id", leagueId)
+    .eq("status", "complete");
 
-      if (!row) continue;
-
-      let wins = row.wins;
-      let losses = row.losses;
-
-      if (matchup.winner_user_id === userId) {
-        wins += 1;
-      } else if (matchup.winner_user_id) {
-        losses += 1;
-      }
-
-      await supabase
-        .from("league_standings")
-        .update({
-          wins,
-          losses,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("league_id", leagueId)
-        .eq("user_id", userId);
+  for (const userId of affectedUserIds) {
+    let wins = 0;
+    let losses = 0;
+    for (const m of allCompleted ?? []) {
+      if (m.home_user_id !== userId && m.away_user_id !== userId) continue;
+      if (m.winner_user_id === userId) wins++;
+      else if (m.winner_user_id) losses++;
     }
+
+    await supabase
+      .from("league_standings")
+      .update({
+        wins,
+        losses,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("league_id", leagueId)
+      .eq("user_id", userId);
   }
 }
 
