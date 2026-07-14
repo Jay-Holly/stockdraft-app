@@ -9,9 +9,9 @@ export const NFL_TEAM_MAP_COORDS: Record<string, { x: number; y: number }> = {
   BUF: { x: 795, y: 118 },
   MIA: { x: 828, y: 560 },
   NE: { x: 872, y: 108 },
-  NYJ: { x: 808, y: 158 },
+  NYJ: { x: 795, y: 145 },
   // AFC North
-  BAL: { x: 768, y: 188 },
+  BAL: { x: 760, y: 200 },
   CIN: { x: 648, y: 222 },
   CLE: { x: 682, y: 168 },
   PIT: { x: 728, y: 180 },
@@ -23,13 +23,13 @@ export const NFL_TEAM_MAP_COORDS: Record<string, { x: number; y: number }> = {
   // AFC West
   DEN: { x: 378, y: 248 },
   KC: { x: 468, y: 258 },
-  LAC: { x: 92, y: 352 },
+  LAC: { x: 75, y: 365 },
   LV: { x: 148, y: 288 },
   // NFC East
   DAL: { x: 468, y: 398 },
-  NYG: { x: 812, y: 152 },
-  PHI: { x: 792, y: 168 },
-  WAS: { x: 772, y: 198 },
+  NYG: { x: 820, y: 148 },
+  PHI: { x: 805, y: 178 },
+  WAS: { x: 785, y: 225 },
   // NFC North
   CHI: { x: 578, y: 198 },
   DET: { x: 652, y: 168 },
