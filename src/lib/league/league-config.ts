@@ -29,25 +29,25 @@ export const SPORTS_LEAGUE_FORMATS = [
     id: "sdfl",
     label: "SDFL",
     description: "StockDraft Football League",
-    logoSrc: "/images/leagues/sdfl.png",
+    logoSrc: "/images/leagues/sdfl.png" as string | null,
   },
   {
     id: "sdhl",
     label: "SDHL",
     description: "StockDraft Hockey League",
-    logoSrc: null,
+    logoSrc: "/images/leagues/sdhl.png" as string | null,
   },
   {
     id: "sdba",
     label: "SDBA",
     description: "StockDraft Basketball Association",
-    logoSrc: "/images/leagues/sdba.png",
+    logoSrc: "/images/leagues/sdba.png" as string | null,
   },
   {
     id: "sdlb",
     label: "SDLB",
     description: "StockDraft League Baseball",
-    logoSrc: null,
+    logoSrc: "/images/leagues/sdlb.png" as string | null,
   },
 ] as const;
 
