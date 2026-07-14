@@ -9,10 +9,14 @@ import {
   type SdflDivision,
   type SdflDivisionSlot,
 } from "@/lib/league/sdfl-divisions";
-import { mapSdflSlotToRealTeam } from "@/lib/sim/nfl-team-alignment";
+import {
+  mapRealTeamToDisplayLabel,
+  mapSdflSlotToRealTeam,
+} from "@/lib/sim/nfl-team-alignment";
 import {
   NFL_TEAM_MAP_COORDS,
-  US_MAP_OUTLINE_PATH,
+  SDFL_MAP_IMAGE_HEIGHT,
+  SDFL_MAP_IMAGE_WIDTH,
 } from "@/lib/league/nfl-team-map-coords";
 import type { LeagueIdentityPayload } from "@/lib/league/team-identity";
 
@@ -55,8 +59,9 @@ export function SdflFranchiseMap({
           slot.division,
           slot.divisionSlot
         );
-        const coords = team ? NFL_TEAM_MAP_COORDS[team] : null;
-        return { slot, key, team, coords };
+        const label = team ? mapRealTeamToDisplayLabel(team) : null;
+        const coords = label ? NFL_TEAM_MAP_COORDS[label] : null;
+        return { slot, key, team: label, coords };
       }).filter(
         (marker): marker is typeof marker & { coords: { x: number; y: number } } =>
           marker.coords !== null
@@ -72,12 +77,18 @@ export function SdflFranchiseMap({
   return (
     <div className="sdfl-map-wrap">
       <svg
-        viewBox="0 0 1000 620"
+        viewBox={`0 0 ${SDFL_MAP_IMAGE_WIDTH} ${SDFL_MAP_IMAGE_HEIGHT}`}
         className="sdfl-map-svg"
         role="group"
         aria-label="SDFL franchise map — claim an open division slot"
       >
-        <path d={US_MAP_OUTLINE_PATH} className="sdfl-map-outline" />
+        <image
+          href="/images/league/sdfl-us-map.png"
+          x="0"
+          y="0"
+          width={SDFL_MAP_IMAGE_WIDTH}
+          height={SDFL_MAP_IMAGE_HEIGHT}
+        />
 
         {markers.map(({ slot, key, team, coords }) => {
           const isOpen = openSlotKeys.has(key);

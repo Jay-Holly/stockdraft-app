@@ -3567,12 +3567,6 @@ body:has(.landing-screen) {
   display: block;
 }
 
-.sdfl-map-outline {
-  fill: rgba(255, 255, 255, 0.035);
-  stroke: rgba(255, 255, 255, 0.12);
-  stroke-width: 2;
-}
-
 .sdfl-map-marker {
   cursor: pointer;
   outline: none;

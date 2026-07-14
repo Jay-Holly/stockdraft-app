@@ -38,6 +38,25 @@ export function mapSdflSlotToRealTeam(
   return teams[divisionSlot - 1] ?? null;
 }
 
+/**
+ * UI-safe market label for a real team code — never shown to users as the
+ * actual NFL abbreviation for markets that name a specific franchise (NYJ,
+ * NYG, WAS, LAC). Everything else already reads as a plain city/region
+ * code, not a team identity, so it passes through unchanged. Only use this
+ * for display (map labels, tooltips) — sim data alignment (schedule,
+ * injuries) keys off the real team code from mapSdflSlotToRealTeam.
+ */
+const DISPLAY_LABEL_OVERRIDES: Record<string, string> = {
+  NYJ: "NJ",
+  NYG: "NY",
+  WAS: "DC",
+  LAC: "SD",
+};
+
+export function mapRealTeamToDisplayLabel(team: string): string {
+  return DISPLAY_LABEL_OVERRIDES[team] ?? team;
+}
+
 export type SdflSlot = {
   conference: SdflConference;
   division: SdflDivision;
