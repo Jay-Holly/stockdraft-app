@@ -430,16 +430,34 @@ export function DraftRoom({
     return "offline";
   }, [feedConnection, clockConnection, liveInProgress, pollStale]);
 
+  // Two independent realtime channels (feed + clock) both have to be
+  // connected for this to read "live" — a sub-second blip in either one
+  // otherwise flips the badge to "Reconnecting" and back, flickering.
+  // Debounce entering a degraded state; recovery to "live" is immediate.
+  const [displaySyncStatus, setDisplaySyncStatus] =
+    useState<LiveDraftFeedSyncStatus>(feedSyncStatus);
+
+  useEffect(() => {
+    if (feedSyncStatus === "live") {
+      setDisplaySyncStatus("live");
+      return;
+    }
+    const timer = setTimeout(() => {
+      setDisplaySyncStatus(feedSyncStatus);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [feedSyncStatus]);
+
   const feedSyncDetail = useMemo(() => {
-    if (!liveInProgress || feedSyncStatus === "live") return null;
-    if (feedSyncStatus === "reconnecting") {
+    if (!liveInProgress || displaySyncStatus === "live") return null;
+    if (displaySyncStatus === "reconnecting") {
       return "Live feed reconnecting — picks still load via polling.";
     }
-    if (feedSyncStatus === "polling") {
+    if (displaySyncStatus === "polling") {
       return "Draft polling is slow — waiting for the next refresh.";
     }
     return "Live feed offline — refresh the page if picks stop appearing.";
-  }, [feedSyncStatus, liveInProgress]);
+  }, [displaySyncStatus, liveInProgress]);
 
   const handleToggleSafetyPick = useCallback(async (symbol: string) => {
     setError(null);
@@ -793,7 +811,7 @@ export function DraftRoom({
                 <LiveDraftTicker
                   feed={state.draftFeed ?? []}
                   status={liveDraft?.status}
-                  syncStatus={feedSyncStatus}
+                  syncStatus={displaySyncStatus}
                   syncDetail={feedSyncDetail}
                 />
                 <DraftRoundSelector
