@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/Button";
 import { buildInviteLinkPath } from "@/lib/app-url";
@@ -135,7 +135,18 @@ export function CreateLeagueForm({
   defaultTeamName: string;
 }) {
   const router = useRouter();
-  const [formatType, setFormatType] = useState<LeagueFormatType>("standard");
+  const searchParams = useSearchParams();
+  const entryParam = searchParams.get("entry");
+  /** Dashboard buttons deep-link here with a fixed format — hides the toggle entirely. */
+  const lockedFormat: LeagueFormatType | null =
+    entryParam === "player"
+      ? "standard"
+      : entryParam === "sports"
+        ? "sports_league"
+        : null;
+  const [formatType, setFormatType] = useState<LeagueFormatType>(
+    lockedFormat ?? "standard"
+  );
   const [sportsLeagueId, setSportsLeagueId] = useState("sdfl");
   const [playerCount, setPlayerCount] = useState<LeaguePlayerCount>(4);
   const [visibility, setVisibility] = useState<LeagueVisibility>("private");
@@ -204,7 +215,10 @@ export function CreateLeagueForm({
   const allHumanLeague = config.opponentType === "all_human";
   const isSdfl =
     formatType === "sports_league" && isSdflLeague(sportsLeagueId);
-  const playerCountOptions = playerCountsForFormat(formatType, sportsLeagueId);
+  const playerCountOptions = playerCountsForFormat(
+    formatType,
+    sportsLeagueId
+  ).filter((count) => !(entryParam === "player" && count === 2));
   const requiredSportsPlayerCount = playerCountForSportsLeague(sportsLeagueId);
 
   useEffect(() => {
@@ -354,28 +368,30 @@ export function CreateLeagueForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <OptionGroup<LeagueFormatType>
-        label="Format type"
-        description="Standard is the 13-week NFL Package style season."
-        value={formatType}
-        onChange={(value) => {
-          setFormatType(value);
-          if (value === "sports_league") {
-            const required = playerCountForSportsLeague(sportsLeagueId);
-            if (required != null) setPlayerCount(required);
-          } else if (playerCount > 12) {
-            setPlayerCount(4);
-          }
-        }}
-        options={[
-          { value: "standard", label: "Standard", hint: "13-week season" },
-          {
-            value: "sports_league",
-            label: "Sports League",
-            hint: "SDFL · SDHL · SDBA · SDLB",
-          },
-        ]}
-      />
+      {!lockedFormat && (
+        <OptionGroup<LeagueFormatType>
+          label="Format type"
+          description="Standard is the 13-week NFL Package style season."
+          value={formatType}
+          onChange={(value) => {
+            setFormatType(value);
+            if (value === "sports_league") {
+              const required = playerCountForSportsLeague(sportsLeagueId);
+              if (required != null) setPlayerCount(required);
+            } else if (playerCount > 12) {
+              setPlayerCount(4);
+            }
+          }}
+          options={[
+            { value: "standard", label: "Standard", hint: "13-week season" },
+            {
+              value: "sports_league",
+              label: "Sports League",
+              hint: "SDFL · SDHL · SDBA · SDLB",
+            },
+          ]}
+        />
+      )}
 
       {formatType === "sports_league" && (
         <SportsLeaguePicker

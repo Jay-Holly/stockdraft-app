@@ -1,7 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Logo } from "@/components/Logo";
 import { Button } from "@/components/Button";
 import { PageWatermark } from "@/components/PageWatermark";
 import { DayTraderEnterForm } from "@/components/day-trader/DayTraderEnterForm";
@@ -55,17 +55,36 @@ export default async function DayTraderPage() {
         <PageWatermark />
         <div className="max-w-md mx-auto w-full flex-1 flex flex-col">
           <div className="text-center mb-8">
-            <Logo size="lg" />
+            <Image
+              src="/images/day-trader-logo.png"
+              alt="StockDraft Day Trader"
+              width={260}
+              height={260}
+              className="mx-auto"
+              priority
+            />
             <h1 className="text-xl font-bold mt-4">Day Trader</h1>
             <p className="text-muted text-sm mt-2">
               Weekly contest: copy your 10 starters, trade Mon–Fri, compete on $
               and % gain.
             </p>
           </div>
+          <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-2 mb-6">
+            <h2 className="text-sm font-semibold text-white">Game rules</h2>
+            <p className="text-sm text-muted">
+              Rules and an explanation of how Day Trader differs from the
+              rest of StockDraft are coming soon.
+            </p>
+          </div>
           <form action={joinDayTrader} className="space-y-4 mt-auto">
             <Button type="submit" variant="primary" className="w-full">
               Join Day Trader — It&apos;s Free
             </Button>
+            <div className="rounded-xl border border-dark-border bg-dark/40 p-3 text-xs text-muted">
+              Brought to you by Robinhood — start a new account with codeword{" "}
+              <span className="text-white font-semibold">&quot;Stock Draft&quot;</span>{" "}
+              and get $50 off your first stock purchase.
+            </div>
             <Link
               href="/dashboard"
               className="block text-center text-sm text-muted hover:text-white"
@@ -100,7 +119,14 @@ export default async function DayTraderPage() {
       <PageWatermark />
       <div className="max-w-lg mx-auto space-y-6">
         <div className="text-center">
-          <Logo size="lg" />
+          <Image
+            src="/images/day-trader-logo.png"
+            alt="StockDraft Day Trader"
+            width={260}
+            height={260}
+            className="mx-auto"
+            priority
+          />
           <h1 className="text-xl font-bold mt-4">
             {contest?.contest_name ?? "Day Trader"}
           </h1>
@@ -192,6 +218,20 @@ export default async function DayTraderPage() {
             max 10 symbols.
           </p>
           <p>One entry per user per week.</p>
+        </div>
+
+        <div className="rounded-xl border border-dark-border bg-dark/40 p-3 text-xs text-muted">
+          Brought to you by Robinhood — start a new account with codeword{" "}
+          <span className="text-white font-semibold">&quot;Stock Draft&quot;</span> and
+          get $50 off your first stock purchase.
+        </div>
+
+        <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-2">
+          <h2 className="text-sm font-semibold text-white">Game rules</h2>
+          <p className="text-sm text-muted">
+            Rules and an explanation of how Day Trader differs from the rest
+            of StockDraft are coming soon.
+          </p>
         </div>
 
         <Link

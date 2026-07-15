@@ -76,11 +76,11 @@
 }
 
 [data-league-theme="day-trader"] {
-  --color-league-primary: #4b2c82;
+  --color-league-primary: #8cdc51;
   --color-league-secondary: #f2d311;
-  --color-league-on-primary: #ffffff;
+  --color-league-on-primary: #0d0a06;
   --color-league-on-secondary: #0d0a06;
-  --color-league-accent: #4b2c82;
+  --color-league-accent: #8cdc51;
 }
 
 body {

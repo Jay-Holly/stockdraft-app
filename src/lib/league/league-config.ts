@@ -159,9 +159,9 @@ export const LEAGUE_THEMES: Record<LeagueThemeId, LeagueTheme> = {
   "day-trader": {
     id: "day-trader",
     label: "Day Trader",
-    primary: "#4b2c82",
+    primary: "#8cdc51",
     secondary: "#f2d311",
-    onPrimary: "white",
+    onPrimary: "dark",
     onSecondary: "dark",
   },
 };

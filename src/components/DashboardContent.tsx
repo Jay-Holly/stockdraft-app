@@ -17,7 +17,6 @@ import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePan
 import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCountdown";
 import { isDraftCountdownVisible } from "@/lib/league/scheduled-draft";
 import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInviteBanner";
-import { DayTraderPromoCard } from "@/components/day-trader/DayTraderPromoCard";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
@@ -333,16 +332,32 @@ export function DashboardContent({
         <div>
           <h2 className="text-lg font-semibold mb-1">Create New League</h2>
           <p className="text-muted text-sm">
-            Start a Player League with friends, or spin up a Free Sim League
-            against three bot managers.
+            Start a Player League with friends, draft a Sports League (SDFL,
+            SDHL, SDBA, SDLB), spin up a Free Sim League against three bot
+            managers, or jump into Day Trader.
           </p>
         </div>
 
-        <Link href="/leagues/create" className="block">
-          <Button variant="primary" className="w-full">
-            Create Player League
-          </Button>
-        </Link>
+        <div className="grid grid-cols-2 gap-3">
+          <Link href="/leagues/create?entry=player" className="block">
+            <Button variant="primary" className="w-full">
+              Create Player League
+            </Button>
+          </Link>
+          <Link href="/leagues/create?entry=sports" className="block">
+            <Button variant="primary" className="w-full">
+              Create Sports League
+            </Button>
+          </Link>
+        </div>
+
+        <div data-league-theme="day-trader">
+          <Link href="/day-trader" className="block">
+            <Button variant="primary" className="w-full">
+              Day Trader
+            </Button>
+          </Link>
+        </div>
 
         {leagueError && !showBotSelection && (
           <p className="text-sm text-red-400">{leagueError}</p>
@@ -381,8 +396,6 @@ export function DashboardContent({
           dayTraderActive={Boolean(dayTrader)}
         />
       </section>
-
-      <DayTraderPromoCard />
 
       {activeHumanLeague?.league.status === "waiting" &&
         activeHumanLeague.league.owner_user_id === profile.id && (
