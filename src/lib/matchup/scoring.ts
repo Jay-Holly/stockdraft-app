@@ -555,10 +555,20 @@ async function advanceLeagueCalendar(
       isSdplRegularSeasonComplete(currentWeek, regularSeasonWeeks) &&
       !scheduledWeeks.some((week) => week > regularSeasonWeeks)
     ) {
-      await seedPlayoffsIfNeeded(leagueId, playerCount, {
+      const seedResult = await seedPlayoffsIfNeeded(leagueId, playerCount, {
         sdpl: true,
         semifinalWeek,
       });
+      if (seedResult.error) {
+        console.error(
+          `seedPlayoffsIfNeeded failed for league=${leagueId}:`,
+          seedResult.error
+        );
+        // Don't fall through to marking the season "complete" below — that
+        // would permanently strand it (status !== "active" short-circuits
+        // every future scoring visit, so this is the last chance to retry).
+        return { seasonComplete: false, nextWeek: currentWeek };
+      }
 
       const allocation = await allocatePlayoffBonusPoolIfNeeded(
         leagueId,
@@ -582,12 +592,19 @@ async function advanceLeagueCalendar(
       isRegularSeasonComplete(currentWeek, playerCount) &&
       !scheduledWeeks.some((week) => week > getRegularSeasonWeeks(playerCount))
     ) {
-      await seedPlayoffsIfNeeded(leagueId, playerCount);
+      const seedResult = await seedPlayoffsIfNeeded(leagueId, playerCount);
+      if (seedResult.error) {
+        console.error(
+          `seedPlayoffsIfNeeded (legacy) failed for league=${leagueId}:`,
+          seedResult.error
+        );
+        return { seasonComplete: false, nextWeek: currentWeek };
+      }
     }
 
     if (
       currentWeek === PLAYOFF_START_WEEK &&
-      usesFourTeamPlayoff(playerCount)
+      (usesFourTeamPlayoff(playerCount) || usesTwoTeamPlayoff(playerCount))
     ) {
       await seedLegacyChampionshipIfNeeded(leagueId);
     }

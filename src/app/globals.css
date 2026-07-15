@@ -3270,10 +3270,72 @@ body:has(.landing-screen) {
   box-shadow: 0 0 20px color-mix(in srgb, var(--color-league-primary) 28%, transparent);
 }
 
+.matchup-preview-card__round {
+  display: inline-block;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-league-primary);
+  margin-bottom: 0.25rem;
+}
+
 .matchup-preview-card__teams {
   font-size: 0.8125rem;
   font-weight: 700;
   line-height: 1.35;
+}
+
+/* Playoff banner — sits above the focused matchup on Matchups/League pages. */
+.playoff-banner {
+  border-radius: 1rem;
+  padding: 1rem 1.125rem;
+  margin-bottom: 0.75rem;
+  text-align: center;
+  border: 1px solid var(--color-league-primary);
+  background: color-mix(in srgb, var(--color-league-secondary) 22%, var(--color-dark-card));
+}
+
+.playoff-banner--championship {
+  border-color: var(--color-gold);
+  background: color-mix(in srgb, var(--color-gold) 14%, var(--color-dark-card));
+  box-shadow: 0 0 24px color-mix(in srgb, var(--color-gold) 25%, transparent);
+}
+
+.playoff-banner__eyebrow {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.1875rem 0.625rem;
+  border-radius: 9999px;
+  color: var(--color-league-on-primary);
+  background: var(--color-league-primary);
+}
+
+.playoff-banner--championship .playoff-banner__eyebrow {
+  color: var(--color-dark);
+  background: var(--color-gold);
+}
+
+.playoff-banner__matchup {
+  font-size: 1.0625rem;
+  font-weight: 800;
+  margin-top: 0.5rem;
+}
+
+.playoff-banner__matchup span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  margin: 0 0.375rem;
+}
+
+.playoff-banner__message {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  margin-top: 0.25rem;
 }
 
 .matchup-preview-card__scores {

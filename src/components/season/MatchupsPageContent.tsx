@@ -257,6 +257,58 @@ function RosterColumn({
   );
 }
 
+const PLAYOFF_BANNER_COPY: Record<
+  string,
+  { eyebrow: string; message: string; tone: "semifinal" | "championship" }
+> = {
+  semifinal: {
+    eyebrow: "Semifinal",
+    message: "Win to punch your ticket to the Championship.",
+    tone: "semifinal",
+  },
+  final: {
+    eyebrow: "Championship",
+    message: "This is it — win it all.",
+    tone: "championship",
+  },
+  third_place: {
+    eyebrow: "3rd Place",
+    message: "One last game to close out the season.",
+    tone: "semifinal",
+  },
+  wild_card: {
+    eyebrow: "Wild Card",
+    message: "Win and advance.",
+    tone: "semifinal",
+  },
+  divisional: {
+    eyebrow: "Divisional Round",
+    message: "Win and advance.",
+    tone: "semifinal",
+  },
+  conference_championship: {
+    eyebrow: "Conference Championship",
+    message: "Winner goes to the title game.",
+    tone: "championship",
+  },
+};
+
+function PlayoffBanner({ matchup }: { matchup: MatchupDetail }) {
+  if (!matchup.isPlayoff || !matchup.playoffRound) return null;
+  const copy = PLAYOFF_BANNER_COPY[matchup.playoffRound];
+  if (!copy) return null;
+
+  return (
+    <div className={`playoff-banner playoff-banner--${copy.tone}`}>
+      <span className="playoff-banner__eyebrow">{copy.eyebrow}</span>
+      <p className="playoff-banner__matchup">
+        {matchup.homeTeamName} <span>vs</span> {matchup.awayTeamName}
+      </p>
+      <p className="playoff-banner__message">{copy.message}</p>
+    </div>
+  );
+}
+
 function MatchupDetailPanel({
   matchup,
   scoringMode,
@@ -344,6 +396,11 @@ function MatchupPreviewCard({
       className={`matchup-preview-card ${selected ? "matchup-preview-card--selected" : ""}`}
       onClick={onSelect}
     >
+      {matchup.isPlayoff && matchup.playoffRound && (
+        <span className="matchup-preview-card__round">
+          {formatPlayoffRoundLabel(matchup.playoffRound)}
+        </span>
+      )}
       <p className="matchup-preview-card__teams">
         {matchup.homeTeamName}
         <span className="text-muted"> vs </span>
@@ -547,6 +604,7 @@ export function MatchupsPageContent() {
       )}
 
       <div className="matchup-focus-block">
+        <PlayoffBanner matchup={focusedMatchup} />
         <p className="matchup-focus-block__label">
           {focusedMatchup.includesViewer ? "Your matchup" : "Matchup detail"}
         </p>
