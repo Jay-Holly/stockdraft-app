@@ -20,6 +20,7 @@ import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInvi
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
+import { ContactUsModal } from "@/components/ContactUsModal";
 import { CategoryBubbles } from "@/components/league/CategoryBubbles";
 import type { BotPersonality } from "@/lib/league/bots";
 import { Button } from "@/components/Button";
@@ -162,6 +163,7 @@ export function DashboardContent({
   const [showBotSelection, setShowBotSelection] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [leagueError, setLeagueError] = useState<string | null>(null);
+  const [contactUsOpen, setContactUsOpen] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("deleted") !== "1") return;
@@ -288,6 +290,12 @@ export function DashboardContent({
         onClose={() => setDeleteTarget(null)}
       />
 
+      <ContactUsModal
+        open={contactUsOpen}
+        email={profile.email}
+        onClose={() => setContactUsOpen(false)}
+      />
+
       {message && (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           {message}
@@ -344,25 +352,46 @@ export function DashboardContent({
               Create Player League
             </Button>
           </Link>
-          <Link href="/leagues/create?entry=sports" className="block">
-            <Button variant="primary" className="w-full">
-              Create Sports League
-            </Button>
-          </Link>
-        </div>
+          <div
+            style={
+              {
+                "--color-league-primary": "#dc2626",
+                "--color-league-on-primary": "#ffffff",
+              } as React.CSSProperties
+            }
+          >
+            <Link href="/leagues/create?entry=sports" className="block">
+              <Button variant="primary" className="w-full">
+                Create Sports League
+              </Button>
+            </Link>
+          </div>
 
-        <div data-league-theme="day-trader">
-          <Link href="/day-trader" className="block">
-            <Button variant="primary" className="w-full">
-              Day Trader
+          {!showBotSelection && (
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                setLeagueError(null);
+                setShowBotSelection(true);
+              }}
+            >
+              Create Free Sim League
             </Button>
-          </Link>
+          )}
+          <div data-league-theme="day-trader">
+            <Link href="/day-trader" className="block">
+              <Button variant="primary" className="w-full">
+                Day Trader
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {leagueError && !showBotSelection && (
           <p className="text-sm text-red-400">{leagueError}</p>
         )}
-        {showBotSelection ? (
+        {showBotSelection && (
           <BotSelectionPanel
             defaultTeamName={profile.team_name}
             onCancel={() => {
@@ -373,17 +402,6 @@ export function DashboardContent({
             confirming={startingLeague}
             error={leagueError}
           />
-        ) : (
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => {
-              setLeagueError(null);
-              setShowBotSelection(true);
-            }}
-          >
-            Create Free Sim League
-          </Button>
         )}
       </section>
 
@@ -592,6 +610,14 @@ export function DashboardContent({
           )}
         </section>
       )}
+
+      <Button
+        variant="ghost"
+        onClick={() => setContactUsOpen(true)}
+        className="w-full"
+      >
+        Contact Us
+      </Button>
 
       <Button variant="ghost" onClick={handleSignOut} className="w-full">
         Sign out

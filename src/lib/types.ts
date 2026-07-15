@@ -4,6 +4,7 @@ export type Profile = {
   team_name: string;
   avatar_color: string;
   created_at: string;
+  email?: string | null;
   day_trader_joined_at?: string | null;
   is_admin?: boolean;
 };

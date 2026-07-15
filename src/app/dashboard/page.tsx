@@ -52,6 +52,7 @@ export default async function DashboardPage() {
         username,
         team_name: teamName,
         avatar_color: avatarColor,
+        email: user.email,
       })
       .select()
       .single();
