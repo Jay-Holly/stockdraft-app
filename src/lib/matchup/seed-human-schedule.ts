@@ -17,6 +17,7 @@ import { isSdplSeasonRulesLeague, isSportsSimLeague } from "@/lib/season/sdpl-le
 import { seedSportsLeaguePickInjuryMapIfMissing } from "@/lib/sim/pick-injury-map";
 import { generateSportsSimRegularSeasonSchedule } from "@/lib/matchup/sdfl-schedule";
 import { computeSportsSimFinalizeAt } from "@/lib/matchup/sdfl-playoffs";
+import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
 
 async function createSeedSupabase(): Promise<SupabaseClient> {
   try {
@@ -261,6 +262,19 @@ export async function finalizeHumanLeagueAfterDraft(
     );
     return { error: result.error };
   }
+
+  if (result.seeded) {
+    // Week transitions (advanceLeagueCalendar) proactively capture every
+    // member's week-open baseline league-wide, but nothing does that for
+    // week 1 since no prior week "advances" into it — without this, a
+    // member's week-open value only gets captured lazily on their first
+    // page visit that week. If nobody visits before finalization, the
+    // week-open fallback and the finalize-time "current" value both
+    // resolve to the same live quote, scoring that team a guaranteed ~0%
+    // regardless of actual performance.
+    await captureWeekBaselinesForLeague(leagueId, 1, supabase);
+  }
+
   return {};
 }
 
