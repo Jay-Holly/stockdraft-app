@@ -439,8 +439,15 @@ export async function captureWeekBaselinesForUser(
 
   if (rows.length === 0) return;
 
+  // Never clobber an existing row's value_at_open — a pick may already have
+  // a true acquisition-time baseline written by applyIrSwapWeekBaselines /
+  // applyIrMoveWeekBaselines. Re-running this opportunistically (triggered by
+  // a sibling pick's missing baseline) must only fill in what's missing, or
+  // it silently overwrites the real open value with whatever price is live
+  // at the moment it happens to re-run.
   await supabase.from("roster_week_baselines").upsert(rows, {
     onConflict: "league_id,user_id,week_number,pick_id",
+    ignoreDuplicates: true,
   });
 }
 

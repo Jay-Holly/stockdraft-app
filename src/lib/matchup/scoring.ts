@@ -585,7 +585,22 @@ async function advanceLeagueCalendar(
     }
 
     if (currentWeek === semifinalWeek) {
-      await seedPlayoffFinalsIfNeeded(leagueId, semifinalWeek, finalsWeek);
+      const finalsResult = await seedPlayoffFinalsIfNeeded(
+        leagueId,
+        semifinalWeek,
+        finalsWeek
+      );
+      if (finalsResult.error) {
+        console.error(
+          `seedPlayoffFinalsIfNeeded failed for league=${leagueId}:`,
+          finalsResult.error
+        );
+        // Same reasoning as the semifinal-seeding guard above: don't fall
+        // through to marking the season "complete" with no championship
+        // scheduled — that strands the league exactly like the semifinal
+        // case, just one week later.
+        return { seasonComplete: false, nextWeek: currentWeek };
+      }
     }
   } else {
     if (
@@ -606,7 +621,14 @@ async function advanceLeagueCalendar(
       currentWeek === PLAYOFF_START_WEEK &&
       (usesFourTeamPlayoff(playerCount) || usesTwoTeamPlayoff(playerCount))
     ) {
-      await seedLegacyChampionshipIfNeeded(leagueId);
+      const champResult = await seedLegacyChampionshipIfNeeded(leagueId);
+      if (champResult.error) {
+        console.error(
+          `seedLegacyChampionshipIfNeeded failed for league=${leagueId}:`,
+          champResult.error
+        );
+        return { seasonComplete: false, nextWeek: currentWeek };
+      }
     }
   }
 
