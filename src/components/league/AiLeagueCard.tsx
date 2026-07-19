@@ -35,6 +35,9 @@ export function AiLeagueCard({
   const isActive = item.league.id === activeLeagueId;
   const busy = switchingLeagueId === item.league.id;
   const isOwner = item.league.owner_user_id === currentUserId;
+  const hasActionRow =
+    item.league.status === "drafting" ||
+    canEnterSeasonLeague(item.league.status, item.humanDraftComplete);
 
   return (
     <div
@@ -67,7 +70,7 @@ export function AiLeagueCard({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {!isActive && (
+        {!isActive && !hasActionRow && (
           <Button
             variant="ghost"
             className="text-xs px-3"
