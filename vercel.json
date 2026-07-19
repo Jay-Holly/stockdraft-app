@@ -13,6 +13,10 @@
       "schedule": "5 20 * * 1-5"
     },
     {
+      "path": "/api/cron/audit-league-health",
+      "schedule": "15 20 * * 1-5"
+    },
+    {
       "path": "/api/cron/refresh-crypto-prices",
       "schedule": "0 14 * * *"
     },
