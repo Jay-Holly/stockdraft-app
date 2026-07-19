@@ -127,7 +127,12 @@ export function resolveSeasonSettings(
 export function isLineupLocked(now: Date, settings: SeasonSettings): boolean {
   if (!settings.rulesApply) return false;
 
-  const { hour, minute } = getEasternParts(now);
+  const { weekday, hour, minute } = getEasternParts(now);
+  // Lineups only lock during a live trading session. The market is closed on
+  // weekends, so the 9:30 AM–4:00 PM window must never lock Sat/Sun — mirrors
+  // the weekend handling in isFreeAgencyOpen.
+  if (!isWeekday(weekday)) return false;
+
   const mins = minutesOfDay(hour, minute);
   return mins >= LINEUP_LOCK_START_MINUTES && mins < LINEUP_LOCK_END_MINUTES;
 }
