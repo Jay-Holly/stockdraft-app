@@ -927,34 +927,32 @@ export async function scoreActiveMatchupsOnVisit(
   const { listHumanLeaguesForUser } = await import("@/lib/league/human-league");
   const humanLeagues = await listHumanLeaguesForUser(userId);
 
-  let scoredAny = false;
-  let lastError: string | undefined;
-  let lastNotice: string | undefined;
-
-  for (const league of aiLeagues) {
-    if (league.status !== "active") continue;
-
-    // Sports-sim: scores immediately. SDPL: gated by finalize_at inside scoreMatchupForLeague.
-    const result = await scoreMatchupForLeague(userId, league.id);
-    if (result.error) lastError = result.error;
-    if (result.notice) lastNotice = result.notice;
-    if (result.scored) scoredAny = true;
-  }
-
-  for (const item of humanLeagues) {
-    if (item.league.status !== "active") continue;
-
-    if (
-      !isSdplSeasonRulesLeague({
+  // Each league's scoreMatchupForLeague call is an independent round trip
+  // (now heavier since it also captures baselines) — running them one at a
+  // time meant a user in several active leagues paid for all of them added
+  // together, easily exceeding the function timeout. Parallelized.
+  const eligibleAiLeagues = aiLeagues.filter((league) => league.status === "active");
+  const eligibleHumanLeagues = humanLeagues.filter(
+    (item) =>
+      item.league.status === "active" &&
+      isSdplSeasonRulesLeague({
         formatType: item.league.format_type,
         sportsLeagueId: item.league.sports_league_id,
         playerCount: item.league.player_count,
       })
-    ) {
-      continue;
-    }
+  );
 
-    const result = await scoreMatchupForLeague(userId, item.league.id);
+  const results = await Promise.all([
+    ...eligibleAiLeagues.map((league) => scoreMatchupForLeague(userId, league.id)),
+    ...eligibleHumanLeagues.map((item) =>
+      scoreMatchupForLeague(userId, item.league.id)
+    ),
+  ]);
+
+  let scoredAny = false;
+  let lastError: string | undefined;
+  let lastNotice: string | undefined;
+  for (const result of results) {
     if (result.error) lastError = result.error;
     if (result.notice) lastNotice = result.notice;
     if (result.scored) scoredAny = true;
