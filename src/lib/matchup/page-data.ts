@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { BOT_BY_ID } from "@/lib/league/bots";
-import { getLeagueMemberTeamName } from "@/lib/league/server";
+import { getLeagueMemberLogoUrl, getLeagueMemberTeamName } from "@/lib/league/server";
 import { parseLeagueScoringMode } from "@/lib/league/scoring-mode";
 import {
   clampViewWeek,
@@ -25,6 +25,8 @@ export type MatchupTeamSide = {
   isViewer: boolean;
   isBot: boolean;
   avatarColor: string;
+  /** Custom uploaded team logo; falls back to the initials avatar when null. */
+  logoUrl: string | null;
   stats: TeamGainStats;
   primaryScore: number;
   starters: RosterPickView[];
@@ -106,6 +108,7 @@ async function loadTeamSide(
   return {
     userId,
     teamName: await getLeagueMemberTeamName(leagueId, userId),
+    logoUrl: await getLeagueMemberLogoUrl(leagueId, userId),
     isViewer: userId === viewerUserId,
     isBot: Boolean(botProfile) && leagueMeta?.league_type === "ai" && !stealthBots,
     avatarColor: profile?.avatar_color ?? botProfile?.avatarColor ?? "blue",

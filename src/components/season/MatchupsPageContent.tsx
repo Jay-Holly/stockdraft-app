@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatMoney, formatPct, formatSignedMoney } from "@/lib/format";
 import { getAvatarHex } from "@/lib/types";
@@ -205,12 +206,23 @@ function RosterColumn({
   return (
     <div className={`matchup-team-column ${isLeading ? "matchup-team-column--leading" : ""}`}>
       <div className="matchup-team-header">
-        <div
-          className="matchup-team-avatar"
-          style={{ backgroundColor: getAvatarHex(side.avatarColor) }}
-        >
-          {side.teamName.slice(0, 2).toUpperCase()}
-        </div>
+        {side.logoUrl ? (
+          <Image
+            src={side.logoUrl}
+            alt={`${side.teamName} logo`}
+            width={40}
+            height={40}
+            unoptimized
+            className="matchup-team-avatar matchup-team-avatar--logo"
+          />
+        ) : (
+          <div
+            className="matchup-team-avatar"
+            style={{ backgroundColor: getAvatarHex(side.avatarColor) }}
+          >
+            {side.teamName.slice(0, 2).toUpperCase()}
+          </div>
+        )}
         <div className="min-w-0">
           <p className="matchup-team-name">
             {side.teamName}

@@ -13,6 +13,22 @@ export type League = {
   support_code: string;
 };
 
+/** Custom uploaded team logo for a manager in a league, or null if unset. */
+export async function getLeagueMemberLogoUrl(
+  leagueId: string,
+  userId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data: member } = await supabase
+    .from("league_members")
+    .select("logo_url")
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return member?.logo_url?.trim() || null;
+}
+
 export async function getLeagueMemberTeamName(
   leagueId: string,
   userId: string

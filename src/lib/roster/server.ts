@@ -24,7 +24,11 @@ import {
 } from "@/lib/league/human-league";
 import { leagueThemeIdForSportsLeague, type LeagueThemeId } from "@/lib/league/league-config";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
-import { getLeagueMemberTeamName, getLeagueOffBoardSymbols } from "@/lib/league/server";
+import {
+  getLeagueMemberLogoUrl,
+  getLeagueMemberTeamName,
+  getLeagueOffBoardSymbols,
+} from "@/lib/league/server";
 import {
   parseLeagueScoringMode,
 } from "@/lib/league/scoring-mode";
@@ -500,6 +504,7 @@ export async function loadRosterView(
       totalWeekDollarGain,
       sportsSimIrEnabled,
       irResolution,
+      teamLogoUrl: await getLeagueMemberLogoUrl(leagueId, userId),
     },
   };
 }

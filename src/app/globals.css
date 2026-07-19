@@ -2949,6 +2949,12 @@ body:has(.landing-screen) {
   box-shadow: 0 0 0 2px rgba(208, 171, 72, 0.25);
 }
 
+/* Uploaded team logo fills the avatar circle instead of showing initials. */
+.matchup-team-avatar--logo {
+  object-fit: cover;
+  background-color: rgba(0, 0, 0, 0.35);
+}
+
 .matchup-team-column--leading .matchup-team-avatar {
   box-shadow:
     0 0 0 2px rgba(208, 171, 72, 0.45),

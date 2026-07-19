@@ -47,6 +47,8 @@ export type RosterView = {
   irResolution?: IrResolutionState;
   /** Sports-sim only: whether this league supports IR mechanics. */
   sportsSimIrEnabled?: boolean;
+  /** Custom uploaded team logo for this league, or null if none set. */
+  teamLogoUrl?: string | null;
   calendar?: SeasonCalendarState;
 };
 
