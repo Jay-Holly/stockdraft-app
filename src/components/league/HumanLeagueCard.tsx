@@ -108,9 +108,9 @@ export function HumanLeagueCard({
             variant="secondary"
             className="flex-1 text-sm"
             disabled={busy}
-            onClick={() => onSelect(item.league.id)}
+            onClick={() => onSelect(item.league.id, "/my-team")}
           >
-            Select
+            My Team
           </Button>
         )}
         {waiting ? (
