@@ -103,7 +103,7 @@ export function HumanLeagueCard({
       )}
 
       <div className="flex flex-wrap gap-2">
-        {!isActive && (
+        {!waiting && !enterDraft && (
           <Button
             variant="secondary"
             className="flex-1 text-sm"
