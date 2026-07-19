@@ -54,7 +54,7 @@ export function pickMarketValue(pick: DraftPick, price: number): number {
  * fetch failed — persisting it as a baseline poisons weekly/season math with
  * fake -100% weeks. Empty slots (__OPEN__, 0-share bench) genuinely are $0.
  */
-function isTrustworthyBaselineValue(pick: DraftPick, value: number): boolean {
+export function isTrustworthyBaselineValue(pick: DraftPick, value: number): boolean {
   if (value > 0) return true;
   return pick.shares <= 0 || pick.symbol.toUpperCase() === "__OPEN__";
 }

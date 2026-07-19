@@ -75,6 +75,7 @@ import {
   computeWeekDollarGain,
   computeWeekGainPercent,
   ensureWeekBaselines,
+  isTrustworthyBaselineValue,
   pickMarketValue,
 } from "@/lib/roster/weekly";
 import type {
@@ -188,21 +189,29 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
       };
     }
 
-    let price = 0;
+    let livePrice = 0;
     let changePercent = 0;
 
     if (isCryptoSymbol(symbol)) {
       const quote = cryptoQuotes[symbol];
-      price = quote?.price ?? 0;
+      livePrice = quote?.price ?? 0;
       changePercent = quote?.changePercent ?? 0;
     } else {
       const quote = stockQuotes.get(symbol);
-      price = quote?.price ?? 0;
+      livePrice = quote?.price ?? 0;
       changePercent = quote?.changePercent ?? 0;
     }
 
+    // A failed live quote (price 0) must not flash a fake -100% on the
+    // team page — fall back to the pick's last-known-good price, the same
+    // guard the official scoring path already applies before persisting.
+    const price = livePrice > 0 ? livePrice : pick.price_at_pick;
+
     const scores = isScoringRosterPick(pick);
-    const currentValue = pick.shares > 0 ? pick.shares * price : 0;
+    const rawCurrentValue = pickMarketValue(pick, price);
+    const currentValue = isTrustworthyBaselineValue(pick, rawCurrentValue)
+      ? rawCurrentValue
+      : 0;
     const gainPercent = scores
       ? computeGainPercent(pick.budget_spent, currentValue)
       : 0;
