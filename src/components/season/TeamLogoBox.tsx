@@ -115,12 +115,11 @@ export function TeamLogoBox({
             <Image
               src={logoUrl}
               alt="Your team logo"
-              width={56}
-              height={56}
+              width={112}
+              height={112}
               unoptimized
-              className="h-14 w-14 rounded-full object-cover border border-[var(--color-league-accent)] shrink-0"
+              className="h-28 w-28 rounded-full object-cover border border-[var(--color-league-accent)] shrink-0"
             />
-            <p className="text-xs text-muted">Your team logo</p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <button
