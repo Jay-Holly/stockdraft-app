@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { allocatePlayoffBonusPoolIfNeeded } from "@/lib/awards/allocate";
 import { autoClaimPlayoffPayoutsForAllocation } from "@/lib/awards/claim";
 import { activateAiLeagueSchedule } from "@/lib/league/ai-league";
@@ -817,6 +818,19 @@ export async function scoreMatchupForLeague(
   if (!humanStandings) return { error: "Standings not found" };
 
   const currentWeek = league.current_week ?? humanStandings.current_week ?? 1;
+
+  // Capture week-open baselines for EVERY team in the league via a service
+  // client. The per-user lazy capture in loadRosterView runs under the
+  // viewer's RLS session, whose "manage own week baselines" policy only lets
+  // a user write their own rows — so bot and other-manager baselines never
+  // got captured unless that manager personally logged in, leaving their live
+  // matchup scores stuck at 0.00%. Runs before the finalize gate so it
+  // applies during the live week too. Idempotent (ignoreDuplicates).
+  await captureWeekBaselinesForLeague(
+    leagueId,
+    currentWeek,
+    createServiceClient()
+  );
 
   const canFinalize = await canFinalizeLeagueWeek(leagueId, currentWeek);
   const { settings } = await loadSeasonCalendarForLeague(leagueId);
