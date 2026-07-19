@@ -63,10 +63,17 @@ function sortByPrice<T extends { price: number; symbol: string }>(
   });
 }
 
-export function FreeAgentsPageContent() {
-  const [data, setData] = useState<FreeAgentsPageData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+export function FreeAgentsPageContent({
+  initialData = null,
+  initialError = null,
+}: {
+  /** Server-fetched on first render so there's no client-side loading flash. */
+  initialData?: FreeAgentsPageData | null;
+  initialError?: string | null;
+} = {}) {
+  const [data, setData] = useState<FreeAgentsPageData | null>(initialData);
+  const [error, setError] = useState<string | null>(initialError);
+  const [loading, setLoading] = useState(!initialData && !initialError);
   const [busy, setBusy] = useState(false);
 
   const [category, setCategory] = useState<CategoryFilter>("All");

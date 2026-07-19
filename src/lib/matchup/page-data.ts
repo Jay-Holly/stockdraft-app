@@ -105,10 +105,15 @@ async function loadTeamSide(
       opponentType: leagueMeta.opponent_type as "all_ai" | "all_human" | "mixed",
     });
 
+  const [teamName, logoUrl] = await Promise.all([
+    getLeagueMemberTeamName(leagueId, userId),
+    getLeagueMemberLogoUrl(leagueId, userId),
+  ]);
+
   return {
     userId,
-    teamName: await getLeagueMemberTeamName(leagueId, userId),
-    logoUrl: await getLeagueMemberLogoUrl(leagueId, userId),
+    teamName,
+    logoUrl,
     isViewer: userId === viewerUserId,
     isBot: Boolean(botProfile) && leagueMeta?.league_type === "ai" && !stealthBots,
     avatarColor: profile?.avatar_color ?? botProfile?.avatarColor ?? "blue",

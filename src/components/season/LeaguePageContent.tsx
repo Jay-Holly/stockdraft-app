@@ -14,10 +14,17 @@ import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import { Button } from "@/components/Button";
 import { SPORTS_LEAGUE_FORMATS } from "@/lib/league/league-config";
 
-export function LeaguePageContent() {
-  const [data, setData] = useState<LeaguePageData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+export function LeaguePageContent({
+  initialData = null,
+  initialError = null,
+}: {
+  /** Server-fetched on first render so there's no client-side loading flash. */
+  initialData?: LeaguePageData | null;
+  initialError?: string | null;
+} = {}) {
+  const [data, setData] = useState<LeaguePageData | null>(initialData);
+  const [error, setError] = useState<string | null>(initialError);
+  const [loading, setLoading] = useState(!initialData && !initialError);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const load = useCallback(async () => {

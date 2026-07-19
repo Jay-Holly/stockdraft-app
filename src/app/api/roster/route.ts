@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
-import { loadRosterView, requireSeasonLeague, resolveSeasonLeague } from "@/lib/roster/server";
-import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import { loadMyTeamPageData } from "@/lib/roster/server";
 
 export const dynamic = "force-dynamic";
 
@@ -14,34 +13,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const season = await requireSeasonLeague(user.id);
-    if ("error" in season) {
-      return NextResponse.json({ error: season.error }, { status: 400 });
-    }
-
     const { searchParams } = new URL(request.url);
     const weekParam = searchParams.get("week");
     const weekNumber = weekParam ? Number(weekParam) : undefined;
 
-    const result = await loadRosterView(user.id, season.league.id, {
+    const result = await loadMyTeamPageData(user.id, {
       weekNumber: Number.isFinite(weekNumber) ? weekNumber : undefined,
     });
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 500 });
+      return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    const league = await resolveSeasonLeague(user.id, season.league.id);
-    const { calendar } = await loadSeasonCalendarForLeague(season.league.id);
     const elapsedMs = Date.now() - started;
 
-    return NextResponse.json(
-      {
-        ...result.roster,
-        leagueName: league?.name ?? season.league.name,
-        calendar,
-      },
-      { headers: { "X-Roster-Load-Ms": String(elapsedMs) } }
-    );
+    return NextResponse.json(result.data, {
+      headers: { "X-Roster-Load-Ms": String(elapsedMs) },
+    });
   } catch (err) {
     const elapsedMs = Date.now() - started;
     const message =

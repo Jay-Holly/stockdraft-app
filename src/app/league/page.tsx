@@ -2,7 +2,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SeasonShell } from "@/components/season/SeasonShell";
 import { LeaguePageContent } from "@/components/season/LeaguePageContent";
-import { isSeasonLeagueSportsSim, resolveSeasonLeague, seasonLeagueThemeId } from "@/lib/roster/server";
+import {
+  isSeasonLeagueSportsSim,
+  loadLeaguePageData,
+  resolveSeasonLeague,
+  seasonLeagueThemeId,
+} from "@/lib/roster/server";
 
 export default async function LeaguePage() {
   const supabase = await createClient();
@@ -15,9 +20,16 @@ export default async function LeaguePage() {
   const league = await resolveSeasonLeague(user.id);
   const isSportsSim = league ? isSeasonLeagueSportsSim(league) : false;
 
+  // Fetched server-side so the first paint has real data instead of a
+  // client-side loading flash on every navigation.
+  const initial = await loadLeaguePageData(user.id);
+
   return (
     <SeasonShell title="League" isSportsSim={isSportsSim} themeId={seasonLeagueThemeId(league)}>
-      <LeaguePageContent />
+      <LeaguePageContent
+        initialData={initial.ok ? initial.data : null}
+        initialError={initial.ok ? null : initial.error}
+      />
     </SeasonShell>
   );
 }

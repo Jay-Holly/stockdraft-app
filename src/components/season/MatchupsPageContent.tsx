@@ -458,12 +458,23 @@ function MatchupPreviewCard({
   );
 }
 
-export function MatchupsPageContent() {
-  const [data, setData] = useState<MatchupsPageData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [focusedMatchupId, setFocusedMatchupId] = useState<string | null>(null);
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+export function MatchupsPageContent({
+  initialData = null,
+  initialError = null,
+}: {
+  /** Server-fetched on first render so there's no client-side loading flash. */
+  initialData?: MatchupsPageData | null;
+  initialError?: string | null;
+} = {}) {
+  const [data, setData] = useState<MatchupsPageData | null>(initialData);
+  const [error, setError] = useState<string | null>(initialError);
+  const [loading, setLoading] = useState(!initialData && !initialError);
+  const [focusedMatchupId, setFocusedMatchupId] = useState<string | null>(
+    initialData?.myMatchupId ?? initialData?.matchups[0]?.id ?? null
+  );
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(
+    initialData?.viewWeek ?? null
+  );
   const [showAllMatchups, setShowAllMatchups] = useState(false);
 
   const load = useCallback(async (weekNumber?: number) => {

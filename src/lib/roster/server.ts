@@ -509,6 +509,34 @@ export async function loadRosterView(
   };
 }
 
+/** Same payload /api/roster returns — shared so the server-rendered page and
+ * the client's background refresh can never drift out of sync. */
+export async function loadMyTeamPageData(
+  userId: string,
+  options?: { weekNumber?: number }
+): Promise<
+  | { ok: true; data: RosterView & { leagueName: string } }
+  | { ok: false; error: string }
+> {
+  const season = await requireSeasonLeague(userId);
+  if ("error" in season) return { ok: false, error: season.error };
+
+  const result = await loadRosterView(userId, season.league.id, options);
+  if (!result.ok) return { ok: false, error: result.error };
+
+  const league = await resolveSeasonLeague(userId, season.league.id);
+  const { calendar } = await loadSeasonCalendarForLeague(season.league.id);
+
+  return {
+    ok: true,
+    data: {
+      ...result.roster,
+      leagueName: league?.name ?? season.league.name,
+      calendar,
+    },
+  };
+}
+
 async function computeTeamGain(
   userId: string,
   leagueId: string

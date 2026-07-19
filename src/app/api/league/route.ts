@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { loadLeaguePageData } from "@/lib/roster/server";
+import { resolveActiveLeagueId } from "@/lib/league/active-league";
 import {
   ensureAiLeagueReadyForMatchups,
   ensureHumanLeagueReadyForMatchups,
@@ -21,8 +22,14 @@ export async function GET() {
     }
 
     try {
-      await ensureAiLeagueReadyForMatchups(user.id);
-      await ensureHumanLeagueReadyForMatchups(user.id);
+      // Scoped to the league you're actually viewing — these ran across
+      // every league the user belongs to on every navigation, including
+      // ones with permanently broken schedules that get retried forever.
+      const activeLeagueId = await resolveActiveLeagueId(user.id);
+      await Promise.all([
+        ensureAiLeagueReadyForMatchups(user.id, activeLeagueId ?? undefined),
+        ensureHumanLeagueReadyForMatchups(user.id, activeLeagueId ?? undefined),
+      ]);
       await scoreActiveMatchupsOnVisit(user.id);
     } catch (sideEffectError) {
       console.error("GET /api/league scoring side effect failed:", sideEffectError);

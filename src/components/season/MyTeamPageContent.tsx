@@ -21,15 +21,26 @@ import { SeasonCalendarBanner } from "@/components/season/SeasonCalendarBanner";
 import { RosterIrBanner } from "@/components/season/RosterIrBanner";
 import { TeamLogoBox } from "@/components/season/TeamLogoBox";
 
-export function MyTeamPageContent() {
-  const [roster, setRoster] = useState<RosterView | null>(null);
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+export function MyTeamPageContent({
+  initialRoster = null,
+  initialError = null,
+}: {
+  /** Server-fetched on first render so there's no client-side loading flash. */
+  initialRoster?: RosterView | null;
+  initialError?: string | null;
+} = {}) {
+  const [roster, setRoster] = useState<RosterView | null>(initialRoster);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(
+    initialRoster?.viewWeek ?? null
+  );
+  const [error, setError] = useState<string | null>(initialError);
+  const [loading, setLoading] = useState(!initialRoster && !initialError);
   const [busy, setBusy] = useState(false);
   const [irStarterId, setIrStarterId] = useState<string | null>(null);
   const [irBenchId, setIrBenchId] = useState<string | null>(null);
-  const [teamLogoUrl, setTeamLogoUrl] = useState<string | null>(null);
+  const [teamLogoUrl, setTeamLogoUrl] = useState<string | null>(
+    initialRoster?.teamLogoUrl ?? null
+  );
   const [irMoveStarterId, setIrMoveStarterId] = useState<string | null>(null);
   const [irMoveSlotId, setIrMoveSlotId] = useState<string | null>(null);
   const [irReturnPickId, setIrReturnPickId] = useState<string | null>(null);

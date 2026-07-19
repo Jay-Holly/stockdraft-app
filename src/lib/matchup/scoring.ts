@@ -982,9 +982,13 @@ export async function scoreAllActiveAiMatchups(
 }
 
 export async function ensureAiLeagueReadyForMatchups(
-  userId: string
+  userId: string,
+  scopeLeagueId?: string
 ): Promise<{ error?: string }> {
-  const leagues = await listAiLeaguesForUser(userId);
+  const allLeagues = await listAiLeaguesForUser(userId);
+  const leagues = scopeLeagueId
+    ? allLeagues.filter((league) => league.id === scopeLeagueId)
+    : allLeagues;
   const supabase = await createClient();
   let lastError: string | undefined;
 
@@ -1027,11 +1031,15 @@ export async function ensureAiLeagueReadyForMatchups(
 }
 
 export async function ensureHumanLeagueReadyForMatchups(
-  userId: string
+  userId: string,
+  scopeLeagueId?: string
 ): Promise<{ error?: string }> {
   const { listHumanLeaguesForUser } = await import("@/lib/league/human-league");
 
-  const humanLeagues = await listHumanLeaguesForUser(userId);
+  const allHumanLeagues = await listHumanLeaguesForUser(userId);
+  const humanLeagues = scopeLeagueId
+    ? allHumanLeagues.filter((item) => item.league.id === scopeLeagueId)
+    : allHumanLeagues;
   const supabase = await createClient();
   let lastError: string | undefined;
 

@@ -462,14 +462,29 @@ export async function captureWeekBaselinesForLeague(
     .select("user_id")
     .eq("league_id", leagueId);
 
-  for (const draft of drafts ?? []) {
-    await captureWeekBaselinesForUser(
-      supabase,
-      leagueId,
-      draft.user_id,
-      weekNumber
-    );
-  }
+  if (!drafts?.length) return;
+
+  // This gets called on every matchups/league page visit for every league
+  // the user belongs to, but a week's baselines only need real work once —
+  // after that this is a cheap count check instead of N live quote fetches.
+  const { data: existingRows } = await supabase
+    .from("roster_week_baselines")
+    .select("user_id")
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber);
+  const coveredUserIds = new Set((existingRows ?? []).map((row) => row.user_id));
+  const uncoveredDrafts = drafts.filter(
+    (draft) => !coveredUserIds.has(draft.user_id)
+  );
+  if (uncoveredDrafts.length === 0) return;
+
+  // Each manager's capture does its own live quote fetch — running them
+  // sequentially meant a league visit paid for N round trips back to back.
+  await Promise.all(
+    uncoveredDrafts.map((draft) =>
+      captureWeekBaselinesForUser(supabase, leagueId, draft.user_id, weekNumber)
+    )
+  );
 }
 
 export async function captureWeekCloseSnapshots(
