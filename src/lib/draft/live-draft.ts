@@ -449,7 +449,14 @@ async function repairLiveDraftOrderIfNeeded(leagueId: string): Promise<void> {
   if (leagueBots.length === 0) return;
 
   const botIds = leagueBots.map((b) => b.id);
-  const humanIds = order.filter((id) => !isBotUserId(id));
+  const botIdSet = new Set(botIds);
+  // Derive humans as "not one of this league's actual provisioned bots"
+  // rather than via isBotUserId, which only recognizes the static AI-league
+  // bot roster — per-league synthetic bots (provision_league_bot, random
+  // UUIDs) aren't in it, so isBotUserId misclassified every one of them as
+  // human here, making hasAllBots fail permanently and re-appending the
+  // real bot list on top of an already-complete order every repair tick.
+  const humanIds = order.filter((id) => !botIdSet.has(id));
   const hasAllBots =
     botIds.every((id) => order.includes(id)) &&
     order.length === humanIds.length + botIds.length;
