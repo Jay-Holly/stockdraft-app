@@ -229,7 +229,15 @@ export async function getLeagueDraftStateRow(
     p_league_id: leagueId,
   });
 
-  if (error || !data) {
+  // get_league_draft_state is security definer and gates on auth.uid()
+  // membership — a caller with no auth.uid() (e.g. a service-role client
+  // used by a cron job) fails that check and the function returns SQL NULL,
+  // which comes back here as an object with every field null rather than a
+  // JS null/undefined. `!data` alone doesn't catch that, so it silently
+  // masqueraded as a real (empty) draft state. Fall back to the direct
+  // table read — unaffected by the RPC's auth.uid() gate — whenever the
+  // row is missing its primary key.
+  if (error || !data || !(data as { league_id?: string }).league_id) {
     const { data: direct } = await supabase
       .from("league_draft_state")
       .select("*")

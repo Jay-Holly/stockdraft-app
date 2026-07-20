@@ -142,7 +142,14 @@ async function fetchLeagueDraftRow(
     }
   );
 
-  if (!rpcError && rpcDraft) {
+  // get_league_draft is security definer and gates on auth.uid() membership.
+  // A caller with no auth.uid() (a service-role client, e.g. from a cron
+  // job) fails that check and the function returns SQL NULL, which comes
+  // back here as an object with every field null rather than a JS
+  // null/undefined — `!rpcDraft` alone doesn't catch that. Trusting it as-is
+  // hands a fake draft row (id: null) down into pick submission. Require a
+  // real id before trusting the RPC result.
+  if (!rpcError && rpcDraft && (rpcDraft as { id?: string }).id) {
     return rpcDraft as Draft;
   }
 

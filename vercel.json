@@ -5,6 +5,10 @@
       "schedule": "*/2 * * * *"
     },
     {
+      "path": "/api/cron/advance-live-drafts",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/finalize-matchups",
       "schedule": "0 10 * * 1"
     },
