@@ -39,6 +39,7 @@ import {
 import { fetchCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoPickEligible } from "@/lib/draft/engine";
 import { shouldStealthBots } from "@/lib/league/stealth-bots";
+import { getLeagueOffBoardSymbols } from "@/lib/league/server";
 import {
   normalizeSafetyPickQueue,
   toggleSafetyPickQueueSymbol,
@@ -1813,7 +1814,7 @@ export async function toggleSafetyPickQueue(
 
   const { data: draftRow, error: loadError } = await supabase
     .from("drafts")
-    .select("safety_pick_queue, safety_pick_symbol")
+    .select("id, safety_pick_queue, safety_pick_symbol")
     .eq("user_id", userId)
     .eq("league_id", leagueId)
     .maybeSingle();
@@ -1821,9 +1822,18 @@ export async function toggleSafetyPickQueue(
   if (loadError) return { error: loadError.message };
   if (!draftRow) return { error: "Draft not found" };
 
-  const current = normalizeSafetyPickQueue(
+  const [{ data: picks }, leagueOffBoardSet] = await Promise.all([
+    supabase.from("draft_picks").select("*").eq("draft_id", draftRow.id),
+    getLeagueOffBoardSymbols(leagueId),
+  ]);
+  const myStockSymbolSet = getMyStockSymbols((picks ?? []) as DraftPick[]);
+
+  const rawCurrent = normalizeSafetyPickQueue(
     draftRow.safety_pick_queue,
     draftRow.safety_pick_symbol
+  );
+  const current = rawCurrent.filter(
+    (s) => !leagueOffBoardSet.has(s) && !myStockSymbolSet.has(s)
   );
   const { queue, error } = toggleSafetyPickQueueSymbol(current, symbol);
   if (error) return { error };
