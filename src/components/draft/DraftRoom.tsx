@@ -115,20 +115,23 @@ export function DraftRoom({
     }
     return null;
   }, [liveDraft?.draftOrder, state?.waitingRoomMembers, profile.id]);
-  const myRoundPicks = useMemo(() => {
+  const myNextPick = useMemo(() => {
     if (!myDraftPosition) return null;
     const { slot, total } = myDraftPosition;
     const totalRounds = state?.sportsSimDraftRules
       ? SPORTS_SIM_TOTAL_ROUNDS
       : TOTAL_ROUNDS;
-    return Array.from({ length: totalRounds }, (_, i) => {
-      const round = i + 1;
+    const picksMade = liveDraft?.globalPickNumber ?? 0;
+    for (let round = 1; round <= totalRounds; round++) {
       // Snake draft: odd rounds run slot 1→N, even rounds reverse N→1.
       const posInRound = round % 2 === 1 ? slot : total - slot + 1;
       const globalPick = (round - 1) * total + posInRound;
-      return { round, globalPick };
-    });
-  }, [myDraftPosition, state?.sportsSimDraftRules]);
+      if (globalPick > picksMade) {
+        return { round, globalPick, picksAway: globalPick - picksMade - 1 };
+      }
+    }
+    return null;
+  }, [myDraftPosition, state?.sportsSimDraftRules, liveDraft?.globalPickNumber]);
   const canPick =
     !readOnly &&
     !isWaitingRoom &&
@@ -688,22 +691,13 @@ export function DraftRoom({
               Your draft position: {myDraftPosition.slot} of {myDraftPosition.total}
             </p>
           )}
-          {myRoundPicks && (
-            <div className="flex gap-1.5 overflow-x-auto mt-1.5 pb-1">
-              {myRoundPicks.map(({ round, globalPick }) => (
-                <div
-                  key={round}
-                  className="flex flex-col items-center rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-1 shrink-0"
-                >
-                  <span className="text-[10px] uppercase text-muted leading-none">
-                    R{round}
-                  </span>
-                  <span className="text-xs font-semibold text-amber-400 leading-tight">
-                    #{globalPick}
-                  </span>
-                </div>
-              ))}
-            </div>
+          {myNextPick && (
+            <p className="text-xs text-muted mt-1">
+              Your next pick: Round {myNextPick.round} · #{myNextPick.globalPick}
+              {myNextPick.picksAway > 0
+                ? ` (${myNextPick.picksAway} pick${myNextPick.picksAway === 1 ? "" : "s"} away)`
+                : " (you're up!)"}
+            </p>
           )}
           <p className="text-muted text-sm mt-0.5">
             {isWaitingRoom
