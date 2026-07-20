@@ -29,6 +29,46 @@ export type MaybeStartHumanLeagueDraftOptions = {
   maxBotsPerRun?: number;
 };
 
+/** How long a lock is honored before being treated as abandoned (a crashed
+ * invocation that never released it) and reclaimable by the next tick. */
+const DRAFT_START_LOCK_STALE_MS = 5 * 60 * 1000;
+
+/**
+ * Atomically claims the per-league draft-start lock so overlapping cron
+ * ticks can't both run the fill/order/start sequence for the same league at
+ * once — that race is what corrupted a 32-team league's draft order (a bot
+ * duplicated into two slots, two real players silently dropped from the
+ * rotation). Succeeds only if the lock is unheld or stale.
+ */
+async function claimDraftStartLock(
+  supabase: SupabaseClient,
+  leagueId: string
+): Promise<boolean> {
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - DRAFT_START_LOCK_STALE_MS).toISOString();
+
+  const { data, error } = await supabase
+    .from("leagues")
+    .update({ draft_start_locked_at: now.toISOString() })
+    .eq("id", leagueId)
+    .eq("status", "waiting")
+    .or(`draft_start_locked_at.is.null,draft_start_locked_at.lt.${staleBefore}`)
+    .select("id");
+
+  if (error) return false;
+  return (data?.length ?? 0) > 0;
+}
+
+async function releaseDraftStartLock(
+  supabase: SupabaseClient,
+  leagueId: string
+): Promise<void> {
+  await supabase
+    .from("leagues")
+    .update({ draft_start_locked_at: null })
+    .eq("id", leagueId);
+}
+
 export async function ensureDraftRowsForAllMembers(
   leagueId: string,
   supabaseOverride?: SupabaseClient
@@ -322,25 +362,39 @@ export async function processDueScheduledDrafts(
       }
     }
 
-    const result = await maybeStartHumanLeagueDraft(league.id, {
-      force: pastDue,
-      supabase,
-      maxBotsPerRun: options?.maxBotsPerLeaguePerRun,
-    });
+    const locked = await claimDraftStartLock(supabase, league.id);
+    if (!locked) {
+      // Another (still-running) invocation already holds this league's lock.
+      inProgress += 1;
+      continue;
+    }
 
-    if (result.error) {
-      errors.push(result.error);
-      continue;
+    try {
+      const result = await maybeStartHumanLeagueDraft(league.id, {
+        force: pastDue,
+        supabase,
+        maxBotsPerRun: options?.maxBotsPerLeaguePerRun,
+      });
+
+      if (result.error) {
+        errors.push(result.error);
+        continue;
+      }
+      if (result.botFillInProgress) {
+        inProgress += 1;
+        continue;
+      }
+      if (result.identityFillInProgress) {
+        inProgress += 1;
+        continue;
+      }
+      if (result.started) processed += 1;
+    } finally {
+      // Started leagues move off status="waiting", so the lock becomes
+      // irrelevant for them, but clearing it either way keeps the column
+      // clean and lets a corrected retry reclaim it immediately if needed.
+      await releaseDraftStartLock(supabase, league.id);
     }
-    if (result.botFillInProgress) {
-      inProgress += 1;
-      continue;
-    }
-    if (result.identityFillInProgress) {
-      inProgress += 1;
-      continue;
-    }
-    if (result.started) processed += 1;
   }
 
   return {
