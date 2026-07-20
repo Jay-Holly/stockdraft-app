@@ -6,6 +6,7 @@ import { autoClaimPlayoffPayoutsForAllocation } from "@/lib/awards/claim";
 import { activateAiLeagueSchedule } from "@/lib/league/ai-league";
 import {
   captureWeekBaselinesForLeague,
+  captureWeekBaselinesForLeagueCarryingForward,
   captureWeekCloseSnapshots,
 } from "@/lib/roster/weekly";
 import { getLastCryptoQuoteSource } from "@/lib/roster/quotes";
@@ -645,7 +646,12 @@ async function advanceLeagueCalendar(
   }
 
   await syncLeagueCurrentWeek(leagueId, nextWeek, supabase);
-  await captureWeekBaselinesForLeague(leagueId, nextWeek, supabase);
+  await captureWeekBaselinesForLeagueCarryingForward(
+    leagueId,
+    nextWeek,
+    currentWeek,
+    supabase
+  );
   await setNextWeekFinalizeAt(leagueId, nextWeek, new Date());
 
   const { data: leagueMeta } = await supabase

@@ -487,6 +487,130 @@ export async function captureWeekBaselinesForLeague(
   );
 }
 
+async function captureWeekBaselinesForUserCarryingForward(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  weekNumber: number,
+  priorWeekNumber: number
+): Promise<void> {
+  const { data: priorRows } = await supabase
+    .from("roster_week_baselines")
+    .select("pick_id, value_at_close")
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .eq("week_number", priorWeekNumber);
+
+  const priorCloseByPick = new Map(
+    (priorRows ?? [])
+      .filter((row) => row.value_at_close != null)
+      .map((row) => [row.pick_id as string, Number(row.value_at_close)])
+  );
+
+  let picks = (await loadUserDraftPicks(supabase, userId, leagueId)).filter(
+    (p) => p.pick_type !== "skip"
+  );
+
+  if (picks.length === 0) {
+    const state = await loadDraftStateDetailed(userId, { leagueId });
+    if (!state.ok) return;
+    picks = state.state.picks.filter((p) => p.pick_type !== "skip");
+  }
+
+  if (picks.length === 0) return;
+
+  picks = picksEligibleForWeekBaselines(picks);
+  if (picks.length === 0) return;
+
+  // Picks with no prior-week close (newly acquired via waiver/IR, or the
+  // prior week's own close never got captured) still need a live price.
+  const picksNeedingLivePrice = picks.filter(
+    (pick) => !priorCloseByPick.has(pick.id)
+  );
+  const livePrices =
+    picksNeedingLivePrice.length > 0
+      ? await fetchPricesForPicks(picksNeedingLivePrice)
+      : new Map<string, number>();
+
+  const rows = picks.flatMap((pick) => {
+    const carried = priorCloseByPick.get(pick.id);
+    const value =
+      carried != null
+        ? carried
+        : pickMarketValue(
+            pick,
+            livePrices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
+          );
+    if (!isTrustworthyBaselineValue(pick, value)) return [];
+    return [
+      {
+        league_id: leagueId,
+        user_id: userId,
+        week_number: weekNumber,
+        pick_id: pick.id,
+        value_at_open: value,
+      },
+    ];
+  });
+
+  if (rows.length === 0) return;
+
+  await supabase.from("roster_week_baselines").upsert(rows, {
+    onConflict: "league_id,user_id,week_number,pick_id",
+    ignoreDuplicates: true,
+  });
+}
+
+/**
+ * Same as captureWeekBaselinesForLeague, but a new week's open value is
+ * carried forward from the prior week's close instead of an independent
+ * live-quote fetch. Matters when a cron catches up multiple overdue weeks
+ * in one run: capturing week N+1's open via a fresh fetch mere moments
+ * before also scoring week N+1 (using another fresh fetch as "current")
+ * guarantees a near-identical open/current pair — a ~0% score regardless
+ * of what actually happened that week. Reusing week N's close as week
+ * N+1's open is correct regardless of timing (this week's start price is
+ * last week's end price) and eliminates the coincidental-match failure
+ * mode entirely.
+ */
+export async function captureWeekBaselinesForLeagueCarryingForward(
+  leagueId: string,
+  weekNumber: number,
+  priorWeekNumber: number,
+  supabaseClient?: SupabaseClient
+): Promise<void> {
+  const supabase = supabaseClient ?? (await createClient());
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("user_id")
+    .eq("league_id", leagueId);
+
+  if (!drafts?.length) return;
+
+  const { data: existingRows } = await supabase
+    .from("roster_week_baselines")
+    .select("user_id")
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber);
+  const coveredUserIds = new Set((existingRows ?? []).map((row) => row.user_id));
+  const uncoveredDrafts = drafts.filter(
+    (draft) => !coveredUserIds.has(draft.user_id)
+  );
+  if (uncoveredDrafts.length === 0) return;
+
+  await Promise.all(
+    uncoveredDrafts.map((draft) =>
+      captureWeekBaselinesForUserCarryingForward(
+        supabase,
+        leagueId,
+        draft.user_id,
+        weekNumber,
+        priorWeekNumber
+      )
+    )
+  );
+}
+
 export async function captureWeekCloseSnapshots(
   leagueId: string,
   weekNumber: number,
