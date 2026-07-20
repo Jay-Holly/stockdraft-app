@@ -686,13 +686,13 @@ export function DraftRoom({
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Draft Room — 2026 Season</h1>
-          {myDraftPosition && (
+          {(liveDraft?.globalPickNumber ?? 0) === 0 && myDraftPosition && (
             <p className="text-sm font-semibold text-amber-400 mt-0.5">
               Your draft position: {myDraftPosition.slot} of {myDraftPosition.total}
             </p>
           )}
-          {myNextPick && (
-            <p className="text-xs text-muted mt-1">
+          {(liveDraft?.globalPickNumber ?? 0) > 0 && myNextPick && (
+            <p className="text-sm font-semibold text-amber-400 mt-0.5">
               Your next pick: Round {myNextPick.round} · #{myNextPick.globalPick}
               {myNextPick.picksAway > 0
                 ? ` (${myNextPick.picksAway} pick${myNextPick.picksAway === 1 ? "" : "s"} away)`
