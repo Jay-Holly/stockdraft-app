@@ -22,6 +22,8 @@ import {
   formatFetchError,
 } from "@/lib/fetch-client";
 import type { Draft, DraftFeedEvent, DraftState } from "@/lib/draft/types";
+import { TOTAL_ROUNDS } from "@/lib/draft/types";
+import { SPORTS_SIM_TOTAL_ROUNDS } from "@/lib/draft/draft-constants";
 import type { DraftChatMessage } from "@/lib/draft/chat-types";
 import type { Profile } from "@/lib/types";
 import type { MarketQuote } from "@/lib/market/types";
@@ -93,6 +95,40 @@ export function DraftRoom({
   const isOnClock =
     liveDraft?.onClockUserId != null &&
     liveDraft.onClockUserId === profile.id;
+  const myDraftPosition = useMemo(() => {
+    if (liveDraft?.draftOrder?.length) {
+      const index = liveDraft.draftOrder.findIndex(
+        (team) => team.userId === profile.id
+      );
+      if (index >= 0) {
+        return { slot: index + 1, total: liveDraft.draftOrder.length };
+      }
+    }
+    if (state?.waitingRoomMembers?.length) {
+      const ordered = [...state.waitingRoomMembers].sort(
+        (a, b) => (a.draftSlot ?? Infinity) - (b.draftSlot ?? Infinity)
+      );
+      const index = ordered.findIndex((member) => member.userId === profile.id);
+      if (index >= 0) {
+        return { slot: index + 1, total: ordered.length };
+      }
+    }
+    return null;
+  }, [liveDraft?.draftOrder, state?.waitingRoomMembers, profile.id]);
+  const myRoundPicks = useMemo(() => {
+    if (!myDraftPosition) return null;
+    const { slot, total } = myDraftPosition;
+    const totalRounds = state?.sportsSimDraftRules
+      ? SPORTS_SIM_TOTAL_ROUNDS
+      : TOTAL_ROUNDS;
+    return Array.from({ length: totalRounds }, (_, i) => {
+      const round = i + 1;
+      // Snake draft: odd rounds run slot 1→N, even rounds reverse N→1.
+      const posInRound = round % 2 === 1 ? slot : total - slot + 1;
+      const globalPick = (round - 1) * total + posInRound;
+      return { round, globalPick };
+    });
+  }, [myDraftPosition, state?.sportsSimDraftRules]);
   const canPick =
     !readOnly &&
     !isWaitingRoom &&
@@ -647,6 +683,28 @@ export function DraftRoom({
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Draft Room — 2026 Season</h1>
+          {myDraftPosition && (
+            <p className="text-sm font-semibold text-amber-400 mt-0.5">
+              Your draft position: {myDraftPosition.slot} of {myDraftPosition.total}
+            </p>
+          )}
+          {myRoundPicks && (
+            <div className="flex gap-1.5 overflow-x-auto mt-1.5 pb-1">
+              {myRoundPicks.map(({ round, globalPick }) => (
+                <div
+                  key={round}
+                  className="flex flex-col items-center rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-1 shrink-0"
+                >
+                  <span className="text-[10px] uppercase text-muted leading-none">
+                    R{round}
+                  </span>
+                  <span className="text-xs font-semibold text-amber-400 leading-tight">
+                    #{globalPick}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           <p className="text-muted text-sm mt-0.5">
             {isWaitingRoom
               ? "Waiting room — draft has not started yet"

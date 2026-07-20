@@ -112,6 +112,7 @@ export type LiveDraftView = {
 export type DraftWaitingRoomMember = {
   userId: string;
   teamName: string;
+  draftSlot: number | null;
 };
 
 export type DraftRulesMode = "standard" | "sports_sim";

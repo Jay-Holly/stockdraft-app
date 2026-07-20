@@ -131,6 +131,7 @@ export async function loadDraftApiPayload(
             members.map((member) => ({
               userId: member.userId,
               teamName: member.displayName,
+              draftSlot: member.draftSlot,
             }))
           )
         : Promise.resolve(undefined),
