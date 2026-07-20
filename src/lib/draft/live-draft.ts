@@ -345,11 +345,28 @@ async function repairHumanLiveDraftOrderIfNeeded(leagueId: string): Promise<void
   if (memberIds.length < 2) return;
 
   const memberSet = new Set(memberIds);
-  const order = normalizeDraftOrder(state.draft_order);
+  const rawOrder = normalizeDraftOrder(state.draft_order);
+
+  // Collapse any duplicate slots (e.g. a bot double-booked by a prior
+  // generation race) down to their first occurrence before diffing against
+  // current membership — otherwise a duplicate that's still a valid member
+  // looks neither "stale" nor "missing" and survives the repair untouched.
+  const seen = new Set<string>();
+  const order: string[] = [];
+  let hadDuplicates = false;
+  for (const id of rawOrder) {
+    if (seen.has(id)) {
+      hadDuplicates = true;
+      continue;
+    }
+    seen.add(id);
+    order.push(id);
+  }
+
   const staleInOrder = order.filter((id) => !memberSet.has(id));
   const missingFromOrder = memberIds.filter((id) => !order.includes(id));
 
-  if (staleInOrder.length === 0 && missingFromOrder.length === 0) {
+  if (!hadDuplicates && staleInOrder.length === 0 && missingFromOrder.length === 0) {
     if (league.status === "waiting") {
       await supabase
         .from("leagues")
@@ -432,17 +449,18 @@ async function repairLiveDraftOrderIfNeeded(leagueId: string): Promise<void> {
   if (leagueBots.length === 0) return;
 
   const botIds = leagueBots.map((b) => b.id);
+  const humanIds = order.filter((id) => !isBotUserId(id));
   const hasAllBots =
     botIds.every((id) => order.includes(id)) &&
-    order.length === 1 + botIds.length;
+    order.length === humanIds.length + botIds.length;
 
   if (hasAllBots) return;
 
-  const humanId =
-    order.find((id) => !isBotUserId(id)) ?? order[0] ?? null;
-  if (!humanId) return;
+  if (humanIds.length === 0) return;
 
-  const draftOrder = [humanId, ...botIds];
+  // Preserve every human already in the order (not just the first) — this
+  // only exists to backfill bots that were added after the order was built.
+  const draftOrder = [...humanIds, ...botIds];
   const supabase = await createClient();
   const { data: leagueRow } = await supabase
     .from("leagues")
