@@ -180,16 +180,17 @@ async function main() {
       // real schedule.
       if (event.season?.type !== 2) continue;
 
-      // NBA's In-Season Tournament knockout round (quarterfinals, semis,
-      // championship) are extra neutral-site games beyond each team's real
-      // 82-game schedule — still tagged season.type 2, but distinguishable
-      // by a notes headline ESPN attaches to just these games (group-stage
-      // NBA Cup games have no such note and are correctly kept, since those
-      // count toward the 82).
+      // Of the NBA's In-Season Tournament rounds, only the Championship
+      // game itself is a true extra (83rd) game for the two finalists,
+      // excluded from both teams' records — verified against Wikipedia's
+      // official per-team game log, where the Championship row is marked
+      // "Cup" with no record entry while the Quarterfinal/Semifinal rows
+      // are numbered and DO increment the record (they replace a normal
+      // schedule slot rather than adding to it, unlike the Championship).
       const noteHeadlines = (comp.notes ?? [])
         .map((note) => note.headline ?? "")
         .join(" ");
-      if (/NBA Cup.*(Quarterfinal|Semifinal|Championship)/i.test(noteHeadlines)) {
+      if (/NBA Cup Championship/i.test(noteHeadlines)) {
         continue;
       }
 
