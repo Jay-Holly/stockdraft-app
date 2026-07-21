@@ -386,6 +386,11 @@ export function DashboardContent({
               </Button>
             </Link>
           </div>
+          <Link href="/stockdraft-dfs" className="block">
+            <Button variant="primary" className="w-full">
+              SDDFS
+            </Button>
+          </Link>
         </div>
 
         {leagueError && !showBotSelection && (
