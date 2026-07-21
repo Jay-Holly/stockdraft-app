@@ -18,115 +18,13 @@ import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCount
 import { isDraftCountdownVisible } from "@/lib/league/scheduled-draft";
 import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInviteBanner";
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
-import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import { ContactUsModal } from "@/components/ContactUsModal";
 import { CategoryBubbles } from "@/components/league/CategoryBubbles";
 import type { BotPersonality } from "@/lib/league/bots";
 import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
-import {
-  formatMatchupScore,
-  parseLeagueScoringMode,
-  type LeagueScoringMode,
-} from "@/lib/league/scoring-mode";
 import type { DayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
-
-function leagueStatusLabel(status: string): string {
-  if (status === "waiting") return "Waiting for players";
-  if (status === "drafting") return "Draft in progress";
-  if (status === "active") return "Season active";
-  return "Season complete";
-}
-
-function canEnterSeasonLeague(
-  status: string,
-  humanDraftComplete: boolean
-): boolean {
-  return (
-    humanDraftComplete && status !== "drafting" && status !== "waiting"
-  );
-}
-
-function MatchupResultCard({
-  weekNumber,
-  opponentName,
-  humanScore,
-  opponentScore,
-  scoringMode,
-  winner,
-  upcoming = false,
-}: {
-  weekNumber: number;
-  opponentName: string;
-  humanScore: number | null;
-  opponentScore: number | null;
-  scoringMode: LeagueScoringMode;
-  winner: string | null;
-  upcoming?: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-dark-border p-4">
-      <p className="text-xs text-muted uppercase tracking-wider mb-2">
-        Week {weekNumber} {upcoming ? "matchup" : "result"}
-      </p>
-      <p className="text-sm mb-3">
-        vs <span className="font-semibold text-white">{opponentName}</span>
-      </p>
-
-      {upcoming ? (
-        <p className="text-sm text-muted">
-          Scores on your next dashboard visit using{" "}
-          {scoringMode === "dollar_gain"
-            ? "weekly dollar gain on starters + crypto (bench excluded)."
-            : "weekly percentage gain on starters + crypto (bench excluded)."}
-        </p>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg bg-dark px-3 py-2">
-              <p className="text-muted text-xs">You</p>
-              <p
-                className={`font-bold ${
-                  winner === "human"
-                    ? "text-green-400"
-                    : winner === "tie"
-                      ? "text-gold"
-                      : "text-white"
-                }`}
-              >
-                {formatMatchupScore(humanScore, scoringMode)}
-              </p>
-            </div>
-            <div className="rounded-lg bg-dark px-3 py-2">
-              <p className="text-muted text-xs">Opponent</p>
-              <p
-                className={`font-bold ${
-                  winner === "opponent"
-                    ? "text-green-400"
-                    : winner === "tie"
-                      ? "text-gold"
-                      : "text-white"
-                }`}
-              >
-                {formatMatchupScore(opponentScore, scoringMode)}
-              </p>
-            </div>
-          </div>
-          {winner && (
-            <p className="text-sm mt-3 font-medium">
-              {winner === "human"
-                ? "You won this week!"
-                : winner === "opponent"
-                  ? `${opponentName} won this week.`
-                  : "This week was a tie."}
-            </p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
 
 export function DashboardContent({
   profile,
@@ -250,28 +148,6 @@ export function DashboardContent({
       supportCode: league.support_code,
     });
   }
-
-  function renderOwnerDeleteButton(
-    league: { id: string; name: string; support_code: string; owner_user_id: string | null },
-    busy: boolean
-  ) {
-    if (league.owner_user_id !== profile.id) return null;
-
-    return (
-      <Button
-        variant="ghost"
-        className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 ml-auto"
-        disabled={busy}
-        onClick={() => openDeleteLeagueModal(league)}
-      >
-        Delete League
-      </Button>
-    );
-  }
-
-  const activeLeagueItem = leagues.find(
-    (item) => item.league.id === activeLeagueId
-  );
 
   const squadLeagues = humanLeagues.filter(
     (item) => item.league.format_type !== "sports_league"
@@ -494,126 +370,6 @@ export function DashboardContent({
                 void setActiveLeague(leagueId, href)
               }
             />
-          )}
-        </section>
-      )}
-
-      {activeSummary && activeSummary.league.id === activeLeagueId && (
-        <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="mb-2">
-                <LeagueSupportId code={activeSummary.league.support_code} size="md" />
-              </div>
-              <h2 className="text-lg font-semibold">
-                {activeLeagueItem?.humanTeamName ?? profile.team_name}
-              </h2>
-              <p className="text-muted text-sm">{activeSummary.league.name}</p>
-              <p className="text-muted text-xs capitalize mt-1">
-                {leagueStatusLabel(activeSummary.league.status)}
-              </p>
-            </div>
-            {activeSummary.standings && (
-              <div className="text-right shrink-0">
-                <p className="text-2xl font-black text-gold">
-                  {activeSummary.standings.wins}-{activeSummary.standings.losses}
-                </p>
-                <p className="text-xs text-muted uppercase tracking-wider">
-                  W-L record
-                </p>
-              </div>
-            )}
-          </div>
-
-          {activeSummary.league.status === "drafting" &&
-            !activeSummary.humanDraftComplete && (
-              <Button href="/draft" variant="primary" className="w-full">
-                Continue live draft
-              </Button>
-            )}
-
-          {canEnterSeasonLeague(
-            activeSummary.league.status,
-            activeSummary.humanDraftComplete
-          ) && (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="primary"
-                className="flex-1 text-sm"
-                disabled={switchingLeagueId === activeSummary.league.id}
-                onClick={() =>
-                  void setActiveLeague(activeSummary.league.id, "/league")
-                }
-              >
-                Open league
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1 text-sm"
-                disabled={switchingLeagueId === activeSummary.league.id}
-                onClick={() =>
-                  void setActiveLeague(activeSummary.league.id, "/matchups")
-                }
-              >
-                Matchups
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1 text-sm"
-                disabled={switchingLeagueId === activeSummary.league.id}
-                onClick={() =>
-                  void setActiveLeague(activeSummary.league.id, "/my-team")
-                }
-              >
-                My Team
-              </Button>
-              <Button
-                variant="ghost"
-                className="flex-1 text-sm"
-                disabled={switchingLeagueId === activeSummary.league.id}
-                onClick={() =>
-                  void setActiveLeague(activeSummary.league.id, "/free-agents")
-                }
-              >
-                Free Agents
-              </Button>
-            </div>
-          )}
-
-          {activeSummary.lastCompletedMatchup &&
-            activeSummary.league.status !== "drafting" && (
-              <MatchupResultCard
-                weekNumber={activeSummary.lastCompletedMatchup.weekNumber}
-                opponentName={activeSummary.lastCompletedMatchup.opponentName}
-                humanScore={activeSummary.lastCompletedMatchup.humanScorePct}
-                opponentScore={
-                  activeSummary.lastCompletedMatchup.opponentScorePct
-                }
-                scoringMode={parseLeagueScoringMode(
-                  activeSummary.league.scoring_mode
-                )}
-                winner={activeSummary.lastCompletedMatchup.winner}
-              />
-            )}
-
-          {activeSummary.currentMatchup &&
-            activeSummary.league.status !== "drafting" &&
-            activeSummary.currentMatchup.status === "scheduled" && (
-              <MatchupResultCard
-                weekNumber={activeSummary.currentMatchup.weekNumber}
-                opponentName={activeSummary.currentMatchup.opponentName}
-                humanScore={null}
-                opponentScore={null}
-                scoringMode={parseLeagueScoringMode(
-                  activeSummary.league.scoring_mode
-                )}
-                winner={null}
-                upcoming
-              />
-            )}
-          {renderOwnerDeleteButton(
-            activeSummary.league,
-            switchingLeagueId === activeSummary.league.id
           )}
         </section>
       )}
