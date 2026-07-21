@@ -20,6 +20,17 @@ function getNyParts(date: Date) {
   };
 }
 
+/** Today's date in the US market timezone, as "YYYY-MM-DD" — used to match a game's game_date. */
+export function getNyDateString(date = new Date()): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: MARKET_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(date);
+}
+
 /** US equities session: Mon–Fri 9:30 AM – 4:00 PM Eastern. */
 export function isUsMarketOpen(date = new Date()): boolean {
   const { weekday, hour, minute } = getNyParts(date);

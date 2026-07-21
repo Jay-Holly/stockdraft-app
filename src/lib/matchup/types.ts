@@ -2,6 +2,8 @@ export type LeagueMatchupRow = {
   id: string;
   league_id: string;
   week_number: number;
+  /** Multi-asset sports-sim leagues only (sdba/sdhl/sdlb) — the real game's date. Null everywhere else. */
+  game_date: string | null;
   opponent_bot_id: string | null;
   opponent_name: string | null;
   human_score_pct: number | null;
@@ -35,6 +37,44 @@ export function findHumanMatchupForWeek(
     matchups.find(
       (matchup) =>
         matchup.week_number === weekNumber &&
+        (matchup.home_user_id === userId || matchup.away_user_id === userId)
+    ) ?? null
+  );
+}
+
+/**
+ * Multi-asset sports-sim leagues (sdba/sdhl/sdlb) can have several of the
+ * viewer's games in one calendar week — use this instead of
+ * findHumanMatchupForWeek wherever every game in the week must be shown, not
+ * just the first one found.
+ */
+export function findHumanMatchupsForWeek(
+  matchups: LeagueMatchupRow[],
+  userId: string,
+  weekNumber: number
+): LeagueMatchupRow[] {
+  return matchups.filter(
+    (matchup) =>
+      matchup.week_number === weekNumber &&
+      (matchup.home_user_id === userId || matchup.away_user_id === userId)
+  );
+}
+
+/**
+ * Multi-asset sports-sim leagues only — "today's" game for a user, since a
+ * calendar week can hold several of their games and week-level lookup would
+ * pick an arbitrary one. dateIso must be a "YYYY-MM-DD" string (see
+ * getNyDateString in @/lib/market/hours).
+ */
+export function findHumanMatchupForDate(
+  matchups: LeagueMatchupRow[],
+  userId: string,
+  dateIso: string
+): LeagueMatchupRow | null {
+  return (
+    matchups.find(
+      (matchup) =>
+        matchup.game_date === dateIso &&
         (matchup.home_user_id === userId || matchup.away_user_id === userId)
     ) ?? null
   );
