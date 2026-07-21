@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getSymbolQuote } from "@/lib/roster/quotes";
+import { fetchLiveSddfsQuotes } from "@/lib/sddfs/live-quotes";
 import { computeSddfsPayouts } from "@/lib/sddfs/scoring";
 import { createClient } from "@/lib/supabase/server";
 
@@ -44,19 +44,6 @@ async function loadUsernames(
   }
 
   return new Map((data ?? []).map((p) => [p.id, p.username as string]));
-}
-
-async function liveQuotesForSymbols(
-  symbols: string[]
-): Promise<Record<string, number>> {
-  const prices: Record<string, number> = {};
-  await Promise.all(
-    symbols.map(async (symbol) => {
-      const quote = await getSymbolQuote(symbol);
-      prices[symbol.toUpperCase()] = quote.price;
-    })
-  );
-  return prices;
 }
 
 /**
@@ -146,7 +133,7 @@ export async function getSddfsContestLeaderboard(
     contest.status === "locked"
       ? [...new Set((picks ?? []).map((p) => p.symbol))]
       : [];
-  const liveQuotes = await liveQuotesForSymbols(allSymbols);
+  const liveQuotes = await fetchLiveSddfsQuotes(allSymbols);
 
   const scoreByEntry = new Map<string, number>();
   const livePicksByEntry = new Map<string, SddfsLeaderboardPick[]>();

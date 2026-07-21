@@ -37,14 +37,7 @@ export default async function DfsEntryLeaguePage({
   return (
     <DfsShell title={`SDDFS — $${myEntry.buyIn} League`}>
       <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center gap-3">
-          <Image
-            src="/images/leagues/sddfs.png"
-            alt="SDDFS"
-            width={48}
-            height={48}
-            className="rounded-lg"
-          />
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold">${myEntry.buyIn} Contest</h1>
             <p className="text-muted text-sm">
@@ -56,6 +49,13 @@ export default async function DfsEntryLeaguePage({
                   : "Final — contest scored"}
             </p>
           </div>
+          <Image
+            src="/images/leagues/sddfs.png"
+            alt="SDDFS"
+            width={112}
+            height={112}
+            className="rounded-xl flex-shrink-0"
+          />
         </div>
 
         <div className="bg-dark-card border border-white/10 rounded-xl p-4">

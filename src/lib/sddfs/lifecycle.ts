@@ -1,29 +1,13 @@
 import "server-only";
 
 import { getEasternParts } from "@/lib/season/eastern-time";
-import { getSymbolQuote } from "@/lib/roster/quotes";
+import { fetchLiveSddfsQuotes } from "@/lib/sddfs/live-quotes";
 import { createServiceClient } from "@/lib/supabase/service";
 import { finalizeSddfsContest } from "@/lib/sddfs/scoring";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 const MARKET_CLOSE_HOUR_ET = 16;
-
-async function quotesForSymbols(
-  symbols: string[]
-): Promise<Record<string, number>> {
-  const prices: Record<string, number> = {};
-
-  await Promise.all(
-    symbols.map(async (symbol) => {
-      const upper = symbol.toUpperCase();
-      const quote = await getSymbolQuote(symbol);
-      prices[upper] = quote.price;
-    })
-  );
-
-  return prices;
-}
 
 /** Locks any 'open' contests past lock_at and snapshots each pick's open price. */
 async function lockDueContests(
@@ -66,7 +50,7 @@ async function lockDueContests(
       .in("entry_id", entryIds);
 
     const symbols = [...new Set((picks ?? []).map((p) => p.symbol))];
-    const prices = await quotesForSymbols(symbols);
+    const prices = await fetchLiveSddfsQuotes(symbols);
 
     for (const pick of picks ?? []) {
       const openPrice = prices[pick.symbol.toUpperCase()] ?? 0;
@@ -127,7 +111,7 @@ async function scoreClosedContests(
         .in("entry_id", entryIds);
 
       const symbols = [...new Set((picks ?? []).map((p) => p.symbol))];
-      const prices = await quotesForSymbols(symbols);
+      const prices = await fetchLiveSddfsQuotes(symbols);
 
       for (const pick of picks ?? []) {
         const closePrice = prices[pick.symbol.toUpperCase()] ?? 0;

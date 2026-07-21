@@ -6,7 +6,11 @@ export default async function StockDraftDfsLobbyPage() {
   const contests = await getDfsContestsForToday();
 
   return (
-    <DfsShell title="SDDFS">
+    <DfsShell
+      title="SDDFS"
+      watermarkSizeClassName="w-[95vw] max-w-[820px]"
+      watermarkOpacityClassName="opacity-[0.12]"
+    >
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-bold">SDDFS</h1>

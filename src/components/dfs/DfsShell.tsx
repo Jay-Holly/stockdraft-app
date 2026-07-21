@@ -14,15 +14,23 @@ const LINKS = [
 export function DfsShell({
   title,
   children,
+  watermarkSizeClassName,
+  watermarkOpacityClassName,
 }: {
   title: string;
   children: React.ReactNode;
+  watermarkSizeClassName?: string;
+  watermarkOpacityClassName?: string;
 }) {
   const pathname = usePathname();
 
   return (
     <div className="min-h-screen flex flex-col">
-      <PageWatermark logoSrc="/images/leagues/sddfs.png" />
+      <PageWatermark
+        logoSrc="/images/leagues/sddfs.png"
+        sizeClassName={watermarkSizeClassName}
+        opacityClassName={watermarkOpacityClassName}
+      />
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between gap-3 mb-3">

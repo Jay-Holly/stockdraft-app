@@ -1,6 +1,14 @@
 import Image from "next/image";
 
-export function PageWatermark({ logoSrc }: { logoSrc?: string | null }) {
+export function PageWatermark({
+  logoSrc,
+  sizeClassName = "w-[75vw] max-w-[520px]",
+  opacityClassName = "opacity-[0.05]",
+}: {
+  logoSrc?: string | null;
+  sizeClassName?: string;
+  opacityClassName?: string;
+}) {
   return (
     <div
       aria-hidden="true"
@@ -12,7 +20,7 @@ export function PageWatermark({ logoSrc }: { logoSrc?: string | null }) {
           alt=""
           width={600}
           height={750}
-          className="w-[75vw] max-w-[520px] h-auto opacity-[0.05]"
+          className={`${sizeClassName} h-auto ${opacityClassName}`}
         />
       ) : (
         <span className="text-[26vw] font-black tracking-tight leading-none opacity-[0.03] select-none whitespace-nowrap">
