@@ -416,6 +416,55 @@ export default function GameRulesPage() {
 
         <SectionDivider />
 
+        <SectionTitle>SDDFS — STOCKDRAFT DAILY FANTASY SPORT</SectionTitle>
+        <BodyText>
+          SDDFS is a single-day contest, separate from your season leagues.
+          Build a 12-pick lineup each morning, lock it in at the open, and see
+          where you land when the market closes that afternoon.
+        </BodyText>
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Building your lineup:
+        </p>
+        <BulletList
+          items={[
+            "12 picks total — one stock or crypto from each of the 11 GICS sectors (Technology, Financials, Healthcare, Consumer Discretionary, Consumer Staples, Energy, Industrials, Materials, Real Estate, Utilities, Communication Services) plus one Crypto pick",
+            "Picks are not exclusive — any number of players can roster the same stock or coin. It's not first-come-first-served, so draft the pick you think will actually move.",
+            "One entry per contest, one contest per buy-in tier per day",
+          ]}
+        />
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Contest tiers:
+        </p>
+        <RulesTable
+          headers={["Contest", "Buy-in", "Entrant cap"]}
+          rows={[
+            ["$2 Bill", "$2", "150"],
+            ["The 5 Spot", "$5", "100"],
+            ["The Ten'er", "$10", "75"],
+            ["The 25 Spot", "$25", "50"],
+            ["The Fiddy Thousand Cent", "$50", "20"],
+            ["The Big Ciento", "$100", "10"],
+          ]}
+        />
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Lock, scoring, and payouts:
+        </p>
+        <BulletList
+          items={[
+            "Lineups lock at 9:00 AM ET (market open) — make any last-minute swaps before then in the Free Agents panel on your entry's page",
+            "Scored at 4:00 PM ET (market close) on each pick's open-to-close % change, summed across all 12 picks — highest total score wins",
+            "Top 3 finishers split 50% / 30% / 20% of a prize pool equal to 92% of all buy-ins collected",
+            "Ties split the pooled share evenly across every tied entry, even when a tie straddles the paid places (e.g. a 3-way tie for 2nd splits the 2nd + 3rd shares evenly across all three)",
+          ]}
+        />
+        <p className="text-sm text-white/90 leading-relaxed mt-3">
+          Track your live standings and projected payout anytime from My Teams
+          — scores update throughout the day as the market moves, not just
+          once at close.
+        </p>
+
+        <SectionDivider />
+
         <SectionTitle>COMING SOON — SPORTS SIM LEAGUES</SectionTitle>
         <BodyText>
           StockDraft is expanding into sport-specific leagues that mirror real
