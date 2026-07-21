@@ -83,6 +83,14 @@
   --color-league-accent: #8cdc51;
 }
 
+[data-league-theme="sddfs"] {
+  --color-league-primary: #7c3aed;
+  --color-league-secondary: #a855f7;
+  --color-league-on-primary: #ffffff;
+  --color-league-on-secondary: #ffffff;
+  --color-league-accent: #a855f7;
+}
+
 body {
   background-color: var(--color-dark);
   color: #f9fafb;

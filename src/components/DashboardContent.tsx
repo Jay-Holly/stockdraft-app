@@ -386,11 +386,13 @@ export function DashboardContent({
               </Button>
             </Link>
           </div>
-          <Link href="/stockdraft-dfs" className="block">
-            <Button variant="primary" className="w-full">
-              SDDFS
-            </Button>
-          </Link>
+          <div data-league-theme="sddfs">
+            <Link href="/stockdraft-dfs" className="block">
+              <Button variant="primary" className="w-full">
+                StockDraft Daily Fantasy Sport
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {leagueError && !showBotSelection && (
