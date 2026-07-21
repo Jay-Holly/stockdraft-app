@@ -52,9 +52,9 @@ export default async function DfsEntryLeaguePage({
           <Image
             src="/images/leagues/sddfs.png"
             alt="SDDFS"
-            width={112}
-            height={112}
-            className="rounded-xl flex-shrink-0"
+            width={180}
+            height={180}
+            className="rounded-xl flex-shrink-0 w-32 h-32 sm:w-44 sm:h-44"
           />
         </div>
 

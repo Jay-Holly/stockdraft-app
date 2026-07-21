@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { getDfsContestsForToday } from "@/lib/dfs/contests";
 import { DfsShell } from "@/components/dfs/DfsShell";
@@ -6,35 +7,43 @@ export default async function StockDraftDfsLobbyPage() {
   const contests = await getDfsContestsForToday();
 
   return (
-    <DfsShell
-      title="SDDFS"
-      watermarkSizeClassName="w-[95vw] max-w-[820px]"
-      watermarkOpacityClassName="opacity-[0.12]"
-    >
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">SDDFS</h1>
-          <p className="text-muted text-sm">
+    <DfsShell title="SDDFS" hideWatermark>
+      <div data-league-theme="sddfs" className="max-w-lg mx-auto space-y-6">
+        <div className="text-center">
+          <Image
+            src="/images/leagues/sddfs.png"
+            alt="SDDFS"
+            width={200}
+            height={200}
+            className="mx-auto rounded-2xl"
+            priority
+          />
+          <h1 className="text-xl font-bold mt-4">SDDFS</h1>
+          <p className="text-muted text-sm mt-2">
             Pick one stock from each sector, build a 12-pick lineup, win a
             share of the prize pool.
           </p>
         </div>
 
-        <div className="bg-dark-card border border-white/10 rounded-xl divide-y divide-white/5">
+        <div className="space-y-3">
           {contests.map((contest) => (
             <Link
               key={contest.id}
               href={`/stockdraft-dfs/${contest.id}`}
-              className="flex items-center justify-between p-4 hover:bg-white/5"
+              className="block rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 hover:bg-white/5"
             >
-              <div>
-                <div className="font-semibold">{contest.name}</div>
-                <div className="text-xs text-muted">
-                  ${contest.buyIn} buy-in — {contest.entrants} /{" "}
-                  {contest.maxEntrants} entered
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">{contest.name}</div>
+                  <div className="text-xs text-muted mt-1">
+                    ${contest.buyIn} buy-in — {contest.entrants} /{" "}
+                    {contest.maxEntrants} entered
+                  </div>
                 </div>
+                <span className="text-[var(--color-league-accent)] text-sm font-medium">
+                  Enter →
+                </span>
               </div>
-              <span className="text-gold text-sm font-medium">Enter →</span>
             </Link>
           ))}
         </div>
