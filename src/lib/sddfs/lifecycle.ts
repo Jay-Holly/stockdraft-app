@@ -1,8 +1,7 @@
 import "server-only";
 
 import { getEasternParts } from "@/lib/season/eastern-time";
-import { fetchCachedStockQuotes } from "@/lib/market/cached-prices";
-import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
+import { getSymbolQuote } from "@/lib/roster/quotes";
 import { createServiceClient } from "@/lib/supabase/service";
 import { finalizeSddfsContest } from "@/lib/sddfs/scoring";
 
@@ -13,18 +12,15 @@ const MARKET_CLOSE_HOUR_ET = 16;
 async function quotesForSymbols(
   symbols: string[]
 ): Promise<Record<string, number>> {
-  const cached = await fetchCachedStockQuotes(symbols);
   const prices: Record<string, number> = {};
 
-  for (const symbol of symbols.map((s) => s.toUpperCase())) {
-    const quote = cached[symbol];
-    if (quote?.price) {
-      prices[symbol] = quote.price;
-      continue;
-    }
-    const fallback = getFallbackStockQuote(symbol);
-    prices[symbol] = fallback?.price ?? 0;
-  }
+  await Promise.all(
+    symbols.map(async (symbol) => {
+      const upper = symbol.toUpperCase();
+      const quote = await getSymbolQuote(symbol);
+      prices[upper] = quote.price;
+    })
+  );
 
   return prices;
 }
