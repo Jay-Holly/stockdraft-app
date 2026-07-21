@@ -1412,7 +1412,7 @@ export async function resolveAutoPick(
   }
 
   const safety = await trySafetyStockAutoPick(leagueId, userId);
-  if (safety && turn.type !== "crypto") return safety;
+  if (safety && turn.type !== "crypto" && turn.canPickStock) return safety;
 
   if (
     turn.type === "crypto" ||

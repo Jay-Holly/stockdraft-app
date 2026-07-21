@@ -20,6 +20,10 @@ export const SPORTS_SIM_TOTAL_ROUNDS = 13;
 export const SPORTS_SIM_BENCH_START_ROUND = 11;
 export const SPORTS_SIM_PICKS_PER_TEAM = 13;
 
+/** SDBA/SDHL/SDLB only (see isMultiAssetSimLeague) — the 10 starter slots split exactly 5 stock / 5 crypto. */
+export const SPORTS_SIM_STARTER_STOCK_SLOTS = 5;
+export const SPORTS_SIM_STARTER_CRYPTO_SLOTS = 5;
+
 /** Begin bot provisioning this many ms before scheduled_draft_at (draft still starts on time). */
 export const SPORTS_SIM_BOT_PROVISION_LEAD_MS = 8 * 60 * 1000;
 

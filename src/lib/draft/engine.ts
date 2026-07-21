@@ -4,6 +4,8 @@ import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import {
   getDraftRuleConstants,
   SPORTS_SIM_STARTER_BUDGET,
+  SPORTS_SIM_STARTER_CRYPTO_SLOTS,
+  SPORTS_SIM_STARTER_STOCK_SLOTS,
 } from "@/lib/draft/draft-constants";
 import {
   BENCH_ROUNDS,
@@ -49,6 +51,17 @@ function countStarterSlotPicks(
       p.pick_type !== "skip" &&
       p.round_number <= c.starterRounds &&
       (p.pick_type === "stock" || p.pick_type === "crypto")
+  ).length;
+}
+
+function countStarterRoundPicksByType(
+  picks: DraftPick[],
+  rules: DraftRulesMode,
+  pickType: "stock" | "crypto"
+): number {
+  const c = getDraftRuleConstants(rules);
+  return picks.filter(
+    (p) => p.pick_type === pickType && p.round_number <= c.starterRounds
   ).length;
 }
 
@@ -319,7 +332,8 @@ function openTurnLabel(
 export function getTurn(
   draft: Draft,
   picks: DraftPick[],
-  rules: DraftRulesMode = "standard"
+  rules: DraftRulesMode = "standard",
+  enforceStarterSplit = false
 ): DraftTurn {
   const summary = summarizePicks(picks, rules);
   const round = draft.current_round;
@@ -339,12 +353,23 @@ export function getTurn(
 
   if (rules === "sports_sim") {
     if (round <= c.starterRounds) {
+      let canPickStock = true;
+      let canPickCrypto = true;
+      if (enforceStarterSplit) {
+        canPickStock =
+          countStarterRoundPicksByType(picks, rules, "stock") <
+          SPORTS_SIM_STARTER_STOCK_SLOTS;
+        canPickCrypto =
+          countStarterRoundPicksByType(picks, rules, "crypto") <
+          SPORTS_SIM_STARTER_CRYPTO_SLOTS;
+      }
+
       return {
         type: "open",
         round,
         label: sportsSimTurnLabel(round),
-        canPickStock: true,
-        canPickCrypto: true,
+        canPickStock,
+        canPickCrypto,
         stockBudget: c.starterBudget,
         cryptoRemaining: 0,
       };
