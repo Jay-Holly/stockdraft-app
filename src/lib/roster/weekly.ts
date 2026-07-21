@@ -59,7 +59,7 @@ export function isTrustworthyBaselineValue(pick: DraftPick, value: number): bool
   return pick.shares <= 0 || pick.symbol.toUpperCase() === "__OPEN__";
 }
 
-async function fetchPricesForPicks(
+export async function fetchPricesForPicks(
   picks: DraftPick[]
 ): Promise<Map<string, number>> {
   const stockSymbols = picks
@@ -418,13 +418,47 @@ export async function captureWeekBaselinesForUser(
 
   if (picks.length === 0) return;
 
-  const prices = await fetchPricesForPicks(picks);
+  // A week's open MUST equal the prior week's close when one exists —
+  // otherwise season/weekly math (which sums per-week close-minus-open
+  // deltas) silently drops or fabricates gains at every gap. This path runs
+  // opportunistically on page visits and used to always live-price the open,
+  // racing captureWeekBaselinesForUserCarryingForward's calendar-driven
+  // carry-forward and frequently winning (upsert ignoreDuplicates means
+  // whichever writes first sticks). Checking the prior week's close first
+  // makes both paths agree regardless of which one runs first.
+  let priorCloseByPick = new Map<string, number>();
+  if (weekNumber > 1) {
+    const { data: priorRows } = await supabase
+      .from("roster_week_baselines")
+      .select("pick_id, value_at_close")
+      .eq("league_id", leagueId)
+      .eq("user_id", userId)
+      .eq("week_number", weekNumber - 1);
+
+    priorCloseByPick = new Map(
+      (priorRows ?? [])
+        .filter((row) => row.value_at_close != null)
+        .map((row) => [row.pick_id as string, Number(row.value_at_close)])
+    );
+  }
+
+  const picksNeedingLivePrice = picks.filter(
+    (pick) => !priorCloseByPick.has(pick.id)
+  );
+  const prices =
+    picksNeedingLivePrice.length > 0
+      ? await fetchPricesForPicks(picksNeedingLivePrice)
+      : new Map<string, number>();
 
   const rows = picks.flatMap((pick) => {
-    const value = pickMarketValue(
-      pick,
-      prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
-    );
+    const carried = priorCloseByPick.get(pick.id);
+    const value =
+      carried != null
+        ? carried
+        : pickMarketValue(
+            pick,
+            prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
+          );
     if (!isTrustworthyBaselineValue(pick, value)) return [];
     return [
       {

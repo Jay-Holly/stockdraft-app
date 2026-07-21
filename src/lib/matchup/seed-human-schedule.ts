@@ -13,9 +13,18 @@ import {
 import { resolveSeasonSettings } from "@/lib/season/calendar";
 import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
 import { backfillFinalizeAtForLeague } from "@/lib/matchup/finalize-week";
-import { isSdplSeasonRulesLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
+import {
+  isMultiAssetSimLeague,
+  isSdplSeasonRulesLeague,
+  isSportsSimLeague,
+} from "@/lib/season/sdpl-league";
 import { seedSportsLeaguePickInjuryMapIfMissing } from "@/lib/sim/pick-injury-map";
 import { generateSportsSimRegularSeasonSchedule } from "@/lib/matchup/sdfl-schedule";
+import {
+  generateMultiAssetRegularSeasonSchedule,
+  type MultiAssetScheduledGame,
+} from "@/lib/matchup/multi-asset-schedule";
+import type { ScheduledGame } from "@/lib/matchup/schedule";
 import { computeSportsSimFinalizeAt } from "@/lib/matchup/sdfl-playoffs";
 import { captureWeekBaselinesForLeague } from "@/lib/roster/weekly";
 
@@ -131,10 +140,17 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
     formatType: league.format_type ?? "standard",
     sportsLeagueId: league.sports_league_id ?? null,
   });
+  const isMultiAssetSim = isMultiAssetSimLeague(league.sports_league_id);
 
-  let schedule;
+  let schedule: ScheduledGame[] | MultiAssetScheduledGame[];
   const scheduleAnchor = new Date();
-  if (isSportsSim) {
+  if (isMultiAssetSim) {
+    schedule = await generateMultiAssetRegularSeasonSchedule(
+      supabase,
+      leagueId,
+      league.sports_league_id
+    );
+  } else if (isSportsSim) {
     schedule = await generateSportsSimRegularSeasonSchedule(supabase, leagueId);
   } else if (isSdpl) {
     const settingsResult = await supabase
@@ -181,7 +197,7 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
       home_user_id: game.homeUserId,
       away_user_id: game.awayUserId,
       is_playoff: game.isPlayoff,
-      playoff_round: game.playoffRound ?? null,
+      playoff_round: "playoffRound" in game ? (game.playoffRound ?? null) : null,
       opponent_bot_id: humanIsHome
         ? game.awayUserId
         : humanIsAway
@@ -193,9 +209,17 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
           ? homeName
           : `${homeName} vs ${awayName}`,
       status: "scheduled" as const,
-      ...(isSportsSim
-        ? { finalize_at: computeSportsSimFinalizeAt(scheduleAnchor, game.weekNumber) }
-        : {}),
+      game_date: "gameDate" in game ? game.gameDate : null,
+      ...(isMultiAssetSim
+        ? {
+            finalize_at: computeSportsSimFinalizeAt(
+              scheduleAnchor,
+              (game as MultiAssetScheduledGame).gameIndex + 1
+            ),
+          }
+        : isSportsSim
+          ? { finalize_at: computeSportsSimFinalizeAt(scheduleAnchor, game.weekNumber) }
+          : {}),
     };
   });
 

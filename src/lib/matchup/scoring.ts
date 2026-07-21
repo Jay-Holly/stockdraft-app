@@ -9,12 +9,23 @@ import {
   captureWeekBaselinesForLeagueCarryingForward,
   captureWeekCloseSnapshots,
 } from "@/lib/roster/weekly";
+import {
+  captureDayCloseForLeague,
+  computeGameScorePercentForUser,
+} from "@/lib/roster/day-scoring";
+import {
+  isMultiAssetRegularSeasonComplete,
+  seedMultiAssetPlayoffFinalsIfNeeded,
+  seedMultiAssetPlayoffRound1IfNeeded,
+  seedMultiAssetPlayoffRound2IfNeeded,
+  seedMultiAssetPlayoffRound3IfNeeded,
+} from "@/lib/matchup/multi-asset-playoffs";
 import { getLastCryptoQuoteSource } from "@/lib/roster/quotes";
 import { listAiLeaguesForUser } from "@/lib/league/active-league";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { runSportsSimIrWeeklyCheck } from "@/lib/sim/ir-enforcement";
 import { ensureIrSlotsForLeague } from "@/lib/sim/ir-slots";
-import { isSportsSimLeague } from "@/lib/season/sdpl-league";
+import { isMultiAssetSimLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
 import {
   canFinalizeLeagueWeek,
   setNextWeekFinalizeAt,
@@ -323,12 +334,16 @@ export async function resolveMatchupWinner(
     weekNumber?: number;
     at?: Date;
     supabase?: SupabaseClient;
+    /** Multi-asset sports-sim leagues only — a single-game matchup has no dollar-gain tiebreak, it just stays a tie. */
+    isSingleGame?: boolean;
   }
 ): Promise<string | null> {
   const epsilon = matchupScoreEpsilon(scoringMode);
   if (Math.abs(homeScore - awayScore) >= epsilon) {
     return homeScore > awayScore ? homeUserId : awayUserId;
   }
+
+  if (options?.isSingleGame) return null;
 
   const tiebreakMode: ReturnType<typeof parseLeagueScoringMode> =
     scoringMode === "percent_gain" ? "dollar_gain" : "percent_gain";
@@ -365,30 +380,46 @@ async function scoreSingleMatchup(
   const supabase = options?.supabase ?? (await createClient());
   let homeScore: number;
   let awayScore: number;
+  const isSingleGame = Boolean(matchup.game_date);
 
   try {
-    homeScore = await computeWeeklyScoreForUser(
-      matchup.home_user_id,
-      matchup.league_id,
-      scoringMode,
-      {
-        forceHybrid: options?.forceHybrid,
-        weekNumber: options?.weekNumber ?? matchup.week_number,
-        at: options?.at,
-        supabase: options?.supabase,
-      }
-    );
-    awayScore = await computeWeeklyScoreForUser(
-      matchup.away_user_id,
-      matchup.league_id,
-      scoringMode,
-      {
-        forceHybrid: options?.forceHybrid,
-        weekNumber: options?.weekNumber ?? matchup.week_number,
-        at: options?.at,
-        supabase: options?.supabase,
-      }
-    );
+    if (isSingleGame) {
+      homeScore = await computeGameScorePercentForUser(
+        matchup.home_user_id,
+        matchup.league_id,
+        matchup.game_date as string,
+        supabase
+      );
+      awayScore = await computeGameScorePercentForUser(
+        matchup.away_user_id,
+        matchup.league_id,
+        matchup.game_date as string,
+        supabase
+      );
+    } else {
+      homeScore = await computeWeeklyScoreForUser(
+        matchup.home_user_id,
+        matchup.league_id,
+        scoringMode,
+        {
+          forceHybrid: options?.forceHybrid,
+          weekNumber: options?.weekNumber ?? matchup.week_number,
+          at: options?.at,
+          supabase: options?.supabase,
+        }
+      );
+      awayScore = await computeWeeklyScoreForUser(
+        matchup.away_user_id,
+        matchup.league_id,
+        scoringMode,
+        {
+          forceHybrid: options?.forceHybrid,
+          weekNumber: options?.weekNumber ?? matchup.week_number,
+          at: options?.at,
+          supabase: options?.supabase,
+        }
+      );
+    }
   } catch (error) {
     console.error(
       `scoreSingleMatchup failed league=${matchup.league_id} matchup=${matchup.id}:`,
@@ -404,7 +435,12 @@ async function scoreSingleMatchup(
     scoringMode,
     homeScore,
     awayScore,
-    { weekNumber: options?.weekNumber ?? matchup.week_number, forceHybrid: options?.forceHybrid, supabase }
+    {
+      weekNumber: options?.weekNumber ?? matchup.week_number,
+      forceHybrid: options?.forceHybrid,
+      supabase,
+      isSingleGame,
+    }
   );
 
   const { data: league } = await supabase
@@ -529,8 +565,19 @@ async function advanceLeagueCalendar(
     formatType: leagueFormat?.format_type,
     sportsLeagueId: leagueFormat?.sports_league_id,
   });
+  // isSportsSimLeague groups SDFL together with SDBA/SDHL/SDLB, but the
+  // week-number thresholds and seeding functions below (SDFL_REGULAR_SEASON_WEEKS,
+  // seedSdflWildCardIfNeeded, etc.) are all NFL-specific — an 18-week season
+  // and SDFL's sdal/sdnl conference standings, neither of which exist for the
+  // multi-asset leagues' ~23+ calendar-week, division/wildcard real seasons.
+  // Running this branch against sdba/sdhl/sdlb would misfire real playoff
+  // seeding at the wrong week and against nonexistent conference data.
+  // Multi-asset playoff seeding (division winners + wildcards) is not yet
+  // built — until then, these leagues just fall through to plain week
+  // advancement below with no seeding attempted.
+  const isMultiAssetSim = isMultiAssetSimLeague(leagueFormat?.sports_league_id);
 
-  if (isSportsSim) {
+  if (isSportsSim && !isMultiAssetSim) {
     if (
       isSportsSimRegularSeasonComplete(currentWeek) &&
       !scheduledWeeks.some((week) => week > SDFL_REGULAR_SEASON_WEEKS)
@@ -549,7 +596,7 @@ async function advanceLeagueCalendar(
     if (currentWeek === SDFL_CONFERENCE_CHAMPIONSHIP_WEEK) {
       await seedSdflFinalIfNeeded(supabase, leagueId);
     }
-  } else if (settings.rulesApply) {
+  } else if (!isMultiAssetSim && settings.rulesApply) {
     const regularSeasonWeeks = settings.regularSeasonWeeks;
     const { semifinalWeek, finalsWeek } = getSdplPlayoffWeeks(regularSeasonWeeks);
 
@@ -604,7 +651,7 @@ async function advanceLeagueCalendar(
         return { seasonComplete: false, nextWeek: currentWeek };
       }
     }
-  } else {
+  } else if (!isMultiAssetSim) {
     if (
       isRegularSeasonComplete(currentWeek, playerCount) &&
       !scheduledWeeks.some((week) => week > getRegularSeasonWeeks(playerCount))
@@ -631,6 +678,35 @@ async function advanceLeagueCalendar(
         );
         return { seasonComplete: false, nextWeek: currentWeek };
       }
+    }
+  } else if (isMultiAssetSim) {
+    // Each seed*IfNeeded call independently no-ops unless its own round is
+    // both unseeded and its prerequisite round is fully decided, so calling
+    // all four unconditionally every advance is safe and idempotent — unlike
+    // SDFL's fixed week-number thresholds, these leagues' regular seasons
+    // vary in length per sport's real schedule, so there's no single
+    // "currentWeek === X" constant to branch on.
+    if (await isMultiAssetRegularSeasonComplete(supabase, leagueId)) {
+      await seedMultiAssetPlayoffRound1IfNeeded(
+        supabase,
+        leagueId,
+        leagueFormat?.sports_league_id
+      );
+      await seedMultiAssetPlayoffRound2IfNeeded(
+        supabase,
+        leagueId,
+        leagueFormat?.sports_league_id
+      );
+      await seedMultiAssetPlayoffRound3IfNeeded(
+        supabase,
+        leagueId,
+        leagueFormat?.sports_league_id
+      );
+      await seedMultiAssetPlayoffFinalsIfNeeded(
+        supabase,
+        leagueId,
+        leagueFormat?.sports_league_id
+      );
     }
   }
 
@@ -732,12 +808,19 @@ export async function finalizeMatchupsForLeagueWeek(
   const scoringMode = parseLeagueScoringMode(league.scoring_mode);
   const playerCount = await getLeaguePlayerCount(leagueId);
 
+  // Multi-asset sports-sim leagues (sdba/sdhl/sdlb) can have several
+  // game_date rows sharing one week_number, each with its own finalize_at —
+  // unlike SDFL/SDPL/SDAI, where every row in a week shares the same
+  // finalize_at. Without this filter, one week-level gate passing would
+  // force-score every game in the week at once, including ones whose real
+  // date (and finalize_at) hasn't arrived yet.
   const { data: weekMatchups } = await supabase
     .from("league_matchups")
     .select("*")
     .eq("league_id", leagueId)
     .eq("week_number", weekNumber)
-    .eq("status", "scheduled");
+    .eq("status", "scheduled")
+    .or(`finalize_at.is.null,finalize_at.lte.${at.toISOString()}`);
 
   if (!weekMatchups?.length) {
     return { finalized: false };
@@ -756,8 +839,14 @@ export async function finalizeMatchupsForLeagueWeek(
     supabase
   );
   let lastError: string | undefined;
+  const closedGameDates = new Set<string>();
 
   for (const matchup of weekMatchups as LeagueMatchupRow[]) {
+    if (matchup.game_date && !closedGameDates.has(matchup.game_date)) {
+      await captureDayCloseForLeague(leagueId, matchup.game_date, supabase);
+      closedGameDates.add(matchup.game_date);
+    }
+
     const result = await scoreSingleMatchup(matchup, scoringMode, {
       forceHybrid,
       weekNumber,
@@ -790,7 +879,19 @@ export async function finalizeMatchupsForLeagueWeek(
     );
   }
 
-  await advanceLeagueCalendar(leagueId, playerCount, weekNumber, supabase);
+  // Multi-asset leagues can still have other game_date rows this week whose
+  // finalize_at hasn't arrived yet — only advance the calendar once nothing
+  // remains scheduled for this week_number, same guard as scoreMatchupForLeague.
+  const { count: stillScheduled } = await supabase
+    .from("league_matchups")
+    .select("*", { count: "exact", head: true })
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber)
+    .eq("status", "scheduled");
+
+  if (!stillScheduled) {
+    await advanceLeagueCalendar(leagueId, playerCount, weekNumber, supabase);
+  }
 
   return { finalized: true };
 }
@@ -845,14 +946,24 @@ export async function scoreMatchupForLeague(
     return { scored: false };
   }
 
-  const { data: weekMatchups } = await supabase
+  const { data: allWeekMatchups } = await supabase
     .from("league_matchups")
     .select("*")
     .eq("league_id", leagueId)
     .eq("week_number", currentWeek)
     .eq("status", "scheduled");
 
-  if (!weekMatchups?.length) {
+  // Multi-asset sports-sim leagues can have several game_date rows sharing
+  // one week_number, each with its own finalize_at (unlike SDFL/SDPL/SDAI,
+  // where every row in a week shares one). Only score the ones whose own
+  // real date has actually arrived — a still-scheduled-but-not-yet-eligible
+  // row must not be mistaken for "week is done, advance the calendar" below.
+  const now = new Date();
+  const weekMatchups = (allWeekMatchups ?? []).filter(
+    (m) => !m.finalize_at || new Date(m.finalize_at) <= now
+  );
+
+  if (!allWeekMatchups?.length) {
     const { count: anyMatchups } = await supabase
       .from("league_matchups")
       .select("*", { count: "exact", head: true })
@@ -871,6 +982,12 @@ export async function scoreMatchupForLeague(
     return scoreMatchupForLeague(userId, leagueId);
   }
 
+  if (weekMatchups.length === 0) {
+    // Games are scheduled this week but none has reached its own finalize_at
+    // yet (multi-asset leagues only) — not the same as "week is done".
+    return { scored: false };
+  }
+
   const sameDayClose = usesSameDayCloseCapture(settings, currentWeek);
 
   if (sameDayClose) {
@@ -879,8 +996,14 @@ export async function scoreMatchupForLeague(
 
   let lastError: string | undefined;
   const forceHybrid = await shouldForceHybridForWeek(leagueId, currentWeek);
+  const closedGameDates = new Set<string>();
 
   for (const matchup of weekMatchups as LeagueMatchupRow[]) {
+    if (matchup.game_date && !closedGameDates.has(matchup.game_date)) {
+      await captureDayCloseForLeague(leagueId, matchup.game_date, supabase);
+      closedGameDates.add(matchup.game_date);
+    }
+
     const result = await scoreSingleMatchup(matchup, scoringMode, {
       forceHybrid,
       weekNumber: currentWeek,
