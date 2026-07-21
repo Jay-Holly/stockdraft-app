@@ -28,9 +28,10 @@ export default async function StockDraftDfsLobbyPage() {
               className="flex items-center justify-between p-4 hover:bg-white/5"
             >
               <div>
-                <div className="font-semibold">${contest.buyIn} Contest</div>
+                <div className="font-semibold">{contest.name}</div>
                 <div className="text-xs text-muted">
-                  {contest.entrants} / {contest.maxEntrants} entered
+                  ${contest.buyIn} buy-in — {contest.entrants} /{" "}
+                  {contest.maxEntrants} entered
                 </div>
               </div>
               <span className="text-gold text-sm font-medium">Enter →</span>

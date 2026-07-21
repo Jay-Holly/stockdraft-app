@@ -128,7 +128,7 @@ export function FreeAgentPanel({ entries }: { entries: MyDfsEntry[] }) {
                   : "border-white/20 text-muted hover:border-white/40"
               }`}
             >
-              ${entry.buyIn} Contest — {entry.contestDate}
+              {entry.contestName} — {entry.contestDate}
             </button>
           ))}
         </div>

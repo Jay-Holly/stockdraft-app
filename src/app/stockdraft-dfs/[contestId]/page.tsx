@@ -16,12 +16,13 @@ export default async function DfsContestDraftPage({
   }
 
   return (
-    <DfsShell title={`SDDFS — $${contest.buyIn} Contest`}>
+    <DfsShell title={`SDDFS — ${contest.name}`}>
       <div className="max-w-6xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">${contest.buyIn} Contest</h1>
+          <h1 className="text-3xl font-bold">{contest.name}</h1>
           <p className="text-muted text-sm">
-            Pick one stock from each sector to build your 12-pick lineup.
+            ${contest.buyIn} buy-in — pick one stock from each sector to build
+            your 12-pick lineup.
           </p>
         </div>
         <DfsLineupBuilder contestId={contest.id} />

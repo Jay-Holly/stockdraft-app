@@ -1,5 +1,6 @@
 import "server-only";
 
+import { tierNameForBuyIn } from "@/lib/dfs/contests";
 import { createClient } from "@/lib/supabase/server";
 
 export type MyDfsEntryPick = {
@@ -12,6 +13,7 @@ export type MyDfsEntry = {
   entryId: string;
   contestId: string;
   buyIn: number;
+  contestName: string;
   contestDate: string;
   contestStatus: "open" | "locked" | "scored";
   totalScore: number | null;
@@ -62,10 +64,13 @@ export async function getMyDfsEntries(): Promise<MyDfsEntry[]> {
       ? entry.sddfs_contests[0]
       : entry.sddfs_contests;
 
+    const buyIn = Number(contest?.buy_in ?? 0);
+
     return {
       entryId: entry.id,
       contestId: entry.contest_id,
-      buyIn: Number(contest?.buy_in ?? 0),
+      buyIn,
+      contestName: tierNameForBuyIn(buyIn),
       contestDate: contest?.contest_date ?? "",
       contestStatus: (contest?.status ?? "open") as MyDfsEntry["contestStatus"],
       totalScore: entry.total_score,

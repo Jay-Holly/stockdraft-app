@@ -9,14 +9,30 @@ export type DfsContest = {
   id: string;
   contestDate: string;
   buyIn: number;
+  name: string;
   maxEntrants: number;
   entrants: number;
   lockAt: string;
   status: "open" | "locked" | "scored";
 };
 
-/** SDDFS buy-in tiers. */
-export const DFS_BUY_INS = [2, 5, 10, 25, 50, 100] as const;
+/** SDDFS buy-in tiers, each with its own display name and entrant cap. */
+export const DFS_TIERS = {
+  2: { name: "$2 Bill", maxEntrants: 150 },
+  5: { name: "The 5 Spot", maxEntrants: 100 },
+  10: { name: "The Ten'er", maxEntrants: 75 },
+  25: { name: "The 25 Spot", maxEntrants: 50 },
+  50: { name: "The Fiddy Thousand Cent", maxEntrants: 20 },
+  100: { name: "The Big Ciento", maxEntrants: 10 },
+} as const;
+
+export const DFS_BUY_INS = Object.keys(DFS_TIERS).map(Number) as Array<
+  keyof typeof DFS_TIERS
+>;
+
+export function tierNameForBuyIn(buyIn: number): string {
+  return DFS_TIERS[buyIn as keyof typeof DFS_TIERS]?.name ?? `$${buyIn} Contest`;
+}
 
 const DFS_LOCK_HOUR_ET = 9;
 const DFS_LOCK_MINUTE_ET = 0;
@@ -42,7 +58,7 @@ export async function ensureTodaysSddfsContests(
   const rows = DFS_BUY_INS.map((buyIn) => ({
     contest_date: contestDate,
     buy_in: buyIn,
-    max_entrants: 10,
+    max_entrants: DFS_TIERS[buyIn].maxEntrants,
     lock_at: lockAt,
     status: "open" as const,
   }));
@@ -89,6 +105,7 @@ export async function getDfsContestsForToday(): Promise<DfsContest[]> {
     id: c.id,
     contestDate: c.contest_date,
     buyIn: Number(c.buy_in),
+    name: tierNameForBuyIn(Number(c.buy_in)),
     maxEntrants: c.max_entrants,
     entrants: countByContest.get(c.id) ?? 0,
     lockAt: c.lock_at,
@@ -119,6 +136,7 @@ export async function getDfsContestById(id: string): Promise<DfsContest | null> 
     id: contest.id,
     contestDate: contest.contest_date,
     buyIn: Number(contest.buy_in),
+    name: tierNameForBuyIn(Number(contest.buy_in)),
     maxEntrants: contest.max_entrants,
     entrants: count ?? 0,
     lockAt: contest.lock_at,

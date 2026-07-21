@@ -35,8 +35,9 @@ export default async function DfsMyTeamsPage() {
               >
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <div className="font-semibold">
-                      ${entry.buyIn} Contest — {entry.contestDate}
+                    <div className="font-semibold">{entry.contestName}</div>
+                    <div className="text-xs text-muted">
+                      ${entry.buyIn} — {entry.contestDate}
                     </div>
                     <div className="text-xs text-muted">
                       {statusLabel(entry.contestStatus)}

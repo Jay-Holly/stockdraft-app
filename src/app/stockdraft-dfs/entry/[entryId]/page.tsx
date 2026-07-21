@@ -35,13 +35,13 @@ export default async function DfsEntryLeaguePage({
   );
 
   return (
-    <DfsShell title={`SDDFS — $${myEntry.buyIn} League`}>
+    <DfsShell title={`SDDFS — ${myEntry.contestName}`}>
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold">${myEntry.buyIn} Contest</h1>
+            <h1 className="text-3xl font-bold">{myEntry.contestName}</h1>
             <p className="text-muted text-sm">
-              {myEntry.contestDate} —{" "}
+              ${myEntry.buyIn} buy-in — {myEntry.contestDate} —{" "}
               {myEntry.contestStatus === "open"
                 ? "Open — editable until 9:00 AM ET lock"
                 : myEntry.contestStatus === "locked"
