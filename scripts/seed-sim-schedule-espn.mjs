@@ -171,6 +171,34 @@ async function main() {
     for (const event of events) {
       const comp = event.competitions?.[0];
       if (!comp) continue;
+
+      // ESPN's dates=X scoreboard returns every game on that calendar day
+      // regardless of season type — near the season boundary that includes
+      // trailing preseason games (e.g. an Oct 4 2024 Lightning-Hurricanes
+      // preseason game shows up alongside real regular-season games on the
+      // same date). Only season.type 2 ("regular-season") belongs in the
+      // real schedule.
+      if (event.season?.type !== 2) continue;
+
+      // NBA's In-Season Tournament knockout round (quarterfinals, semis,
+      // championship) are extra neutral-site games beyond each team's real
+      // 82-game schedule — still tagged season.type 2, but distinguishable
+      // by a notes headline ESPN attaches to just these games (group-stage
+      // NBA Cup games have no such note and are correctly kept, since those
+      // count toward the 82).
+      const noteHeadlines = (comp.notes ?? [])
+        .map((note) => note.headline ?? "")
+        .join(" ");
+      if (/NBA Cup.*(Quarterfinal|Semifinal|Championship)/i.test(noteHeadlines)) {
+        continue;
+      }
+
+      // A postponed game (e.g. the Jan 2025 LA wildfires) still appears as
+      // its own entry on the originally-scheduled date, in addition to the
+      // real makeup game on its rescheduled date — counting both doubles
+      // that matchup for both teams.
+      if (comp.status?.type?.name === "STATUS_POSTPONED") continue;
+
       const competitors = comp.competitors ?? [];
       const home = competitors.find((c) => c.homeAway === "home");
       const away = competitors.find((c) => c.homeAway === "away");
