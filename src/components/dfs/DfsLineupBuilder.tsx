@@ -264,7 +264,7 @@ export function DfsLineupBuilder({ contestId }: { contestId: string }) {
 
         {entered ? (
           <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center text-green-400 font-semibold">
-            You're entered!
+            You&apos;re entered!
           </div>
         ) : (
           <button

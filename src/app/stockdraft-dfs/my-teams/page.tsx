@@ -17,13 +17,13 @@ export default async function DfsMyTeamsPage() {
         <div>
           <h1 className="text-3xl font-bold">My Teams</h1>
           <p className="text-muted text-sm">
-            Every SDDFS contest you've entered will show up here.
+            Every SDDFS contest you&apos;ve entered will show up here.
           </p>
         </div>
 
         {entries.length === 0 ? (
           <div className="bg-dark-card border border-white/10 rounded-xl p-8 text-center text-muted">
-            You haven't entered any SDDFS contests yet.
+            You haven&apos;t entered any SDDFS contests yet.
           </div>
         ) : (
           <div className="space-y-4">
