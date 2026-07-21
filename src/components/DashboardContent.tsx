@@ -347,6 +347,18 @@ export function DashboardContent({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
+          {!showBotSelection && (
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                setLeagueError(null);
+                setShowBotSelection(true);
+              }}
+            >
+              Create Free Sim League
+            </Button>
+          )}
           <Link href="/leagues/create?entry=player" className="block">
             <Button variant="primary" className="w-full">
               Create Player League
@@ -367,22 +379,10 @@ export function DashboardContent({
             </Link>
           </div>
 
-          {!showBotSelection && (
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => {
-                setLeagueError(null);
-                setShowBotSelection(true);
-              }}
-            >
-              Create Free Sim League
-            </Button>
-          )}
           <div data-league-theme="day-trader">
             <Link href="/day-trader" className="block">
               <Button variant="primary" className="w-full">
-                Day Trader
+                StockDraft Day Trader
               </Button>
             </Link>
           </div>
