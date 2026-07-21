@@ -8,7 +8,7 @@ import type { SeasonCalendarErrorCode } from "@/lib/season/types";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { resolveIrResolutionState } from "@/lib/sim/ir-enforcement";
-import { isSportsSimLeague } from "@/lib/season/sdpl-league";
+import { isMultiAssetSimLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
 
 export type RosterMoveResult = {
   error?: string;
@@ -82,6 +82,13 @@ async function loadIrResolutionForUser(
       sportsLeagueId: leagueRow.sports_league_id,
     })
   ) {
+    return null;
+  }
+
+  // SDBA/SDHL/SDLB treat IR as a free stash slot (no real injury-eligibility
+  // gate) — the multi-game-per-week sports don't have a reliable injury
+  // source for two of the three leagues, so gameplay never depends on it.
+  if (isMultiAssetSimLeague(leagueRow.sports_league_id)) {
     return null;
   }
 

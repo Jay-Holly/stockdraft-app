@@ -14,6 +14,7 @@ import {
 import { resolveIrResolutionState } from "@/lib/sim/ir-enforcement";
 import { IR_OPEN_SYMBOL } from "@/lib/sim/types";
 import { requireSeasonLeague } from "@/lib/roster/server";
+import { isMultiAssetSimLeague } from "@/lib/season/sdpl-league";
 import {
   enforceIrResolutionClearForLeague,
   enforceSportsSimIrMoveAllowed,
@@ -154,21 +155,28 @@ export async function applyMoveToIr(
     return { error: "All 3 IR slots are full." };
   }
 
+  // SDBA/SDHL/SDLB treat the 3 IR slots as a free stash — no real injury
+  // eligibility required, since two of the three sports have no reliable
+  // injury-history source anyway (see seed-sim-nba-2024.mjs / seed-sim-nhl-2024.mjs).
+  const isFreeStashLeague = isMultiAssetSimLeague(leagueRow.sports_league_id);
+
   const weekNumber = leagueRow.current_week ?? 1;
-  const eligibility = await isStockIrEligibleForLeague(
-    supabase,
-    league.id,
-    leagueRow,
-    starter.symbol,
-    weekNumber
-  );
-  if (eligibility.error) {
-    return { error: eligibility.error };
-  }
-  if (!eligibility.eligible) {
-    return {
-      error: `${starter.symbol} is not IR-eligible this week based on the mapped player's injury status.`,
-    };
+  if (!isFreeStashLeague) {
+    const eligibility = await isStockIrEligibleForLeague(
+      supabase,
+      league.id,
+      leagueRow,
+      starter.symbol,
+      weekNumber
+    );
+    if (eligibility.error) {
+      return { error: eligibility.error };
+    }
+    if (!eligibility.eligible) {
+      return {
+        error: `${starter.symbol} is not IR-eligible this week based on the mapped player's injury status.`,
+      };
+    }
   }
 
   const quote = await getSymbolQuote(starter.symbol);
@@ -244,32 +252,38 @@ export async function applyReturnFromIr(
     return { error: "Select a valid IR stock to return to active." };
   }
 
+  // SDBA/SDHL/SDLB treat the 3 IR slots as a free stash — return anytime,
+  // no real injury-status check required (see applyMoveToIr for why).
+  const isFreeStashLeague = isMultiAssetSimLeague(leagueRow.sports_league_id);
   const weekNumber = leagueRow.current_week ?? 1;
-  const eligibility = await isStockIrEligibleForLeague(
-    supabase,
-    league.id,
-    leagueRow,
-    irPick.symbol,
-    weekNumber
-  );
-  if (eligibility.eligible) {
-    return {
-      error: `${irPick.symbol} is still IR-eligible this week. Use Move to IR only while injured.`,
-    };
-  }
 
-  const resolution = await resolveIrResolutionState(
-    supabase,
-    league.id,
-    leagueRow,
-    state.state.picks,
-    weekNumber
-  );
-  const forcedReturn = resolution.picks.some((row) => row.pickId === irPick.id);
-  if (!forcedReturn) {
-    return {
-      error: `${irPick.symbol} is still IR-eligible or does not require a return yet.`,
-    };
+  if (!isFreeStashLeague) {
+    const eligibility = await isStockIrEligibleForLeague(
+      supabase,
+      league.id,
+      leagueRow,
+      irPick.symbol,
+      weekNumber
+    );
+    if (eligibility.eligible) {
+      return {
+        error: `${irPick.symbol} is still IR-eligible this week. Use Move to IR only while injured.`,
+      };
+    }
+
+    const resolution = await resolveIrResolutionState(
+      supabase,
+      league.id,
+      leagueRow,
+      state.state.picks,
+      weekNumber
+    );
+    const forcedReturn = resolution.picks.some((row) => row.pickId === irPick.id);
+    if (!forcedReturn) {
+      return {
+        error: `${irPick.symbol} is still IR-eligible or does not require a return yet.`,
+      };
+    }
   }
 
   const openStarter =

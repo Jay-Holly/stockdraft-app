@@ -30,6 +30,9 @@ import {
   applyIrSwapWeekBaselines,
   syncCryptoBaselinesAfterRebalance,
 } from "@/lib/roster/weekly";
+import { isMultiAssetSimLeague } from "@/lib/season/sdpl-league";
+import { isStockMoveWindowOpen } from "@/lib/market/hours";
+import { getSectorForSymbol } from "@/lib/market/gics-sector";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -511,6 +514,17 @@ export async function applyWaiverClaim(
   if (irGate) return irGate;
   const gate = await enforceFreeAgencyOpenForLeague(league.id);
   if (gate) return gate;
+
+  const isMultiAssetLeague = isMultiAssetSimLeague(
+    league.league_type === "human" ? league.sports_league_id : null
+  );
+  if (isMultiAssetLeague && !isStockMoveWindowOpen()) {
+    return {
+      error:
+        "Stock moves are only allowed 4:30 PM–9:30 AM Eastern, Monday–Friday (locked during trading hours).",
+    };
+  }
+
   const state = await loadDraftStateDetailed(userId, { leagueId: league.id });
   if (!state.ok) return { error: state.error };
 
@@ -533,6 +547,16 @@ export async function applyWaiverClaim(
 
   const droppedSymbol = targetPick.symbol.toUpperCase();
   const isOpenSlot = droppedSymbol === "__OPEN__";
+
+  if (isMultiAssetLeague && !isOpenSlot) {
+    const droppedSector = getSectorForSymbol(droppedSymbol);
+    const addedSector = getSectorForSymbol(upper);
+    if (droppedSector && addedSector && droppedSector !== addedSector) {
+      return {
+        error: `${upper} (${addedSector}) is not in the same sector as ${droppedSymbol} (${droppedSector}). Pick up from the same sector you're dropping from.`,
+      };
+    }
+  }
 
   const offBoard = await getLeagueOffBoardSymbols(league.id);
   if (offBoard.has(upper)) {

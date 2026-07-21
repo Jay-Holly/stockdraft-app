@@ -31,3 +31,19 @@ export function normalizeSdplPlayerCount(
     ? (count as SdplPlayerCount)
     : null;
 }
+
+/**
+ * SDBA/SDHL/SDLB — multi-game-per-week sports-sim leagues that use their own
+ * roster/move rules (open anytime-FA, sector-locked stock swaps, stock moves
+ * gated to outside market hours, IR as a free stash slot). SDFL keeps the
+ * original one-game-per-week sports-sim behavior and is deliberately
+ * excluded here.
+ */
+export const MULTI_ASSET_SIM_LEAGUE_IDS = ["sdba", "sdhl", "sdlb"] as const;
+
+export function isMultiAssetSimLeague(
+  sportsLeagueId: string | null | undefined
+): boolean {
+  const id = sportsLeagueId?.toLowerCase();
+  return !!id && (MULTI_ASSET_SIM_LEAGUE_IDS as readonly string[]).includes(id);
+}

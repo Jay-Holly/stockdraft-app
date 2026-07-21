@@ -51,3 +51,24 @@ export function isUsMarketRefreshAllowed(date = new Date()): boolean {
 export function getMarketSession(date = new Date()): "live" | "static" {
   return isUsMarketOpen(date) ? "live" : "static";
 }
+
+/**
+ * SDBA/SDHL/SDLB stock-move window: open 4:30 PM–9:30 AM Eastern, Mon–Fri
+ * (i.e. locked during the 9:30 AM–4:30 PM trading session so nobody can
+ * react to a live intraday price move). Weekends are always open — the
+ * weekly matchup only scores stocks Mon 9:30 AM–Fri 4:30 PM, so nothing
+ * about a weekend stock move affects that week's score either way.
+ */
+export function isStockMoveWindowOpen(date = new Date()): boolean {
+  const { weekday, hour, minute } = getNyParts(date);
+
+  if (weekday === "Sat" || weekday === "Sun") {
+    return true;
+  }
+
+  const minutes = hour * 60 + minute;
+  const tradingOpen = 9 * 60 + 30;
+  const tradingClose = 16 * 60 + 30;
+
+  return minutes < tradingOpen || minutes >= tradingClose;
+}
