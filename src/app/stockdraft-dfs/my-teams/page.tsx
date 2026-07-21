@@ -30,7 +30,7 @@ export default async function DfsMyTeamsPage() {
             {entries.map((entry) => (
               <Link
                 key={entry.entryId}
-                href={`/stockdraft-dfs/${entry.contestId}`}
+                href={`/stockdraft-dfs/entry/${entry.entryId}`}
                 className="block bg-dark-card border border-white/10 rounded-xl p-4 hover:bg-white/5"
               >
                 <div className="flex items-center justify-between mb-2">

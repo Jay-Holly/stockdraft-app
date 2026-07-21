@@ -9,7 +9,6 @@ const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/stockdraft-dfs", label: "Lobby" },
   { href: "/stockdraft-dfs/my-teams", label: "My Teams" },
-  { href: "/stockdraft-dfs/free-agents", label: "Free Agents" },
 ];
 
 export function DfsShell({
