@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/league", label: "League" },
   { href: "/my-team", label: "My Team" },
   { href: "/matchups", label: "Matchups" },
+  { href: "/standings", label: "Standings" },
   { href: "/free-agents", label: "Free Agents" },
   { href: "/awards", label: "Awards" },
   { href: "/draft-recap", label: "Draft Recap" },

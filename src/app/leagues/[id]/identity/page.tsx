@@ -3,14 +3,19 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { SdflIdentityForm } from "@/components/league/SdflIdentityForm";
+import { GenericTeamMapForm } from "@/components/league/GenericTeamMapForm";
 import {
   isSdflLeague,
   memberNeedsSdflIdentity,
 } from "@/lib/league/team-identity";
+import {
+  isGenericMapLeague,
+  memberNeedsGenericMapClaim,
+} from "@/lib/league/generic-team-map";
 
 type PageProps = { params: Promise<{ id: string }> };
 
-export default async function SdflIdentityPage({ params }: PageProps) {
+export default async function LeagueIdentityPage({ params }: PageProps) {
   const { id: leagueId } = await params;
   const supabase = await createClient();
 
@@ -28,7 +33,10 @@ export default async function SdflIdentityPage({ params }: PageProps) {
     .eq("id", leagueId)
     .maybeSingle();
 
-  if (!league || league.league_type !== "human" || !isSdflLeague(league.sports_league_id)) {
+  const isSdfl = league ? isSdflLeague(league.sports_league_id) : false;
+  const isGenericMap = league ? isGenericMapLeague(league.sports_league_id) : false;
+
+  if (!league || league.league_type !== "human" || (!isSdfl && !isGenericMap)) {
     redirect("/dashboard");
   }
 
@@ -43,7 +51,10 @@ export default async function SdflIdentityPage({ params }: PageProps) {
     redirect("/dashboard");
   }
 
-  const needsIdentity = await memberNeedsSdflIdentity(user.id, leagueId, supabase);
+  const needsIdentity = isSdfl
+    ? await memberNeedsSdflIdentity(user.id, leagueId, supabase)
+    : await memberNeedsGenericMapClaim(user.id, leagueId, supabase);
+
   if (!needsIdentity && league.status !== "waiting") {
     redirect(`/draft?league=${leagueId}`);
   }
@@ -62,7 +73,11 @@ export default async function SdflIdentityPage({ params }: PageProps) {
         </div>
       </header>
       <main className="flex-1 px-4 py-6 max-w-3xl mx-auto w-full">
-        <SdflIdentityForm leagueId={leagueId} />
+        {isSdfl ? (
+          <SdflIdentityForm leagueId={leagueId} />
+        ) : (
+          <GenericTeamMapForm leagueId={leagueId} />
+        )}
       </main>
     </div>
   );

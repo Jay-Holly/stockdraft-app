@@ -3709,6 +3709,27 @@ body:has(.landing-screen) {
   stroke-width: 3;
 }
 
+/* Mask drawn over a claimed team's dot on the finished map artwork —
+   makes the red/blue marker "disappear" once someone selects that team. */
+.sdfl-map-marker__mask {
+  stroke-width: 2;
+  transition:
+    r 0.2s ease,
+    opacity 0.35s ease;
+  animation: sdfl-map-mask-in 0.4s ease forwards;
+}
+
+@keyframes sdfl-map-mask-in {
+  0% {
+    r: 0;
+    opacity: 0;
+  }
+  100% {
+    r: 11;
+    opacity: 1;
+  }
+}
+
 .sdfl-map-tooltip {
   position: absolute;
   top: 0.75rem;

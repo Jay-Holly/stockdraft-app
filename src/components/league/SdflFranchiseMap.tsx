@@ -83,7 +83,7 @@ export function SdflFranchiseMap({
         aria-label="SDFL franchise map — claim an open division slot"
       >
         <image
-          href="/images/league/sdfl-us-map.png"
+          href="/images/league/sdfl-map.png"
           x="0"
           y="0"
           width={SDFL_MAP_IMAGE_WIDTH}
@@ -97,7 +97,10 @@ export function SdflFranchiseMap({
           const isClaiming = claimingKey === key;
           const disabled = !isOpen && !isMine;
           const color = CONFERENCE_COLOR[slot.conference];
-          const fill = isMine && previewColor ? previewColor : color;
+          // The background art already draws each team's colored dot.
+          // Claiming a slot masks that dot out (it "disappears") rather
+          // than redrawing a colored circle on top of it.
+          const isTaken = Boolean(claimed) || isClaiming;
 
           return (
             <g
@@ -124,21 +127,24 @@ export function SdflFranchiseMap({
                 }
               }}
             >
-              {!claimed && (
+              {!isTaken && (
                 <circle
                   r="14"
                   className="sdfl-map-marker__pulse"
                   style={{ stroke: color }}
                 />
               )}
-              <circle
-                r="9"
-                className="sdfl-map-marker__dot"
-                style={{
-                  fill: claimed || isClaiming ? fill : "transparent",
-                  stroke: color,
-                }}
-              />
+              {/* Invisible hit target so the whole dot area is clickable */}
+              <circle r="11" fill="transparent" />
+              {isTaken && (
+                <circle
+                  r="11"
+                  className="sdfl-map-marker__mask"
+                  fill={isMine && previewColor ? previewColor : "#000000"}
+                  stroke={isMine ? color : "none"}
+                  strokeWidth={isMine ? 2 : 0}
+                />
+              )}
             </g>
           );
         })}
@@ -165,8 +171,8 @@ export function SdflFranchiseMap({
           SDNL
         </span>
         <span className="sdfl-map-legend__item sdfl-map-legend__item--muted">
-          <span className="sdfl-map-legend__dot sdfl-map-legend__dot--hollow" />
-          Open
+          <span className="sdfl-map-legend__dot" style={{ background: "#000000", border: "1px solid #666" }} />
+          Claimed (marker hidden)
         </span>
       </div>
     </div>
