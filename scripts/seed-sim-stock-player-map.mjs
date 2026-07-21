@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 /**
- * Seed sim_stock_player_map for NFL 2024 by joining parallel rank lists:
+ * Seed sim_stock_player_map for a sports-sim sport/season by joining parallel rank lists:
  *   - Stocks: S&P 500 market-cap rank from src/data/sp500-market-cap-ranks.json
- *             (same order SDFL uses via getMarketCapRank / enrichDraftPoolStocks)
- *   - Players: sim_player_rankings.rank for sport=nfl, season=2024
+ *             (same single draft_pool every sports-sim league draws from, via
+ *             getMarketCapRank / enrichDraftPoolStocks)
+ *   - Players: sim_player_rankings.rank for the given sport/season
  *
  * Usage:
- *   node --env-file=.env.local scripts/seed-sim-stock-player-map.mjs
  *   node --env-file=.env.local scripts/seed-sim-stock-player-map.mjs --sport nfl --season 2024
+ *   node --env-file=.env.local scripts/seed-sim-stock-player-map.mjs --sport mlb --season 2024
+ *   (defaults to --sport nfl --season 2024 if omitted)
  *
  * Prerequisites:
  *   - Migration 049_sports_sim_ir_slots.sql applied (sim_stock_player_map table)
- *   - scripts/seed-sim-nfl-2024.mjs run (sim_players + sim_player_rankings)
+ *   - scripts/seed-sim-<sport>-2024.mjs run (sim_players + sim_player_rankings, ranks 1-384 complete)
  *   - src/data/sp500-market-cap-ranks.json present (503 S&P ranks; 1-384 required)
  */
 
@@ -159,10 +161,9 @@ async function verifyDraftPoolSymbols(supabase, symbols) {
 async function main() {
   const { sport, season } = parseArgs();
 
-  if (sport !== "nfl") {
+  if (!["nfl", "mlb", "nba", "nhl"].includes(sport)) {
     console.error(
-      `Only sport=nfl is implemented. SDFL stock ranks come from sp500-market-cap-ranks.json; ` +
-        `other sports need their own stock-rank source before seeding.`
+      `Unknown sport "${sport}". Expected one of: nfl, mlb, nba, nhl.`
     );
     process.exit(1);
   }

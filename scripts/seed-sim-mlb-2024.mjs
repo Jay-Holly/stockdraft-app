@@ -258,13 +258,15 @@ function computePitcherFantasyPoints(stat) {
   );
 }
 
-function buildFantasyIndex(hittingSplits, pitchingSplits) {
+function buildFantasyIndex(hittingSplits, pitchingSplits, teamIdToAbbrev) {
   /** @type {Map<number, { person_id: number, full_name: string, team: string, position: string, fantasy_points: number, hit_fp: number, pit_fp: number }>} */
   const byPerson = new Map();
 
   for (const split of hittingSplits) {
     const personId = split.player?.id;
-    const team = normalizeTeamAbbrev(split.team?.abbreviation);
+    const team = normalizeTeamAbbrev(
+      split.team?.abbreviation ?? teamIdToAbbrev.get(split.team?.id)
+    );
     const fullName = split.player?.fullName;
     if (!personId || !team || !fullName) continue;
 
@@ -292,7 +294,9 @@ function buildFantasyIndex(hittingSplits, pitchingSplits) {
 
   for (const split of pitchingSplits) {
     const personId = split.player?.id;
-    const team = normalizeTeamAbbrev(split.team?.abbreviation);
+    const team = normalizeTeamAbbrev(
+      split.team?.abbreviation ?? teamIdToAbbrev.get(split.team?.id)
+    );
     const fullName = split.player?.fullName;
     if (!personId || !team || !fullName) continue;
 
@@ -495,7 +499,11 @@ async function main() {
   const { byKey: rosterByKey, byPersonId: rosterByPersonId } =
     buildRosterIndex(rosterEntries);
 
-  const rankedCandidates = buildFantasyIndex(hittingSplits, pitchingSplits);
+  const rankedCandidates = buildFantasyIndex(
+    hittingSplits,
+    pitchingSplits,
+    teamIdToAbbrev
+  );
   const top384 = rankedCandidates.slice(0, TOTAL_RANKS);
 
   if (top384.length < TOTAL_RANKS) {
@@ -552,8 +560,12 @@ async function main() {
   const teamGameDates = new Map();
 
   for (const game of scheduleGames) {
-    const home = normalizeTeamAbbrev(game.teams?.home?.team?.abbreviation);
-    const away = normalizeTeamAbbrev(game.teams?.away?.team?.abbreviation);
+    const home = normalizeTeamAbbrev(
+      game.teams?.home?.team?.abbreviation ?? teamIdToAbbrev.get(game.teams?.home?.team?.id)
+    );
+    const away = normalizeTeamAbbrev(
+      game.teams?.away?.team?.abbreviation ?? teamIdToAbbrev.get(game.teams?.away?.team?.id)
+    );
     const homeScore = Number(game.teams?.home?.score);
     const awayScore = Number(game.teams?.away?.score);
     const gameDate = (game.officialDate ?? game.gameDate?.slice(0, 10)) || null;
