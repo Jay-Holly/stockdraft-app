@@ -22,7 +22,9 @@ export default async function StockDraftDfsLobbyPage() {
             className="mx-auto rounded-2xl"
             priority
           />
-          <h1 className="text-xl font-bold mt-4">SDDFS</h1>
+          <h1 className="text-xl font-bold mt-4">
+            StockDraft Daily Fantasy Sport
+          </h1>
           <p className="text-muted text-sm mt-2">
             Pick one stock from each sector, build a 12-pick lineup, win a
             share of the prize pool.
