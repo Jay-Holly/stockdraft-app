@@ -200,12 +200,20 @@ export function DashboardContent({
             <h1 className="text-xl font-bold truncate">{profile.team_name}</h1>
             <p className="text-muted text-sm truncate">@{profile.username}</p>
             <p className="text-muted text-xs mt-1">Member since {createdDate}</p>
-            <Link
-              href="/profile"
-              className="inline-block text-xs font-semibold text-gold hover:underline mt-2"
-            >
-              Manager Profile
-            </Link>
+            <div className="flex items-center gap-3 mt-2">
+              <Link
+                href="/profile"
+                className="text-xs font-semibold text-gold hover:underline"
+              >
+                Manager Profile
+              </Link>
+              <Link
+                href="/my-account"
+                className="text-xs font-semibold text-gold hover:underline"
+              >
+                My Account
+              </Link>
+            </div>
           </div>
         </div>
       </section>
