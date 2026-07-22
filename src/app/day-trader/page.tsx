@@ -54,6 +54,12 @@ export default async function DayTraderPage() {
       <div className="min-h-screen flex flex-col px-4 py-8" data-league-theme="day-trader">
         <PageWatermark />
         <div className="max-w-md mx-auto w-full flex-1 flex flex-col">
+          <Link
+            href="/dashboard"
+            className="season-nav-link season-nav-link--active self-start mb-4"
+          >
+            ← Dashboard
+          </Link>
           <div className="text-center mb-8">
             <Image
               src="/images/day-trader-logo.png"
@@ -118,6 +124,12 @@ export default async function DayTraderPage() {
     <div className="min-h-screen px-4 py-8" data-league-theme="day-trader">
       <PageWatermark />
       <div className="max-w-lg mx-auto space-y-6">
+        <Link
+          href="/dashboard"
+          className="season-nav-link season-nav-link--active inline-block"
+        >
+          ← Dashboard
+        </Link>
         <div className="text-center">
           <Image
             src="/images/day-trader-logo.png"
