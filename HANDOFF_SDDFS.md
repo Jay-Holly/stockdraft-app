@@ -16,6 +16,121 @@ specific paths you touched before committing (this has bitten us before:
 one commit accidentally swept in another session's unrelated,
 not-yet-committed work because it was already `git add`ed).
 
+## Session update (2026-07-22, later): Dashboard polish — NOT YET COMMITTED
+
+Follow-on to the SDWFS/wallet/Join-Public-League session below, same day,
+different thread. All changes are local-only in
+`src/components/DashboardContent.tsx` — **not committed, not pushed**. Check
+`git status` before doing anything else; this is the only file touched.
+
+- **"Create New League" box copy** rewritten shorter/punchier: "...Day
+  Trader for prizes, our ultimate game of skill the Daily/Weekly Fantasy
+  Sport contests to wager a flat fee for a shot at the pot. Private and
+  Public leagues we have it all!"
+- **"Create Sports League" button renamed** to "Create Sports Sim League"
+  (matches the "Sports Sim" naming used elsewhere on the dashboard).
+- **"My Leagues" section rebuilt**: previously used the bubble-style
+  `CategoryBubbles` component (now unused — import removed, component file
+  itself untouched in case something else references it). Replaced with
+  the same colored full-width `Button` tile pattern as the "Create New
+  League"/"Join Public League" boxes, one tile per category (Sim Leagues,
+  Player Leagues, Sports Sim, Day Trader, Daily Fantasy Sport, Weekly
+  Fantasy Sport — the last two link to `/stockdraft-dfs` and
+  `/stockdraft-wfs` and use the existing `data-league-theme="sddfs"` /
+  `"sdwfs"` accent colors). Active-count/"View" status text sits centered
+  below each button instead of inside a bubble.
+- **All three boxes' outlines** (Create New League / Join Public League /
+  My Leagues) changed from `border-gold/30` → briefly `border-yellow-400`
+  → final: `border-white/30` (dim white, current state).
+- **Button sizing bug fixed**: the shared `Button` component's base class
+  is `w-full sm:w-auto`, so at desktop widths buttons were shrinking to
+  fit their text instead of filling the grid cell (e.g. "Sim Leagues" was
+  visibly narrower than "Player Leagues"). Fixed by adding `sm:w-full`
+  alongside `w-full` in the `className` override on every affected button
+  (14 total across the three boxes), plus `h-14 text-center leading-tight`
+  so multi-line labels don't make some buttons taller than others.
+- Verified via the dev server preview (`dev3100` launch config) — a full
+  authenticated screenshot of the rendered dashboard was reviewed visually
+  mid-session; `tsc --noEmit` clean after every edit.
+- **Tried and abandoned:** exporting a screenshot as a real JPEG file via
+  an in-page SVG `foreignObject` → `canvas.toDataURL()` capture hack. Hit
+  a persistent "tainted canvas" security error even after stripping
+  images/backgrounds — not worth chasing further. A plain screenshot
+  (already pixel-accurate) is the right tool for this; don't retry the
+  canvas-export approach.
+- **Next step, user-led:** review the dashboard changes, then commit/push/
+  deploy together (explicitly deferred per user request to batch this
+  rather than commit after every small tweak).
+
+## Session update (2026-07-22): SDWFS + dashboard/wallet nav + Join Public League
+
+Three adjacent features built and shipped this session, all committed/pushed
+to `main` (commits `336214a`, `6d14c06`) — not core SDDFS work, but built
+alongside it in the same repo/session, so recording here per user request.
+
+1. **SDWFS ("StockDraft Weekly Fantasy Sport")** — a full sibling game mode
+   to SDDFS, same 12-pick/6-tier/payout mechanics, but on a **weekly** cycle
+   instead of daily: lineup locks Monday 9 AM ET, scores Friday 4 PM ET
+   close on cumulative Monday-open → Friday-close % change (not
+   day-over-day). Turquoise theme (`data-league-theme="sdwfs"`,
+   `#14b8a6`/`#06b6d4`). Mirrors SDDFS's file map 1:1 under `wfs`/`sdwfs`
+   namespaces (`src/lib/wfs/contests.ts`, `src/lib/sdwfs/{lifecycle,
+   live-quotes,scoring,leaderboard}.ts`, `src/app/stockdraft-wfs/*`,
+   `src/components/dfs/WfsShell.tsx`, `src/components/wfs/*`). Same direct
+   Finnhub/CoinGecko live-quote approach as SDDFS's fix #1 above (never the
+   stale `stock_prices`/`crypto_prices` cache). New cron
+   `src/app/api/cron/sdwfs-lifecycle/route.ts`, added to `vercel.json`.
+   New migration `070_sdwfs_contest.sql` (`sdwfs_contests`, `sdwfs_entries`,
+   `sdwfs_entry_picks`), **applied to production DB**.
+   - **Key behavior:** `activeSdwfsContestWeekIso()` in
+     `src/lib/wfs/contests.ts` flips the "active signup week" to *next*
+     Monday starting at **this Monday 10 AM ET** (1 hour after lock) — not
+     at Friday close like SDDFS's daily equivalent. This lets people sign
+     up for next week while the current week is locked/scoring/playing
+     out. The 15-min lifecycle cron creates next week's contest rows
+     automatically at that same threshold — no manual step needed, this
+     was explicitly requested by the user ("needs to happen every week at
+     10am Monday morning by itself").
+   - Dashboard link added next to the SDDFS button in
+     `src/components/DashboardContent.tsx`.
+   - Logo at `public/images/leagues/sdwfs.png` (source:
+     `~/Desktop/STOCK DRAFT/Sports Sim logos/SDWFS.png`).
+
+2. **Wallet nav changes** — `DfsShell`/`WfsShell` nav pills now include
+   "My Wallet" linking to `/my-account`, sized to fit on one row with
+   Dashboard/Lobby/My Teams (required tightening `.season-nav`/
+   `.season-nav-link` padding/gap slightly in `globals.css` — a small
+   global change, low risk, just tighter pill spacing everywhere that
+   reuses this nav pattern). The `/my-account` wallet page itself now shows
+   `(USER ID: USERNAME)` top-right, linking to `/profile` — **only on that
+   page**, not in the SDDFS/SDWFS shells (went through a few iterations
+   with the user before landing here — don't re-add a username/account
+   bubble to the league shells themselves).
+
+3. **Join Public League** (dashboard feature, not SDDFS/SDWFS-specific) —
+   new box under "Create New League" on the dashboard: red "Join Sports Sim
+   Leagues" and gold "Join Player League" buttons. Sports-sim flow: pick a
+   sport (SDFL/SDHL/SDBA/SDLB logos) → list of public `waiting` leagues for
+   that sport. Player-league flow: pick a size (4/6/8/10/12, using
+   `public/images/leagues/SDPL{4,6,8,10,12}.png` logos, sourced from
+   `~/Desktop/STOCK DRAFT/PLAYER LEAGUES LOGOS/` — **2-team size
+   deliberately excluded**, that size is the user's own personal testing
+   size, not for public listing). Each league row shows name, `@commissioner`
+   username, and `X / Y teams` filled (or "FULL"). New SQL function
+   `list_public_human_leagues` (migration `071_public_league_browse.sql`,
+   **applied to production DB**) since no existing RLS policy let
+   non-members browse public leagues. New `joinPublicHumanLeague()` in
+   `src/lib/league/human-league.ts`, alongside (not replacing)
+   `joinHumanLeagueByToken`.
+   Dashboard "Create New League" section copy was also rewritten shorter,
+   and all button lettering in both the "Create New League" and "Join
+   Public League" boxes was made explicitly white (`!text-white`).
+
+All of the above followed the same DB-migration pattern as SDDFS/wallet:
+migrations applied directly via `SUPABASE_DB_URL` + the `pg` npm package
+(no `psql`/`supabase` CLI installed in this environment) — see this
+session's transcript if the exact one-liner is needed again.
+
 ## What SDDFS is
 
 A real-money DFS (daily fantasy) game mode, "StockDraft Daily Fantasy

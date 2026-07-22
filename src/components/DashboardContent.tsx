@@ -20,7 +20,6 @@ import { PendingLeagueInviteBanner } from "@/components/league/PendingLeagueInvi
 import { BotSelectionPanel } from "@/components/league/BotSelectionPanel";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import { ContactUsModal } from "@/components/ContactUsModal";
-import { CategoryBubbles } from "@/components/league/CategoryBubbles";
 import type { BotPersonality } from "@/lib/league/bots";
 import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
@@ -220,14 +219,15 @@ export function DashboardContent({
 
       <LiveTickerTape />
 
-      <section className="bg-dark-card border border-gold/30 rounded-2xl p-6 space-y-4">
+      <section className="bg-dark-card border-2 border-white/30 rounded-2xl p-6 space-y-4">
         <div>
           <h2 className="text-lg font-semibold mb-1">Create New League</h2>
           <p className="text-muted text-sm">
             Free Sim League to practice against bots, Player League with
-            friends, Sports League draft, Day Trader for prizes, or
-            Daily/Weekly Fantasy Sport to wager a flat fee for a shot at
-            the pot.
+            friends, Sports League draft, Day Trader for prizes, our
+            ultimate game of skill the Daily/Weekly Fantasy Sport contests
+            to wager a flat fee for a shot at the pot. Private and Public
+            leagues we have it all!
           </p>
         </div>
 
@@ -235,7 +235,7 @@ export function DashboardContent({
           {!showBotSelection && (
             <Button
               variant="secondary"
-              className="w-full !text-white"
+              className="w-full sm:w-full !text-white h-14 text-center leading-tight"
               onClick={() => {
                 setLeagueError(null);
                 setShowBotSelection(true);
@@ -245,7 +245,7 @@ export function DashboardContent({
             </Button>
           )}
           <Link href="/leagues/create?entry=player" className="block">
-            <Button variant="primary" className="w-full !text-white">
+            <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
               Create Player League
             </Button>
           </Link>
@@ -258,29 +258,29 @@ export function DashboardContent({
             }
           >
             <Link href="/leagues/create?entry=sports" className="block">
-              <Button variant="primary" className="w-full !text-white">
-                Create Sports League
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
+                Create Sports Sim League
               </Button>
             </Link>
           </div>
 
           <div data-league-theme="day-trader">
             <Link href="/day-trader" className="block">
-              <Button variant="primary" className="w-full !text-white">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
                 StockDraft Day Trader
               </Button>
             </Link>
           </div>
           <div data-league-theme="sddfs">
             <Link href="/stockdraft-dfs" className="block">
-              <Button variant="primary" className="w-full !text-white">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
                 StockDraft Daily Fantasy Sport
               </Button>
             </Link>
           </div>
           <div data-league-theme="sdwfs">
             <Link href="/stockdraft-wfs" className="block">
-              <Button variant="primary" className="w-full !text-white">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
                 StockDraft Weekly Fantasy Sport
               </Button>
             </Link>
@@ -304,7 +304,7 @@ export function DashboardContent({
         )}
       </section>
 
-      <section className="bg-dark-card border border-gold/30 rounded-2xl p-6 space-y-4">
+      <section className="bg-dark-card border-2 border-white/30 rounded-2xl p-6 space-y-4">
         <div>
           <h2 className="text-lg font-semibold mb-1">Join Public League</h2>
           <p className="text-muted text-sm">
@@ -323,27 +323,94 @@ export function DashboardContent({
             }
           >
             <Link href="/leagues/join-public/sports-sim" className="block">
-              <Button variant="primary" className="w-full !text-white">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
                 Join Sports Sim Leagues
               </Button>
             </Link>
           </div>
           <Link href="/leagues/join-public/player" className="block">
-            <Button variant="primary" className="w-full !text-white">
+            <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
               Join Player League
             </Button>
           </Link>
         </div>
       </section>
 
-      <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">
+      <section className="bg-dark-card border-2 border-white/30 rounded-2xl p-6 space-y-4">
         <h2 className="text-lg font-semibold">My Leagues</h2>
-        <CategoryBubbles
-          simLeagueCount={leagues.length}
-          playerLeagueCount={squadLeagues.length}
-          sportsSimLeagueCount={sportsSimLeagues.length}
-          dayTraderActive={Boolean(dayTrader)}
-        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <div data-league-theme="sdai">
+            <Link href="/dashboard/sim-leagues" className="block">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
+                Sim Leagues
+              </Button>
+            </Link>
+            <p className="text-muted text-xs text-center mt-1">
+              {leagues.length > 0 ? `${leagues.length} active` : "None yet"}
+            </p>
+          </div>
+
+          <div data-league-theme="sdpl">
+            <Link href="/dashboard/player-leagues" className="block">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
+                Player Leagues
+              </Button>
+            </Link>
+            <p className="text-muted text-xs text-center mt-1">
+              {squadLeagues.length > 0 ? `${squadLeagues.length} active` : "None yet"}
+            </p>
+          </div>
+
+          <div
+            style={
+              {
+                "--color-league-primary": "#dc2626",
+                "--color-league-on-primary": "#ffffff",
+              } as React.CSSProperties
+            }
+          >
+            <Link href="/dashboard/sports-sim" className="block">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
+                Sports Sim
+              </Button>
+            </Link>
+            <p className="text-muted text-xs text-center mt-1">
+              {sportsSimLeagues.length > 0
+                ? `${sportsSimLeagues.length} active`
+                : "None yet"}
+            </p>
+          </div>
+
+          <div data-league-theme="day-trader">
+            <Link href="/day-trader" className="block">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
+                Day Trader
+              </Button>
+            </Link>
+            <p className="text-muted text-xs text-center mt-1">
+              {dayTrader ? "1 active" : "View"}
+            </p>
+          </div>
+
+          <div data-league-theme="sddfs">
+            <Link href="/stockdraft-dfs" className="block">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
+                Daily Fantasy Sport
+              </Button>
+            </Link>
+            <p className="text-muted text-xs text-center mt-1">View</p>
+          </div>
+
+          <div data-league-theme="sdwfs">
+            <Link href="/stockdraft-wfs" className="block">
+              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
+                Weekly Fantasy Sport
+              </Button>
+            </Link>
+            <p className="text-muted text-xs text-center mt-1">View</p>
+          </div>
+        </div>
       </section>
 
       {activeHumanLeague?.league.status === "waiting" &&
