@@ -570,6 +570,11 @@ async function main() {
     const awayScore = Number(game.teams?.away?.score);
     const gameDate = (game.officialDate ?? game.gameDate?.slice(0, 10)) || null;
     if (!home || !away || !gameDate) continue;
+    // Doubleheaders put two genuinely distinct games on the same date
+    // between the same two teams — gameNumber (1, or 2 for the nightcap)
+    // is MLB's own disambiguator, required so both legs get their own row
+    // instead of colliding as if one were a duplicate of the other.
+    const gameNumber = Number(game.gameNumber) || 1;
 
     for (const team of [home, away]) {
       if (!teamGameDates.has(team)) teamGameDates.set(team, []);
@@ -591,6 +596,7 @@ async function main() {
       season: SEASON,
       week: null,
       game_date: gameDate,
+      game_number: gameNumber,
       home_team: home,
       away_team: away,
       winning_team: winningTeam,

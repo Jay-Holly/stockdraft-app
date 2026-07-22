@@ -18,6 +18,8 @@ import { resolveMlbRealTeamFromSlotKey } from "@/lib/sim/mlb-team-alignment";
 export type MultiAssetScheduledGame = {
   weekNumber: number;
   gameDate: string;
+  /** MLB doubleheaders: 2 for the nightcap, otherwise 1. Distinguishes two real games sharing a date+pairing. */
+  gameNumber: number;
   homeUserId: string;
   awayUserId: string;
   isPlayoff: false;
@@ -55,6 +57,7 @@ export async function loadMultiAssetFranchiseRealTeamMap(
 
 type GameResultRow = {
   game_date: string | null;
+  game_number: number | null;
   home_team: string | null;
   away_team: string | null;
 };
@@ -93,10 +96,11 @@ export async function generateMultiAssetRegularSeasonSchedule(
 
   const { data: games, error } = await supabase
     .from("sim_game_results")
-    .select("game_date, home_team, away_team")
+    .select("game_date, game_number, home_team, away_team")
     .eq("sport", sport)
     .eq("season", CURRENT_SIM_SEASON)
-    .order("game_date", { ascending: true });
+    .order("game_date", { ascending: true })
+    .order("game_number", { ascending: true });
 
   if (error) throw new Error(error.message);
 
@@ -122,6 +126,7 @@ export async function generateMultiAssetRegularSeasonSchedule(
     schedule.push({
       weekNumber: weekNumberForDate(row.game_date, firstGameDate),
       gameDate: row.game_date,
+      gameNumber: row.game_number ?? 1,
       homeUserId,
       awayUserId,
       isPlayoff: false,

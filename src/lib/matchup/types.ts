@@ -4,6 +4,8 @@ export type LeagueMatchupRow = {
   week_number: number;
   /** Multi-asset sports-sim leagues only (sdba/sdhl/sdlb) — the real game's date. Null everywhere else. */
   game_date: string | null;
+  /** MLB doubleheaders: 2 for the nightcap sharing a game_date, otherwise 1. */
+  game_number: number;
   opponent_bot_id: string | null;
   opponent_name: string | null;
   human_score_pct: number | null;
@@ -65,18 +67,29 @@ export function findHumanMatchupsForWeek(
  * calendar week can hold several of their games and week-level lookup would
  * pick an arbitrary one. dateIso must be a "YYYY-MM-DD" string (see
  * getNyDateString in @/lib/market/hours).
+ *
+ * A doubleheader is just two games on the same date, game_number 1 then 2 —
+ * nothing special about it. Sorting by game_number and preferring whichever
+ * game isn't complete yet naturally shows the opener first, then flips to
+ * the nightcap once it's decided, same as any other sequence of games.
  */
 export function findHumanMatchupForDate(
   matchups: LeagueMatchupRow[],
   userId: string,
   dateIso: string
 ): LeagueMatchupRow | null {
-  return (
-    matchups.find(
+  const todaysGames = matchups
+    .filter(
       (matchup) =>
         matchup.game_date === dateIso &&
         (matchup.home_user_id === userId || matchup.away_user_id === userId)
-    ) ?? null
+    )
+    .sort((a, b) => a.game_number - b.game_number);
+
+  return (
+    todaysGames.find((matchup) => matchup.status !== "complete") ??
+    todaysGames[todaysGames.length - 1] ??
+    null
   );
 }
 

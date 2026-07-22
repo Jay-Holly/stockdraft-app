@@ -210,6 +210,7 @@ export async function seedHumanLeagueRegularSeasonIfMissing(
           : `${homeName} vs ${awayName}`,
       status: "scheduled" as const,
       game_date: "gameDate" in game ? game.gameDate : null,
+      game_number: "gameNumber" in game ? game.gameNumber : 1,
       ...(isMultiAssetSim
         ? {
             finalize_at: computeSportsSimFinalizeAt(
