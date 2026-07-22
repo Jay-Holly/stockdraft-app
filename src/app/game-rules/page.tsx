@@ -438,9 +438,9 @@ export default function GameRulesPage() {
         <RulesTable
           headers={["Contest", "Buy-in", "Entrant cap"]}
           rows={[
-            ["$2 Bill", "$2", "150"],
+            ["The $2 Bill", "$2", "150"],
             ["The 5 Spot", "$5", "100"],
-            ["The Ten'er", "$10", "75"],
+            ["The 10'er", "$10", "75"],
             ["The 25 Spot", "$25", "50"],
             ["The Fiddy Thousand Cent", "$50", "20"],
             ["The Big Ciento", "$100", "10"],

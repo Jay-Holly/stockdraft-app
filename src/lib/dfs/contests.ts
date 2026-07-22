@@ -18,9 +18,9 @@ export type DfsContest = {
 
 /** SDDFS buy-in tiers, each with its own display name and entrant cap. */
 export const DFS_TIERS = {
-  2: { name: "$2 Bill", maxEntrants: 150 },
+  2: { name: "The $2 Bill", maxEntrants: 150 },
   5: { name: "The 5 Spot", maxEntrants: 100 },
-  10: { name: "The Ten'er", maxEntrants: 75 },
+  10: { name: "The 10'er", maxEntrants: 75 },
   25: { name: "The 25 Spot", maxEntrants: 50 },
   50: { name: "The Fiddy Thousand Cent", maxEntrants: 20 },
   100: { name: "The Big Ciento", maxEntrants: 10 },
