@@ -18,12 +18,14 @@ export function DfsShell({
   watermarkSizeClassName,
   watermarkOpacityClassName,
   hideWatermark = false,
+  hideHeaderLogo = false,
 }: {
   title: string;
   children: React.ReactNode;
   watermarkSizeClassName?: string;
   watermarkOpacityClassName?: string;
   hideWatermark?: boolean;
+  hideHeaderLogo?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -45,13 +47,15 @@ export function DfsShell({
                 {title}
               </span>
             </div>
-            <Image
-              src="/images/leagues/sddfs.png"
-              alt="SDDFS"
-              width={96}
-              height={96}
-              className="rounded-lg flex-shrink-0 h-auto w-24"
-            />
+            {!hideHeaderLogo && (
+              <Image
+                src="/images/leagues/sddfs.png"
+                alt="SDDFS"
+                width={96}
+                height={96}
+                className="rounded-lg flex-shrink-0 h-auto w-24"
+              />
+            )}
           </div>
           <nav className="season-nav" aria-label="SDDFS navigation">
             {LINKS.map((link) => (

@@ -11,14 +11,14 @@ export default async function StockDraftDfsLobbyPage() {
   const contests = await getDfsContestsForToday();
 
   return (
-    <DfsShell title="SDDFS" hideWatermark>
+    <DfsShell title="SDDFS" hideWatermark hideHeaderLogo>
       <div data-league-theme="sddfs" className="max-w-lg mx-auto space-y-6">
         <div className="text-center">
           <Image
             src="/images/leagues/sddfs.png"
             alt="SDDFS"
-            width={200}
-            height={200}
+            width={260}
+            height={260}
             className="mx-auto rounded-2xl"
             priority
           />
