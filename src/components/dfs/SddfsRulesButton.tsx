@@ -3,15 +3,6 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
-const DFS_TIER_ROWS: [string, string, string][] = [
-  ["$2 Bill", "$2", "150"],
-  ["The 5 Spot", "$5", "100"],
-  ["The Ten'er", "$10", "75"],
-  ["The 25 Spot", "$25", "50"],
-  ["The Fiddy Thousand Cent", "$50", "20"],
-  ["The Big Ciento", "$100", "10"],
-];
-
 function RulesModal({ onClose }: { onClose: () => void }) {
   const modal = (
     <div className="draft-modal-backdrop" onClick={onClose}>
@@ -34,130 +25,92 @@ function RulesModal({ onClose }: { onClose: () => void }) {
           </p>
 
           <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">1. This is a game of skill</h4>
+            <h4 className="font-semibold text-white">What you're actually playing</h4>
             <p>
-              SDDFS is a fantasy contest of skill, not a game of chance. Your
-              result is determined by the research, analysis, and sector
-              strategy you apply when building your 12-pick lineup — not by
-              a random draw, a house-set line, or odds set against you.
-              Outcomes are driven by the real, publicly available performance
-              of the stocks and crypto assets you select, which is
-              independent of StockDraft and outside our control.
+              SDDFS is a fantasy sport built on top of the public stock and
+              crypto markets — the same way fantasy football is built on top
+              of real NFL games. Your result comes from the sector research
+              and lineup strategy you bring to the draft, not from a random
+              draw or a line StockDraft sets against you. We never buy, sell,
+              or hold any stock, ETF, or coin on your behalf, and nothing
+              here is investment advice — your picks are a fantasy scoring
+              input, referencing public price data, same as a stock ticker
+              referencing a player's real-life stat line.
+            </p>
+            <p>
+              We keep a small slice of each contest's buy-ins to cover
+              payment processing and running the platform. The rest — 92
+              cents of every dollar — goes back out to players as prize
+              money. There's no house line to beat and no edge stacked
+              against you.
             </p>
           </section>
 
           <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">
-              2. No actual securities or crypto are bought, sold, or held
-            </h4>
+            <h4 className="font-semibold text-white">Drafting and scoring</h4>
             <p>
-              Entering SDDFS does not involve the purchase, sale, or
-              custody of any actual stock, ETF, or cryptocurrency.
-              StockDraft is not a broker-dealer, exchange, or investment
-              adviser, and nothing in SDDFS constitutes investment advice.
-              Your picks exist only to score your fantasy lineup, using
-              publicly available open/close pricing data as a scoring
-              reference.
+              Your lineup is 12 picks — one from each of the 11 GICS sectors
+              (Technology, Financials, Healthcare, Consumer Discretionary,
+              Consumer Staples, Energy, Industrials, Materials, Real Estate,
+              Utilities, Communication Services) plus one Crypto pick.
+              Nothing is exclusive — everyone in the contest can roster the
+              same ticker if that's where the conviction is.
+            </p>
+            <p>
+              Set your lineup any time before 9:00 AM ET, when the field
+              locks for the day. Contests settle at 4:00 PM ET market close:
+              each pick scores on its open-to-close percentage move, and
+              your 12 picks are added together for your total. First,
+              second, and third place split the prize pool 50/30/20 — a tie
+              splits its combined share evenly across everyone in it, even
+              when the tie spans more than one paid place. Live standings
+              and a running payout projection are always visible on your
+              entry page, not just at the final bell.
             </p>
           </section>
 
           <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">
-              3. StockDraft does not profit from your entry fee
-            </h4>
+            <h4 className="font-semibold text-white">Keeping it fair</h4>
             <p>
-              92% of every contest&apos;s collected entry fees is returned
-              directly to players as the prize pool. The remaining share
-              covers payment processing, hosting, and operating costs —
-              StockDraft does not run SDDFS as a house-edge wagering
-              product, and does not set odds or take the other side of
-              your entry.
+              One account, one entry per contest. Play under your own name —
+              sharing logins, running duplicate accounts, entering on
+              someone else's behalf, or automating entries with a bot or
+              script gets everything involved forfeited. StockDraft
+              employees, contractors, and their immediate family aren't
+              eligible to enter for cash. Outside of that: this game is
+              built for people who actually know the market, professionals
+              included — that's the whole point.
             </p>
           </section>
 
           <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">4. Eligibility</h4>
-            <ul className="list-disc list-outside ml-4 space-y-1">
-              <li>You must be at least 18 years old (21+ where required by your state).</li>
-              <li>You must be physically located in a jurisdiction where fantasy contests with cash entry fees are legally permitted at the time you enter.</li>
-              <li>You are solely responsible for confirming that entering SDDFS is legal where you are located.</li>
-              <li>One account and one entry per contest per person. Entries made using multiple accounts, on behalf of another person, or by any automated means are void.</li>
-            </ul>
-          </section>
-
-          <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">5. Prohibited participants</h4>
+            <h4 className="font-semibold text-white">Who can enter</h4>
             <p>
-              StockDraft employees, contractors, and their immediate family
-              members are not eligible to enter SDDFS contests for cash
-              prizes.
+              You need to be 18 or older (21+ in states that require it) and
+              physically located somewhere that allows paid skill contests
+              like this one at the moment you enter. It's on you to confirm
+              that before playing — we use location signals to help enforce
+              it, but the responsibility is yours.
             </p>
           </section>
 
           <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">6. How a contest works</h4>
-            <ul className="list-disc list-outside ml-4 space-y-1">
-              <li>Build a 12-pick lineup: one stock or crypto asset from each of the 11 GICS sectors, plus one Crypto pick. Picks are not exclusive to one entrant.</li>
-              <li>Lineups lock at 9:00 AM ET (market open). Swaps are allowed up until lock via the Free Agents panel on your entry.</li>
-              <li>Contests are scored at 4:00 PM ET (market close) on each pick&apos;s open-to-close percentage change, summed across all 12 picks.</li>
-              <li>Top 3 finishers split 50% / 30% / 20% of the prize pool. Ties split the pooled share evenly across every tied entry.</li>
-            </ul>
-          </section>
-
-          <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">7. Contest tiers</h4>
-            <div className="overflow-x-auto rounded-lg border border-white/10 mt-1">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-white/10 bg-white/5">
-                    <th className="text-left py-1.5 px-2 text-muted font-semibold">Contest</th>
-                    <th className="text-left py-1.5 px-2 text-muted font-semibold">Buy-in</th>
-                    <th className="text-left py-1.5 px-2 text-muted font-semibold">Cap</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {DFS_TIER_ROWS.map(([name, buyIn, cap]) => (
-                    <tr key={name} className="border-b border-white/5 last:border-b-0">
-                      <td className="py-1.5 px-2">{name}</td>
-                      <td className="py-1.5 px-2">{buyIn}</td>
-                      <td className="py-1.5 px-2">{cap}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">8. Voided or canceled contests</h4>
+            <h4 className="font-semibold text-white">If something breaks</h4>
             <p>
-              If a contest is canceled, voided due to a technical error, or
-              fails to meet the conditions required to award prizes, entry
-              fees for that contest are fully refunded to affected entrants.
-              StockDraft reserves the right to void individual entries found
-              to violate these rules.
+              A contest that gets canceled, hits a technical error, or can't
+              meet the conditions to pay out gets every affected entry fee
+              refunded, no questions asked. On the flip side, an entry that
+              violates these rules can be pulled. And obviously: what a
+              stock or coin did yesterday doesn't promise anything about
+              today — nobody, including us, can guarantee an outcome here.
             </p>
           </section>
 
-          <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">9. No guarantee of outcome</h4>
-            <p>
-              Past performance of any stock or crypto asset is not a
-              guarantee of future results. StockDraft makes no
-              representation about the likelihood of winning any contest or
-              prize.
-            </p>
-          </section>
-
-          <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">10. Changes to these rules</h4>
-            <p>
-              StockDraft may update these rules from time to time to reflect
-              new features, jurisdictions, or legal requirements. The
-              current version of these rules always governs contests you
-              enter going forward.
-            </p>
-          </section>
+          <p className="text-xs text-muted">
+            These rules can change as the game evolves or as new legal
+            requirements apply — whatever version is live when you enter
+            governs that contest.
+          </p>
         </div>
 
         <div className="draft-modal-actions">
