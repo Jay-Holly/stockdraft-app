@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getDfsContestById } from "@/lib/dfs/contests";
+import { formatDfsContestDateLabel, getDfsContestById } from "@/lib/dfs/contests";
 import { getMyDfsEntries } from "@/lib/dfs/my-teams";
 import { DfsLineupBuilder } from "@/components/dfs/DfsLineupBuilder";
 import { DfsShell } from "@/components/dfs/DfsShell";
@@ -50,8 +50,8 @@ export default async function DfsContestDraftPage({
         <div>
           <h1 className="text-3xl font-bold">{contest.name}</h1>
           <p className="text-muted text-sm">
-            ${contest.buyIn} buy-in — pick one stock from each sector to build
-            your 12-pick lineup.
+            ${contest.buyIn} buy-in — {formatDfsContestDateLabel(contest.contestDate)}{" "}
+            — pick one stock from each sector to build your 12-pick lineup.
           </p>
         </div>
         <DfsLineupBuilder contestId={contest.id} />

@@ -1,6 +1,10 @@
 import "server-only";
 
 import { getEasternParts } from "@/lib/season/eastern-time";
+import {
+  activeSddfsContestDateIso,
+  ensureTodaysSddfsContests,
+} from "@/lib/dfs/contests";
 import { fetchLiveSddfsQuotes } from "@/lib/sddfs/live-quotes";
 import { createServiceClient } from "@/lib/supabase/service";
 import { finalizeSddfsContest } from "@/lib/sddfs/scoring";
@@ -140,5 +144,10 @@ export async function runSddfsLifecycle(): Promise<{
   const supabase = createServiceClient();
   const locked = await lockDueContests(supabase);
   const scored = await scoreClosedContests(supabase);
+  // Proactively create the next active contest date's rows (a no-op before
+  // today's 4 PM ET close) so tomorrow's contests are already open and
+  // enterable right after close, instead of waiting for someone to load
+  // the lobby.
+  await ensureTodaysSddfsContests(supabase, activeSddfsContestDateIso());
   return { locked, scored };
 }

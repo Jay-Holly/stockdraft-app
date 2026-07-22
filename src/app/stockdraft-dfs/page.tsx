@@ -1,6 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getDfsContestsForToday } from "@/lib/dfs/contests";
+import {
+  formatDfsContestDateLabel,
+  getDfsContestsForToday,
+} from "@/lib/dfs/contests";
 import { DfsShell } from "@/components/dfs/DfsShell";
 import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
 
@@ -28,6 +31,12 @@ export default async function StockDraftDfsLobbyPage() {
             <SddfsRulesButton />
           </div>
         </div>
+
+        {contests.length > 0 && (
+          <p className="text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-league-accent)]">
+            {formatDfsContestDateLabel(contests[0].contestDate)} Contests
+          </p>
+        )}
 
         <div className="space-y-3">
           {contests.map((contest) => (

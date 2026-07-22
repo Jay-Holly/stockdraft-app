@@ -1,6 +1,11 @@
 import "server-only";
 
-import { getEasternParts, zonedDateTimeFromIso } from "@/lib/season/eastern-time";
+import {
+  addEasternDays,
+  getEasternParts,
+  zonedDateTimeFromIso,
+  type EasternParts,
+} from "@/lib/season/eastern-time";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -36,19 +41,55 @@ export function tierNameForBuyIn(buyIn: number): string {
 
 const DFS_LOCK_HOUR_ET = 9;
 const DFS_LOCK_MINUTE_ET = 0;
+const MARKET_CLOSE_HOUR_ET = 16;
 
-function todayIsoInEastern(): string {
-  const parts = getEasternParts(new Date());
+function isoFromEasternParts(parts: EasternParts): string {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(
     parts.day
   ).padStart(2, "0")}`;
 }
 
-/** Idempotently creates today's contest (one per buy-in tier) if missing. */
+function isWeekend(parts: EasternParts): boolean {
+  return parts.weekday === "Sat" || parts.weekday === "Sun";
+}
+
+function todayIsoInEastern(): string {
+  return isoFromEasternParts(getEasternParts(new Date()));
+}
+
+/**
+ * Which contest_date the lobby should show/create right now. Today's
+ * contest stays "active" through its whole lifecycle (open -> locked at
+ * 9 AM ET -> scored at 4 PM ET close) — only once the market has actually
+ * closed for the day does the next contest date become active, so
+ * tomorrow's contests are ready to enter immediately after today's close
+ * instead of waiting for someone to load the lobby after midnight.
+ */
+export function activeSddfsContestDateIso(now = new Date()): string {
+  const parts = getEasternParts(now);
+  const minutesNow = parts.hour * 60 + parts.minute;
+  const closeMinutes = MARKET_CLOSE_HOUR_ET * 60;
+
+  if (!isWeekend(parts) && minutesNow < closeMinutes) {
+    return isoFromEasternParts(parts);
+  }
+
+  let cursor = addEasternDays(parts, 1, 12, 0);
+  for (let i = 0; i < 7; i++) {
+    const cursorParts = getEasternParts(cursor);
+    if (!isWeekend(cursorParts)) {
+      return isoFromEasternParts(cursorParts);
+    }
+    cursor = addEasternDays(cursorParts, 1, 12, 0);
+  }
+  return todayIsoInEastern();
+}
+
+/** Idempotently creates the given date's contests (one per buy-in tier) if missing. */
 export async function ensureTodaysSddfsContests(
-  supabase: ServiceClient
+  supabase: ServiceClient,
+  contestDate: string = activeSddfsContestDateIso()
 ): Promise<void> {
-  const contestDate = todayIsoInEastern();
   const lockAt = zonedDateTimeFromIso(
     contestDate,
     DFS_LOCK_HOUR_ET,
@@ -74,9 +115,8 @@ export async function ensureTodaysSddfsContests(
 
 export async function getDfsContestsForToday(): Promise<DfsContest[]> {
   const supabase = createServiceClient();
-  await ensureTodaysSddfsContests(supabase);
-
-  const contestDate = todayIsoInEastern();
+  const contestDate = activeSddfsContestDateIso();
+  await ensureTodaysSddfsContests(supabase, contestDate);
 
   const { data: contests, error } = await supabase
     .from("sddfs_contests")
@@ -142,6 +182,18 @@ export async function getDfsContestById(id: string): Promise<DfsContest | null> 
     lockAt: contest.lock_at,
     status: contest.status,
   };
+}
+
+/** "2026-07-22" -> "Wed, Jul 22" */
+export function formatDfsContestDateLabel(contestDateIso: string): string {
+  const [year, month, day] = contestDateIso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 export function prizePoolForContest(contest: DfsContest): number {
