@@ -33,6 +33,7 @@ import {
   parseLeagueScoringMode,
 } from "@/lib/league/scoring-mode";
 import {
+  findHumanMatchupForDate,
   findHumanMatchupForWeek,
   getOpponentUserId,
   humanScoreFromMatchup,
@@ -40,6 +41,7 @@ import {
   opponentScoreFromMatchup,
   type LeagueMatchupRow,
 } from "@/lib/matchup/types";
+import { getNyDateString } from "@/lib/market/hours";
 import type { CryptoQuote } from "@/lib/coingecko/service";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -51,7 +53,11 @@ import {
   getSeasonWeekContext,
 } from "@/lib/league/season-weeks";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
-import { isSdplSeasonRulesLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
+import {
+  isMultiAssetSimLeague,
+  isSdplSeasonRulesLeague,
+  isSportsSimLeague,
+} from "@/lib/season/sdpl-league";
 import { resolveIrResolutionState } from "@/lib/sim/ir-enforcement";
 import { isStockIrEligibleForLeague } from "@/lib/sim/injury-status";
 import { ensureIrSlotsForDraft } from "@/lib/sim/ir-slots";
@@ -679,11 +685,27 @@ export async function loadLeaguePageData(
     return b.seasonGainPercent - a.seasonGainPercent;
   });
 
-  const currentMatchupRow = findHumanMatchupForWeek(
-    (matchups ?? []) as LeagueMatchupRow[],
-    userId,
-    currentWeek
-  );
+  const isMultiAssetSim = leagueMeta
+    ? isMultiAssetSimLeague(leagueMeta.sports_league_id)
+    : false;
+
+  // Multi-asset leagues (sdba/sdhl/sdlb) can have several of the viewer's
+  // games in one calendar week — a plain week-level lookup would surface an
+  // arbitrary one instead of today's actual game. Fall back to the
+  // week-level pick only when nothing is scheduled today (e.g. an off day).
+  const currentMatchupRow =
+    (isMultiAssetSim
+      ? findHumanMatchupForDate(
+          (matchups ?? []) as LeagueMatchupRow[],
+          userId,
+          getNyDateString()
+        )
+      : null) ??
+    findHumanMatchupForWeek(
+      (matchups ?? []) as LeagueMatchupRow[],
+      userId,
+      currentWeek
+    );
 
   let currentMatchup: MatchupLiveView | null = null;
 
