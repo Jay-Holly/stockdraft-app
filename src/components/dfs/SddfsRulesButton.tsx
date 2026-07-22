@@ -25,7 +25,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
           </p>
 
           <section className="space-y-1.5">
-            <h4 className="font-semibold text-white">What you're actually playing</h4>
+            <h4 className="font-semibold text-white">What you&apos;re actually playing</h4>
             <p>
               SDDFS is a fantasy sport built on top of the public stock and
               crypto markets — the same way fantasy football is built on top
@@ -35,13 +35,13 @@ function RulesModal({ onClose }: { onClose: () => void }) {
               or hold any stock, ETF, or coin on your behalf, and nothing
               here is investment advice — your picks are a fantasy scoring
               input, referencing public price data, same as a stock ticker
-              referencing a player's real-life stat line.
+              referencing a player&apos;s real-life stat line.
             </p>
             <p>
-              We keep a small slice of each contest's buy-ins to cover
+              We keep a small slice of each contest&apos;s buy-ins to cover
               payment processing and running the platform. The rest — 92
               cents of every dollar — goes back out to players as prize
-              money. There's no house line to beat and no edge stacked
+              money. There&apos;s no house line to beat and no edge stacked
               against you.
             </p>
           </section>
@@ -54,7 +54,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
               Consumer Staples, Energy, Industrials, Materials, Real Estate,
               Utilities, Communication Services) plus one Crypto pick.
               Nothing is exclusive — everyone in the contest can roster the
-              same ticker if that's where the conviction is.
+              same ticker if that&apos;s where the conviction is.
             </p>
             <p>
               Set your lineup any time before 9:00 AM ET, when the field
@@ -74,12 +74,12 @@ function RulesModal({ onClose }: { onClose: () => void }) {
             <p>
               One account, one entry per contest. Play under your own name —
               sharing logins, running duplicate accounts, entering on
-              someone else's behalf, or automating entries with a bot or
+              someone else&apos;s behalf, or automating entries with a bot or
               script gets everything involved forfeited. StockDraft
-              employees, contractors, and their immediate family aren't
+              employees, contractors, and their immediate family aren&apos;t
               eligible to enter for cash. Outside of that: this game is
               built for people who actually know the market, professionals
-              included — that's the whole point.
+              included — that&apos;s the whole point.
             </p>
           </section>
 
@@ -88,7 +88,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
             <p>
               You need to be 18 or older (21+ in states that require it) and
               physically located somewhere that allows paid skill contests
-              like this one at the moment you enter. It's on you to confirm
+              like this one at the moment you enter. It&apos;s on you to confirm
               that before playing — we use location signals to help enforce
               it, but the responsibility is yours.
             </p>
@@ -97,11 +97,11 @@ function RulesModal({ onClose }: { onClose: () => void }) {
           <section className="space-y-1.5">
             <h4 className="font-semibold text-white">If something breaks</h4>
             <p>
-              A contest that gets canceled, hits a technical error, or can't
+              A contest that gets canceled, hits a technical error, or can&apos;t
               meet the conditions to pay out gets every affected entry fee
               refunded, no questions asked. On the flip side, an entry that
               violates these rules can be pulled. And obviously: what a
-              stock or coin did yesterday doesn't promise anything about
+              stock or coin did yesterday doesn&apos;t promise anything about
               today — nobody, including us, can guarantee an outcome here.
             </p>
           </section>
