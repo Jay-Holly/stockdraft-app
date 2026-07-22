@@ -2,6 +2,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { DfsShell } from "@/components/dfs/DfsShell";
 import { FreeAgentPanel } from "@/components/dfs/FreeAgentPanel";
+import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
 import { getMyDfsEntries } from "@/lib/dfs/my-teams";
 import { getSddfsContestLeaderboard } from "@/lib/sddfs/leaderboard";
 import { createClient } from "@/lib/supabase/server";
@@ -48,6 +49,9 @@ export default async function DfsEntryLeaguePage({
                   ? "Locked — live standings below"
                   : "Final — contest scored"}
             </p>
+            <div className="mt-2">
+              <SddfsRulesButton />
+            </div>
           </div>
           <Image
             src="/images/leagues/sddfs.png"

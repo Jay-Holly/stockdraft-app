@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { getDfsContestsForToday } from "@/lib/dfs/contests";
 import { DfsShell } from "@/components/dfs/DfsShell";
+import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
 
 export default async function StockDraftDfsLobbyPage() {
   const contests = await getDfsContestsForToday();
@@ -23,6 +24,9 @@ export default async function StockDraftDfsLobbyPage() {
             Pick one stock from each sector, build a 12-pick lineup, win a
             share of the prize pool.
           </p>
+          <div className="mt-3">
+            <SddfsRulesButton />
+          </div>
         </div>
 
         <div className="space-y-3">
