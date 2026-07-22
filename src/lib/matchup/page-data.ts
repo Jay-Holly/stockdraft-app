@@ -8,7 +8,9 @@ import {
 } from "@/lib/league/season-weeks";
 import { shouldStealthBots } from "@/lib/league/stealth-bots";
 import type { LeagueMatchupRow } from "@/lib/matchup/types";
-import { findHumanMatchupForWeek } from "@/lib/matchup/types";
+import { findHumanMatchupForDate, findHumanMatchupForWeek } from "@/lib/matchup/types";
+import { isMultiAssetSimLeague } from "@/lib/season/sdpl-league";
+import { getNyDateString } from "@/lib/market/hours";
 import { loadRosterView, requireSeasonLeague } from "@/lib/roster/server";
 import {
   computeTeamGainStats,
@@ -218,11 +220,21 @@ export async function loadMatchupsPageData(
     };
   }
 
-  const myMatchup = findHumanMatchupForWeek(
-    weekMatchups as LeagueMatchupRow[],
-    userId,
-    viewWeek
+  // Multi-asset leagues (sdba/sdhl/sdlb) can have several of the viewer's
+  // games in one calendar week — highlight today's actual game instead of
+  // an arbitrary one when viewing the current week.
+  const isMultiAssetSim = isMultiAssetSimLeague(
+    league.league_type === "human" ? league.sports_league_id : null
   );
+  const myMatchup =
+    (isMultiAssetSim && !isHistorical
+      ? findHumanMatchupForDate(
+          weekMatchups as LeagueMatchupRow[],
+          userId,
+          getNyDateString()
+        )
+      : null) ??
+    findHumanMatchupForWeek(weekMatchups as LeagueMatchupRow[], userId, viewWeek);
 
   const details = (
     await Promise.all(
