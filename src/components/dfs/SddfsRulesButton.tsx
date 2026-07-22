@@ -90,10 +90,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
             <p>
               StockDraft employees, contractors, and their immediate family
               members are not eligible to enter SDDFS contests for cash
-              prizes. Anyone entering in a professional capacity as a
-              securities trader, analyst, or advisor with access to material
-              non-public information relevant to their picks is prohibited
-              from using that information to inform their lineup.
+              prizes.
             </p>
           </section>
 
