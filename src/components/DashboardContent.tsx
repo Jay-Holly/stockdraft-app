@@ -224,9 +224,10 @@ export function DashboardContent({
         <div>
           <h2 className="text-lg font-semibold mb-1">Create New League</h2>
           <p className="text-muted text-sm">
-            Start a Player League with friends, draft a Sports League (SDFL,
-            SDHL, SDBA, SDLB), spin up a Free Sim League against three bot
-            managers, or jump into Day Trader.
+            Free Sim League to practice against bots, Player League with
+            friends, Sports League draft, Day Trader for prizes, or
+            Daily/Weekly Fantasy Sport to wager a flat fee for a shot at
+            the pot.
           </p>
         </div>
 
@@ -234,7 +235,7 @@ export function DashboardContent({
           {!showBotSelection && (
             <Button
               variant="secondary"
-              className="w-full"
+              className="w-full !text-white"
               onClick={() => {
                 setLeagueError(null);
                 setShowBotSelection(true);
@@ -244,7 +245,7 @@ export function DashboardContent({
             </Button>
           )}
           <Link href="/leagues/create?entry=player" className="block">
-            <Button variant="primary" className="w-full">
+            <Button variant="primary" className="w-full !text-white">
               Create Player League
             </Button>
           </Link>
@@ -257,7 +258,7 @@ export function DashboardContent({
             }
           >
             <Link href="/leagues/create?entry=sports" className="block">
-              <Button variant="primary" className="w-full">
+              <Button variant="primary" className="w-full !text-white">
                 Create Sports League
               </Button>
             </Link>
@@ -265,21 +266,21 @@ export function DashboardContent({
 
           <div data-league-theme="day-trader">
             <Link href="/day-trader" className="block">
-              <Button variant="primary" className="w-full">
+              <Button variant="primary" className="w-full !text-white">
                 StockDraft Day Trader
               </Button>
             </Link>
           </div>
           <div data-league-theme="sddfs">
             <Link href="/stockdraft-dfs" className="block">
-              <Button variant="primary" className="w-full">
+              <Button variant="primary" className="w-full !text-white">
                 StockDraft Daily Fantasy Sport
               </Button>
             </Link>
           </div>
           <div data-league-theme="sdwfs">
             <Link href="/stockdraft-wfs" className="block">
-              <Button variant="primary" className="w-full">
+              <Button variant="primary" className="w-full !text-white">
                 StockDraft Weekly Fantasy Sport
               </Button>
             </Link>
@@ -301,6 +302,38 @@ export function DashboardContent({
             error={leagueError}
           />
         )}
+      </section>
+
+      <section className="bg-dark-card border border-gold/30 rounded-2xl p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold mb-1">Join Public League</h2>
+          <p className="text-muted text-sm">
+            Browse open leagues that are still waiting for players and jump
+            straight into the roster.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div
+            style={
+              {
+                "--color-league-primary": "#dc2626",
+                "--color-league-on-primary": "#ffffff",
+              } as React.CSSProperties
+            }
+          >
+            <Link href="/leagues/join-public/sports-sim" className="block">
+              <Button variant="primary" className="w-full !text-white">
+                Join Sports Sim Leagues
+              </Button>
+            </Link>
+          </div>
+          <Link href="/leagues/join-public/player" className="block">
+            <Button variant="primary" className="w-full !text-white">
+              Join Player League
+            </Button>
+          </Link>
+        </div>
       </section>
 
       <section className="bg-dark-card border border-dark-border rounded-2xl p-6 space-y-4">

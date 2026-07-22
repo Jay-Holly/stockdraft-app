@@ -167,6 +167,162 @@ export async function getLeagueInvitePreview(
   };
 }
 
+export type PublicHumanLeagueListItem = {
+  leagueId: string;
+  leagueName: string;
+  commissionerUsername: string;
+  memberCount: number;
+  playerCount: number;
+};
+
+/**
+ * Browse public "waiting" leagues for the no-token join flow. Pass exactly one
+ * of sportsLeagueId (sports-sim leagues) or playerCount (standard player leagues).
+ */
+export async function listPublicHumanLeagues(
+  filter: { sportsLeagueId: string } | { playerCount: number }
+): Promise<PublicHumanLeagueListItem[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("list_public_human_leagues", {
+    p_sports_league_id: "sportsLeagueId" in filter ? filter.sportsLeagueId : null,
+    p_player_count: "playerCount" in filter ? filter.playerCount : null,
+  });
+
+  if (error || !data) {
+    if (error) console.error("list_public_human_leagues failed:", error.message);
+    return [];
+  }
+
+  return (data as Array<{
+    league_id: string;
+    league_name: string;
+    commissioner_username: string;
+    member_count: number | string;
+    player_count: number;
+  }>).map((row) => ({
+    leagueId: row.league_id,
+    leagueName: row.league_name,
+    commissionerUsername: row.commissioner_username,
+    memberCount: Number(row.member_count),
+    playerCount: row.player_count,
+  }));
+}
+
+/** Join-by-league-id variant of joinHumanLeagueByToken, gated on visibility = 'public' with no token. */
+export async function joinPublicHumanLeague(
+  userId: string,
+  leagueId: string,
+  teamName: string
+): Promise<{
+  league?: HumanLeague;
+  error?: string;
+  redirectTo?: string;
+}> {
+  const trimmedTeam = teamName.trim();
+  const supabase = await createClient();
+
+  const { data: existingMember } = await supabase
+    .from("league_members")
+    .select("user_id")
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingMember) {
+    return loadHumanLeagueById(leagueId);
+  }
+
+  // Pre-join reads use the service client — a non-member is blocked by RLS otherwise.
+  const service = createServiceClient();
+  const { data: leagueRow, error: leagueRowError } = await service
+    .from("leagues")
+    .select(
+      "owner_user_id, status, visibility, player_count, opponent_type, scheduled_draft_at, sports_league_id, league_type"
+    )
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  if (leagueRowError || !leagueRow) {
+    return { error: leagueRowError?.message ?? "League not found." };
+  }
+
+  if (leagueRow.league_type !== "human" || leagueRow.visibility !== "public") {
+    return { error: "This league is not open to public join." };
+  }
+
+  if (leagueRow.owner_user_id === userId) {
+    return { error: "You are already the commissioner of this league." };
+  }
+
+  if (leagueRow.status !== "waiting") {
+    return { error: "This league is no longer accepting players." };
+  }
+
+  const { count: memberCount, error: countError } = await service
+    .from("league_members")
+    .select("*", { count: "exact", head: true })
+    .eq("league_id", leagueId);
+
+  if (countError) return { error: countError.message };
+
+  const playerCount = leagueRow.player_count;
+  if ((memberCount ?? 0) >= playerCount) {
+    return { error: "This league is already full." };
+  }
+
+  const nextDraftSlot = memberCount ?? 0;
+  const sdflLeague = isSdflLeague(leagueRow.sports_league_id);
+
+  if (!sdflLeague) {
+    if (!trimmedTeam) return { error: "Team name is required." };
+    if (trimmedTeam.length > 40) {
+      return { error: "Team name must be 40 characters or fewer." };
+    }
+  }
+
+  const { error: memberError } = await supabase.from("league_members").insert({
+    league_id: leagueId,
+    user_id: userId,
+    display_name: sdflLeague ? "Pending" : trimmedTeam,
+    draft_slot: nextDraftSlot,
+  });
+
+  if (memberError) {
+    if (isUniqueViolation(memberError)) {
+      return loadHumanLeagueById(leagueId);
+    }
+    return { error: memberError.message };
+  }
+
+  const { error: draftError } = await supabase.from("drafts").insert({
+    league_id: leagueId,
+    user_id: userId,
+  });
+
+  if (draftError && !isUniqueViolation(draftError)) {
+    return { error: draftError.message };
+  }
+
+  const hasScheduledDraft = Boolean(leagueRow.scheduled_draft_at);
+  const isFull = nextDraftSlot + 1 >= playerCount;
+
+  if (!hasScheduledDraft && isFull) {
+    const startResult = await maybeStartHumanLeagueDraft(leagueId);
+    if (startResult.error) {
+      console.error(
+        `joinPublicHumanLeague: draft start failed for ${leagueId}:`,
+        startResult.error
+      );
+    }
+  }
+
+  const loaded = await loadHumanLeagueById(leagueId);
+  if (loaded.league && sdflLeague) {
+    return { ...loaded, redirectTo: sdflIdentityPath(leagueId) };
+  }
+  return loaded;
+}
+
 export async function listPendingHumanLeagueInvites(): Promise<
   PendingHumanLeagueInvite[]
 > {
