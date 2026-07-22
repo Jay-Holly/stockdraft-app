@@ -442,7 +442,7 @@ export default function GameRulesPage() {
             ["The 5 Spot", "$5", "100"],
             ["The 10'er", "$10", "75"],
             ["The 25 Spot", "$25", "50"],
-            ["The Fiddy Thousand Cent", "$50", "20"],
+            ["The Fiddy Hundred Cent", "$50", "20"],
             ["The Big Ciento", "$100", "10"],
           ]}
         />

@@ -22,7 +22,7 @@ export const DFS_TIERS = {
   5: { name: "The 5 Spot", maxEntrants: 100 },
   10: { name: "The 10'er", maxEntrants: 75 },
   25: { name: "The 25 Spot", maxEntrants: 50 },
-  50: { name: "The Fiddy Thousand Cent", maxEntrants: 20 },
+  50: { name: "The Fiddy Hundred Cent", maxEntrants: 20 },
   100: { name: "The Big Ciento", maxEntrants: 10 },
 } as const;
 
