@@ -8,12 +8,12 @@ import { PageWatermark } from "@/components/PageWatermark";
 
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/stockdraft-dfs", label: "Lobby" },
-  { href: "/stockdraft-dfs/my-teams", label: "My Teams" },
+  { href: "/stockdraft-wfs", label: "Lobby" },
+  { href: "/stockdraft-wfs/my-teams", label: "My Teams" },
   { href: "/my-account", label: "My Wallet" },
 ];
 
-export function DfsShell({
+export function WfsShell({
   title,
   children,
   watermarkSizeClassName,
@@ -34,7 +34,7 @@ export function DfsShell({
     <div className="min-h-screen flex flex-col">
       {!hideWatermark && (
         <PageWatermark
-          logoSrc="/images/leagues/sddfs.png"
+          logoSrc="/images/leagues/sdwfs.png"
           sizeClassName={watermarkSizeClassName}
           opacityClassName={watermarkOpacityClassName}
         />
@@ -50,15 +50,15 @@ export function DfsShell({
             </div>
             {!hideHeaderLogo && (
               <Image
-                src="/images/leagues/sddfs.png"
-                alt="SDDFS"
+                src="/images/leagues/sdwfs.png"
+                alt="SDWFS"
                 width={96}
                 height={96}
                 className="rounded-lg flex-shrink-0 h-auto w-24"
               />
             )}
           </div>
-          <nav className="season-nav" aria-label="SDDFS navigation">
+          <nav className="season-nav" aria-label="SDWFS navigation">
             {LINKS.map((link) => (
               <Link
                 key={link.href}

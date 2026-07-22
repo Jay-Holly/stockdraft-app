@@ -277,6 +277,13 @@ export function DashboardContent({
               </Button>
             </Link>
           </div>
+          <div data-league-theme="sdwfs">
+            <Link href="/stockdraft-wfs" className="block">
+              <Button variant="primary" className="w-full">
+                StockDraft Weekly Fantasy Sport
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {leagueError && !showBotSelection && (

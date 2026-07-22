@@ -57,9 +57,10 @@ export default async function MyAccountPage({
   const range: WalletRange =
     rawRange === "year" || rawRange === "all" ? rawRange : "month";
 
-  const [balance, transactions] = await Promise.all([
+  const [balance, transactions, { data: profile }] = await Promise.all([
     getWalletBalance(user.id),
     listWalletTransactions(user.id, range),
+    supabase.from("profiles").select("username").eq("id", user.id).single(),
   ]);
 
   return (
@@ -67,9 +68,14 @@ export default async function MyAccountPage({
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <Logo size="sm" />
-          <span className="text-xs text-gold font-semibold uppercase tracking-wider">
-            My Account
-          </span>
+          {profile?.username && (
+            <Link
+              href="/profile"
+              className="text-sm font-black tracking-wide text-gold hover:underline"
+            >
+              (USER ID: {profile.username.toUpperCase()})
+            </Link>
+          )}
         </div>
       </header>
 

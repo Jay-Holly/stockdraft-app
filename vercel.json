@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/sddfs-lifecycle",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sdwfs-lifecycle",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
