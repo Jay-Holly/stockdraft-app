@@ -67,6 +67,7 @@ function TileIconGlyph({ icon }: { icon: TileIcon }) {
       stroke="currentColor"
       strokeWidth={2}
       className="w-5 h-5 shrink-0"
+      style={{ color: "var(--tile-accent)" }}
       aria-hidden="true"
     >
       {TILE_ICON_PATHS[icon]}
@@ -74,17 +75,59 @@ function TileIconGlyph({ icon }: { icon: TileIcon }) {
   );
 }
 
-function TileLabel({ icon, children }: { icon: TileIcon; children: React.ReactNode }) {
+const TILE_ACCENTS: Record<TileIcon, string> = {
+  chart: "#3b82f6",
+  diamond: "#e0a63a",
+  trophy: "#dc2626",
+  bolt: "#8cdc51",
+  calendarDay: "#7c3aed",
+  calendarWeek: "#14b8a6",
+};
+
+const DASHBOARD_TILE_CLASS =
+  "dashboard-tile group flex w-full min-h-[4.5rem] items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-all active:scale-[0.98]";
+
+const DASHBOARD_TILE_ICON_CLASS =
+  "relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border border-[var(--tile-accent)] bg-[radial-gradient(circle_at_30%_30%,color-mix(in_srgb,var(--tile-accent)_30%,transparent),transparent)]";
+
+function DashboardTile({
+  icon,
+  children,
+  href,
+  onClick,
+}: {
+  icon: TileIcon;
+  children: React.ReactNode;
+  href?: string;
+  onClick?: () => void;
+}) {
+  const style = { "--tile-accent": TILE_ACCENTS[icon] } as React.CSSProperties;
+  const content = (
+    <>
+      <span className="dashboard-tile-chart" aria-hidden="true" />
+      <span className={DASHBOARD_TILE_ICON_CLASS}>
+        <TileIconGlyph icon={icon} />
+      </span>
+      <span className="relative z-[1] text-sm font-semibold leading-tight text-white">
+        {children}
+      </span>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={DASHBOARD_TILE_CLASS} style={style}>
+        {content}
+      </Link>
+    );
+  }
+
   return (
-    <span className="flex items-center justify-center gap-2">
-      <TileIconGlyph icon={icon} />
-      <span>{children}</span>
-    </span>
+    <button type="button" onClick={onClick} className={DASHBOARD_TILE_CLASS} style={style}>
+      {content}
+    </button>
   );
 }
-
-const TILE_BUTTON_CLASS =
-  "w-full sm:w-full !text-white h-14 text-center leading-tight border border-black/25 shadow-[0_2px_0_0_rgba(0,0,0,0.35)]";
 
 export function DashboardContent({
   profile,
@@ -302,58 +345,31 @@ export function DashboardContent({
 
         <div className="grid grid-cols-2 gap-3">
           {!showBotSelection && (
-            <Button
-              variant="secondary"
-              className={TILE_BUTTON_CLASS}
+            <DashboardTile
+              icon="chart"
               onClick={() => {
                 setLeagueError(null);
                 setShowBotSelection(true);
               }}
             >
-              <TileLabel icon="chart">Create Free Sim League</TileLabel>
-            </Button>
+              Create Free Sim League
+            </DashboardTile>
           )}
-          <Link href="/leagues/create?entry=player" className="block">
-            <Button variant="primary" className={TILE_BUTTON_CLASS}>
-              <TileLabel icon="diamond">Create Player League</TileLabel>
-            </Button>
-          </Link>
-          <div
-            style={
-              {
-                "--color-league-primary": "#dc2626",
-                "--color-league-on-primary": "#ffffff",
-              } as React.CSSProperties
-            }
-          >
-            <Link href="/leagues/create?entry=sports" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="trophy">Create Sports Sim League</TileLabel>
-              </Button>
-            </Link>
-          </div>
-
-          <div data-league-theme="day-trader">
-            <Link href="/day-trader" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="bolt">StockDraft Day Trader</TileLabel>
-              </Button>
-            </Link>
-          </div>
-          <div data-league-theme="sddfs">
-            <Link href="/stockdraft-dfs" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="calendarDay">StockDraft Daily Fantasy Sport</TileLabel>
-              </Button>
-            </Link>
-          </div>
-          <div data-league-theme="sdwfs">
-            <Link href="/stockdraft-wfs" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="calendarWeek">StockDraft Weekly Fantasy Sport</TileLabel>
-              </Button>
-            </Link>
-          </div>
+          <DashboardTile icon="diamond" href="/leagues/create?entry=player">
+            Create Player League
+          </DashboardTile>
+          <DashboardTile icon="trophy" href="/leagues/create?entry=sports">
+            Create Sports Sim League
+          </DashboardTile>
+          <DashboardTile icon="bolt" href="/day-trader">
+            StockDraft Day Trader
+          </DashboardTile>
+          <DashboardTile icon="calendarDay" href="/stockdraft-dfs">
+            StockDraft Daily Fantasy Sport
+          </DashboardTile>
+          <DashboardTile icon="calendarWeek" href="/stockdraft-wfs">
+            StockDraft Weekly Fantasy Sport
+          </DashboardTile>
         </div>
 
         {leagueError && !showBotSelection && (
@@ -383,25 +399,12 @@ export function DashboardContent({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div
-            style={
-              {
-                "--color-league-primary": "#dc2626",
-                "--color-league-on-primary": "#ffffff",
-              } as React.CSSProperties
-            }
-          >
-            <Link href="/leagues/join-public/sports-sim" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="trophy">Join Sports Sim Leagues</TileLabel>
-              </Button>
-            </Link>
-          </div>
-          <Link href="/leagues/join-public/player" className="block">
-            <Button variant="primary" className={TILE_BUTTON_CLASS}>
-              <TileLabel icon="diamond">Join Player League</TileLabel>
-            </Button>
-          </Link>
+          <DashboardTile icon="trophy" href="/leagues/join-public/sports-sim">
+            Join Sports Sim Leagues
+          </DashboardTile>
+          <DashboardTile icon="diamond" href="/leagues/join-public/player">
+            Join Player League
+          </DashboardTile>
         </div>
       </section>
 
@@ -409,41 +412,28 @@ export function DashboardContent({
         <h2 className="text-lg font-semibold text-gold">My Leagues</h2>
 
         <div className="grid grid-cols-2 gap-3">
-          <div data-league-theme="sdai">
-            <Link href="/dashboard/sim-leagues" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="chart">Sim Leagues</TileLabel>
-              </Button>
-            </Link>
+          <div>
+            <DashboardTile icon="chart" href="/dashboard/sim-leagues">
+              Sim Leagues
+            </DashboardTile>
             <p className="text-muted text-xs text-center mt-1">
               {leagues.length > 0 ? `${leagues.length} active` : "None yet"}
             </p>
           </div>
 
-          <div data-league-theme="sdpl">
-            <Link href="/dashboard/player-leagues" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="diamond">Player Leagues</TileLabel>
-              </Button>
-            </Link>
+          <div>
+            <DashboardTile icon="diamond" href="/dashboard/player-leagues">
+              Player Leagues
+            </DashboardTile>
             <p className="text-muted text-xs text-center mt-1">
               {squadLeagues.length > 0 ? `${squadLeagues.length} active` : "None yet"}
             </p>
           </div>
 
-          <div
-            style={
-              {
-                "--color-league-primary": "#dc2626",
-                "--color-league-on-primary": "#ffffff",
-              } as React.CSSProperties
-            }
-          >
-            <Link href="/dashboard/sports-sim" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="trophy">Sports Sim</TileLabel>
-              </Button>
-            </Link>
+          <div>
+            <DashboardTile icon="trophy" href="/dashboard/sports-sim">
+              Sports Sim
+            </DashboardTile>
             <p className="text-muted text-xs text-center mt-1">
               {sportsSimLeagues.length > 0
                 ? `${sportsSimLeagues.length} active`
@@ -451,32 +441,26 @@ export function DashboardContent({
             </p>
           </div>
 
-          <div data-league-theme="day-trader">
-            <Link href="/day-trader" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="bolt">Day Trader</TileLabel>
-              </Button>
-            </Link>
+          <div>
+            <DashboardTile icon="bolt" href="/day-trader">
+              Day Trader
+            </DashboardTile>
             <p className="text-muted text-xs text-center mt-1">
               {dayTrader ? "1 active" : "View"}
             </p>
           </div>
 
-          <div data-league-theme="sddfs">
-            <Link href="/stockdraft-dfs" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="calendarDay">Daily Fantasy Sport</TileLabel>
-              </Button>
-            </Link>
+          <div>
+            <DashboardTile icon="calendarDay" href="/stockdraft-dfs">
+              Daily Fantasy Sport
+            </DashboardTile>
             <p className="text-muted text-xs text-center mt-1">View</p>
           </div>
 
-          <div data-league-theme="sdwfs">
-            <Link href="/stockdraft-wfs" className="block">
-              <Button variant="primary" className={TILE_BUTTON_CLASS}>
-                <TileLabel icon="calendarWeek">Weekly Fantasy Sport</TileLabel>
-              </Button>
-            </Link>
+          <div>
+            <DashboardTile icon="calendarWeek" href="/stockdraft-wfs">
+              Weekly Fantasy Sport
+            </DashboardTile>
             <p className="text-muted text-xs text-center mt-1">View</p>
           </div>
         </div>
