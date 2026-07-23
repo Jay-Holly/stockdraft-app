@@ -248,17 +248,6 @@ export function DashboardContent({
         <PendingLeagueInviteBanner invites={pendingInvites} />
       )}
 
-      <div className="flex justify-center py-2">
-        <Image
-          src="/images/brand/sdlogo.png"
-          alt="StockDraft"
-          width={140}
-          height={210}
-          className="w-28 h-auto drop-shadow-[0_0_24px_rgba(208,171,72,0.35)]"
-          priority
-        />
-      </div>
-
       <section className="crest-card p-6">
         <div className="flex items-center gap-4">
           <div
@@ -267,7 +256,7 @@ export function DashboardContent({
           >
             {initials}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold truncate">{profile.team_name}</h1>
             <p className="text-muted text-sm truncate">@{profile.username}</p>
             <p className="text-muted text-xs mt-1">Member since {createdDate}</p>
@@ -282,10 +271,18 @@ export function DashboardContent({
                 href="/my-account"
                 className="text-xs font-semibold text-gold hover:underline"
               >
-                My Account
+                My Wallet
               </Link>
             </div>
           </div>
+          <Image
+            src="/images/brand/sdlogo.png"
+            alt="StockDraft"
+            width={140}
+            height={210}
+            className="h-44 w-auto shrink-0 -my-12 drop-shadow-[0_0_28px_rgba(208,171,72,0.5)]"
+            priority
+          />
         </div>
       </section>
 
