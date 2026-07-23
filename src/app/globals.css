@@ -734,6 +734,216 @@ body:has(.landing-screen) {
   }
 }
 
+/* ── Always-on narrow side tickers (used by the signed-out landing page) ──
+   Wins over the max-width:767px horizontal-ticker rules above via higher
+   selector specificity, regardless of viewport width. */
+.landing-screen.sides-always {
+  --landing-ticker-width: 34px;
+}
+
+.landing-screen.sides-always .landing-main {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-right: calc(var(--landing-ticker-width) + env(safe-area-inset-right));
+  padding-left: calc(var(--landing-ticker-width) + env(safe-area-inset-left));
+}
+
+.landing-screen.sides-always .landing-main {
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-screen.sides-always .landing-hero-panel {
+  width: 100%;
+  max-width: 30rem;
+  flex: 0 0 auto;
+  align-self: center;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.landing-screen.sides-always .landing-hero-frame {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.landing-screen.sides-always .landing-hero-image-wrap {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  aspect-ratio: auto;
+  overflow: visible;
+  background: none;
+}
+
+.landing-screen.sides-always .landing-hero-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: none;
+  object-fit: contain;
+}
+
+/* ── Perimeter-loop ticker: four strips hugging the picture's edges, each
+   scrolling so the overall impression is one continuous clockwise loop —
+   up the left side, right across the top, down the right side, left
+   across the bottom. Requires .landing-hero-frame to be position:relative
+   (it already is). ── */
+.ticker-orbit {
+  position: absolute;
+  inset: -30px;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.orbit-strip {
+  position: absolute;
+  overflow: hidden;
+}
+
+.orbit-strip--left,
+.orbit-strip--right {
+  top: 26px;
+  bottom: 26px;
+  width: 26px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 8%,
+    black 92%,
+    transparent 100%
+  );
+}
+
+.orbit-strip--left {
+  left: 0;
+}
+
+.orbit-strip--right {
+  right: 0;
+}
+
+.orbit-strip--top,
+.orbit-strip--bottom {
+  left: 26px;
+  right: 26px;
+  height: 26px;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 8%,
+    black 92%,
+    transparent 100%
+  );
+}
+
+.orbit-strip--top {
+  top: 0;
+}
+
+.orbit-strip--bottom {
+  bottom: 0;
+}
+
+.orbit-strip-track {
+  display: flex;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.orbit-strip-track--vertical-up,
+.orbit-strip-track--vertical-down {
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  animation: orbit-scroll-vertical 30s linear infinite;
+}
+
+.orbit-strip-track--vertical-up {
+  animation-direction: reverse;
+}
+
+.orbit-strip-track--horizontal-right,
+.orbit-strip-track--horizontal-left {
+  flex-direction: row;
+  align-items: center;
+  height: 100%;
+  animation: orbit-scroll-horizontal 30s linear infinite;
+}
+
+.orbit-strip-track--horizontal-left {
+  animation-direction: reverse;
+}
+
+.orbit-strip-set {
+  display: flex;
+  flex-direction: inherit;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.orbit-strip-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 26px;
+  padding: 6px 1px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  line-height: normal;
+}
+
+.orbit-strip-item .stock-ticker-symbol {
+  font-size: 6.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.orbit-strip-item .stock-ticker-change {
+  font-size: 5.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+@keyframes orbit-scroll-vertical {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -50%, 0);
+  }
+}
+
+@keyframes orbit-scroll-horizontal {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-strip-track {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-orbit-item {
+    animation: none;
+  }
+}
+
+
 @keyframes ticker-scroll {
   from {
     transform: translate3d(0, 0, 0);
