@@ -24,6 +24,67 @@ import type { BotPersonality } from "@/lib/league/bots";
 import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
 import type { DayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
+import Image from "next/image";
+
+type TileIcon = "chart" | "diamond" | "trophy" | "bolt" | "calendarDay" | "calendarWeek";
+
+const TILE_ICON_PATHS: Record<TileIcon, React.ReactNode> = {
+  chart: (
+    <path d="M3 17l5-5 4 4 8-8M20 8V4h-4" strokeLinecap="round" strokeLinejoin="round" />
+  ),
+  diamond: (
+    <path d="M6 3h12l3 6-9 12L3 9l3-6z" strokeLinecap="round" strokeLinejoin="round" />
+  ),
+  trophy: (
+    <path
+      d="M8 4h8v4a4 4 0 01-8 0V4zM8 4H4v2a4 4 0 004 4M16 4h4v2a4 4 0 01-4 4M12 12v4m-3 4h6m-3 0v-4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  bolt: <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" strokeLinecap="round" strokeLinejoin="round" />,
+  calendarDay: (
+    <path
+      d="M7 3v3M17 3v3M4 9h16M5 6h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1z"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  calendarWeek: (
+    <path
+      d="M7 3v3M17 3v3M4 9h16M5 6h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1zM8 13h2M14 13h2M8 17h2M14 17h2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+};
+
+function TileIconGlyph({ icon }: { icon: TileIcon }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      className="w-5 h-5 shrink-0"
+      aria-hidden="true"
+    >
+      {TILE_ICON_PATHS[icon]}
+    </svg>
+  );
+}
+
+function TileLabel({ icon, children }: { icon: TileIcon; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center justify-center gap-2">
+      <TileIconGlyph icon={icon} />
+      <span>{children}</span>
+    </span>
+  );
+}
+
+const TILE_BUTTON_CLASS =
+  "w-full sm:w-full !text-white h-14 text-center leading-tight border border-black/25 shadow-[0_2px_0_0_rgba(0,0,0,0.35)]";
 
 export function DashboardContent({
   profile,
@@ -187,10 +248,21 @@ export function DashboardContent({
         <PendingLeagueInviteBanner invites={pendingInvites} />
       )}
 
-      <section className="bg-dark-card border border-dark-border rounded-2xl p-6">
+      <div className="flex justify-center py-2">
+        <Image
+          src="/images/brand/sdlogo.png"
+          alt="StockDraft"
+          width={140}
+          height={210}
+          className="w-28 h-auto drop-shadow-[0_0_24px_rgba(208,171,72,0.35)]"
+          priority
+        />
+      </div>
+
+      <section className="crest-card p-6">
         <div className="flex items-center gap-4">
           <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-black text-white shrink-0"
+            className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-black text-white shrink-0 border border-gold/40"
             style={{ backgroundColor: avatarHex }}
           >
             {initials}
@@ -219,9 +291,9 @@ export function DashboardContent({
 
       <LiveTickerTape />
 
-      <section className="bg-dark-card border-2 border-white/30 rounded-2xl p-6 space-y-4">
+      <section className="crest-card p-6 space-y-4">
         <div>
-          <h2 className="text-lg font-semibold mb-1">Create New League</h2>
+          <h2 className="text-lg font-semibold mb-1 text-gold">Create New League</h2>
           <p className="text-muted text-sm">
             Free Sim League to practice against bots, Player League with
             friends, Sports League draft, Day Trader for prizes, our
@@ -235,18 +307,18 @@ export function DashboardContent({
           {!showBotSelection && (
             <Button
               variant="secondary"
-              className="w-full sm:w-full !text-white h-14 text-center leading-tight"
+              className={TILE_BUTTON_CLASS}
               onClick={() => {
                 setLeagueError(null);
                 setShowBotSelection(true);
               }}
             >
-              Create Free Sim League
+              <TileLabel icon="chart">Create Free Sim League</TileLabel>
             </Button>
           )}
           <Link href="/leagues/create?entry=player" className="block">
-            <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-              Create Player League
+            <Button variant="primary" className={TILE_BUTTON_CLASS}>
+              <TileLabel icon="diamond">Create Player League</TileLabel>
             </Button>
           </Link>
           <div
@@ -258,30 +330,30 @@ export function DashboardContent({
             }
           >
             <Link href="/leagues/create?entry=sports" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                Create Sports Sim League
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="trophy">Create Sports Sim League</TileLabel>
               </Button>
             </Link>
           </div>
 
           <div data-league-theme="day-trader">
             <Link href="/day-trader" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                StockDraft Day Trader
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="bolt">StockDraft Day Trader</TileLabel>
               </Button>
             </Link>
           </div>
           <div data-league-theme="sddfs">
             <Link href="/stockdraft-dfs" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                StockDraft Daily Fantasy Sport
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="calendarDay">StockDraft Daily Fantasy Sport</TileLabel>
               </Button>
             </Link>
           </div>
           <div data-league-theme="sdwfs">
             <Link href="/stockdraft-wfs" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                StockDraft Weekly Fantasy Sport
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="calendarWeek">StockDraft Weekly Fantasy Sport</TileLabel>
               </Button>
             </Link>
           </div>
@@ -304,9 +376,9 @@ export function DashboardContent({
         )}
       </section>
 
-      <section className="bg-dark-card border-2 border-white/30 rounded-2xl p-6 space-y-4">
+      <section className="crest-card p-6 space-y-4">
         <div>
-          <h2 className="text-lg font-semibold mb-1">Join Public League</h2>
+          <h2 className="text-lg font-semibold mb-1 text-gold">Join Public League</h2>
           <p className="text-muted text-sm">
             Browse open leagues that are still waiting for players and jump
             straight into the roster.
@@ -323,27 +395,27 @@ export function DashboardContent({
             }
           >
             <Link href="/leagues/join-public/sports-sim" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                Join Sports Sim Leagues
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="trophy">Join Sports Sim Leagues</TileLabel>
               </Button>
             </Link>
           </div>
           <Link href="/leagues/join-public/player" className="block">
-            <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-              Join Player League
+            <Button variant="primary" className={TILE_BUTTON_CLASS}>
+              <TileLabel icon="diamond">Join Player League</TileLabel>
             </Button>
           </Link>
         </div>
       </section>
 
-      <section className="bg-dark-card border-2 border-white/30 rounded-2xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold">My Leagues</h2>
+      <section className="crest-card p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-gold">My Leagues</h2>
 
         <div className="grid grid-cols-2 gap-3">
           <div data-league-theme="sdai">
             <Link href="/dashboard/sim-leagues" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                Sim Leagues
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="chart">Sim Leagues</TileLabel>
               </Button>
             </Link>
             <p className="text-muted text-xs text-center mt-1">
@@ -353,8 +425,8 @@ export function DashboardContent({
 
           <div data-league-theme="sdpl">
             <Link href="/dashboard/player-leagues" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                Player Leagues
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="diamond">Player Leagues</TileLabel>
               </Button>
             </Link>
             <p className="text-muted text-xs text-center mt-1">
@@ -371,8 +443,8 @@ export function DashboardContent({
             }
           >
             <Link href="/dashboard/sports-sim" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                Sports Sim
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="trophy">Sports Sim</TileLabel>
               </Button>
             </Link>
             <p className="text-muted text-xs text-center mt-1">
@@ -384,8 +456,8 @@ export function DashboardContent({
 
           <div data-league-theme="day-trader">
             <Link href="/day-trader" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                Day Trader
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="bolt">Day Trader</TileLabel>
               </Button>
             </Link>
             <p className="text-muted text-xs text-center mt-1">
@@ -395,8 +467,8 @@ export function DashboardContent({
 
           <div data-league-theme="sddfs">
             <Link href="/stockdraft-dfs" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                Daily Fantasy Sport
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="calendarDay">Daily Fantasy Sport</TileLabel>
               </Button>
             </Link>
             <p className="text-muted text-xs text-center mt-1">View</p>
@@ -404,8 +476,8 @@ export function DashboardContent({
 
           <div data-league-theme="sdwfs">
             <Link href="/stockdraft-wfs" className="block">
-              <Button variant="primary" className="w-full sm:w-full !text-white h-14 text-center leading-tight">
-                Weekly Fantasy Sport
+              <Button variant="primary" className={TILE_BUTTON_CLASS}>
+                <TileLabel icon="calendarWeek">Weekly Fantasy Sport</TileLabel>
               </Button>
             </Link>
             <p className="text-muted text-xs text-center mt-1">View</p>

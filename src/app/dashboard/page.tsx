@@ -109,8 +109,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <PageWatermark />
-      <header className="px-4 py-4 border-b border-dark-border">
+      <PageWatermark logoSrc="/images/brand/sdlogo.png" opacityClassName="opacity-[0.06]" />
+      <header className="px-4 py-4 border-b border-gold/20">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <Logo size="sm" />
           <span className="text-xs text-gold font-semibold uppercase tracking-wider">
