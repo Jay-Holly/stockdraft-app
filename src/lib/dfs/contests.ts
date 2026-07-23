@@ -41,7 +41,9 @@ export function tierNameForBuyIn(buyIn: number): string {
 
 const DFS_LOCK_HOUR_ET = 9;
 const DFS_LOCK_MINUTE_ET = 0;
-const MARKET_CLOSE_HOUR_ET = 16;
+/** Next day's contests become active for entry 1 hour after today's lock —
+ * same rule as SDWFS flipping to next week 1 hour after its Monday lock. */
+const NEXT_CONTEST_ACTIVE_HOUR_ET = DFS_LOCK_HOUR_ET + 1;
 
 function isoFromEasternParts(parts: EasternParts): string {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(
@@ -58,19 +60,20 @@ function todayIsoInEastern(): string {
 }
 
 /**
- * Which contest_date the lobby should show/create right now. Today's
- * contest stays "active" through its whole lifecycle (open -> locked at
- * 9 AM ET -> scored at 4 PM ET close) — only once the market has actually
- * closed for the day does the next contest date become active, so
- * tomorrow's contests are ready to enter immediately after today's close
- * instead of waiting for someone to load the lobby after midnight.
+ * Which contest_date the lobby should show/create right now. Tomorrow's
+ * contests become the active, enterable ones 1 hour after today's 9 AM ET
+ * lock (i.e. 10 AM ET) — same rule as SDWFS flipping to next week 1 hour
+ * after its Monday lock. Today's own contest keeps playing out (locked ->
+ * scored) and stays reachable via My Teams / its entry page; the Lobby is
+ * for entering, so once a day's field is locked it makes room for the
+ * next one instead of waiting for that day's market close.
  */
 export function activeSddfsContestDateIso(now = new Date()): string {
   const parts = getEasternParts(now);
   const minutesNow = parts.hour * 60 + parts.minute;
-  const closeMinutes = MARKET_CLOSE_HOUR_ET * 60;
+  const activeMinutes = NEXT_CONTEST_ACTIVE_HOUR_ET * 60;
 
-  if (!isWeekend(parts) && minutesNow < closeMinutes) {
+  if (!isWeekend(parts) && minutesNow < activeMinutes) {
     return isoFromEasternParts(parts);
   }
 
