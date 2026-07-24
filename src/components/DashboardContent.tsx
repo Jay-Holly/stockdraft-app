@@ -64,7 +64,6 @@ function TileIconGlyph({ icon }: { icon: TileIcon }) {
       stroke="currentColor"
       strokeWidth={2}
       className="w-5 h-5 shrink-0"
-      style={{ color: "var(--tile-accent)" }}
       aria-hidden="true"
     >
       {TILE_ICON_PATHS[icon]}
@@ -72,20 +71,86 @@ function TileIconGlyph({ icon }: { icon: TileIcon }) {
   );
 }
 
-const TILE_ACCENTS: Record<TileIcon, string> = {
-  chart: "#3b82f6",
-  diamond: "#e0a63a",
-  trophy: "#dc2626",
-  bolt: "#8cdc51",
-  calendarDay: "#7c3aed",
-  calendarWeek: "#14b8a6",
+const TILE_THEMES: Record<
+  TileIcon,
+  {
+    border: string;
+    shadow: string;
+    iconText: string;
+    iconBorder: string;
+    iconGlow: string;
+    wash: string;
+    stroke: string;
+    graphPath: string;
+  }
+> = {
+  chart: {
+    border: "border-blue-500/40 hover:border-blue-500",
+    shadow:
+      "shadow-[inset_0_0_15px_rgba(59,130,246,0.08)] hover:shadow-[0_0_25px_rgba(59,130,246,0.4),inset_0_0_15px_rgba(59,130,246,0.15)]",
+    iconText: "text-blue-300",
+    iconBorder: "border-blue-400/60",
+    iconGlow: "shadow-[0_0_16px_rgba(59,130,246,0.7)]",
+    wash: "bg-gradient-to-br from-blue-500/15 via-slate-950/60 to-black/70",
+    stroke: "#3b82f6",
+    graphPath: "M0 30 Q 25 10, 50 25 T 100 5",
+  },
+  diamond: {
+    border: "border-amber-500/40 hover:border-amber-500",
+    shadow:
+      "shadow-[inset_0_0_15px_rgba(234,179,8,0.08)] hover:shadow-[0_0_25px_rgba(234,179,8,0.4),inset_0_0_15px_rgba(234,179,8,0.15)]",
+    iconText: "text-amber-300",
+    iconBorder: "border-amber-300/60",
+    iconGlow: "shadow-[0_0_16px_rgba(234,179,8,0.7)]",
+    wash: "bg-gradient-to-br from-amber-500/15 via-slate-950/60 to-black/70",
+    stroke: "#eab308",
+    graphPath: "M0 35 Q 25 15, 50 20 T 100 10",
+  },
+  trophy: {
+    border: "border-red-500/40 hover:border-red-500",
+    shadow:
+      "shadow-[inset_0_0_15px_rgba(239,68,68,0.08)] hover:shadow-[0_0_25px_rgba(239,68,68,0.4),inset_0_0_15px_rgba(239,68,68,0.15)]",
+    iconText: "text-red-300",
+    iconBorder: "border-red-400/60",
+    iconGlow: "shadow-[0_0_16px_rgba(239,68,68,0.7)]",
+    wash: "bg-gradient-to-br from-red-500/15 via-slate-950/60 to-black/70",
+    stroke: "#ef4444",
+    graphPath: "M0 25 Q 25 35, 50 15 T 100 5",
+  },
+  bolt: {
+    border: "border-emerald-500/40 hover:border-emerald-500",
+    shadow:
+      "shadow-[inset_0_0_15px_rgba(34,197,94,0.08)] hover:shadow-[0_0_25px_rgba(34,197,94,0.4),inset_0_0_15px_rgba(34,197,94,0.15)]",
+    iconText: "text-emerald-300",
+    iconBorder: "border-emerald-400/60",
+    iconGlow: "shadow-[0_0_16px_rgba(34,197,94,0.7)]",
+    wash: "bg-gradient-to-br from-emerald-500/15 via-slate-950/60 to-black/70",
+    stroke: "#22c55e",
+    graphPath: "M0 30 Q 30 5, 60 25 T 100 12",
+  },
+  calendarDay: {
+    border: "border-purple-500/40 hover:border-purple-500",
+    shadow:
+      "shadow-[inset_0_0_15px_rgba(168,85,247,0.08)] hover:shadow-[0_0_25px_rgba(168,85,247,0.4),inset_0_0_15px_rgba(168,85,247,0.15)]",
+    iconText: "text-purple-300",
+    iconBorder: "border-purple-400/60",
+    iconGlow: "shadow-[0_0_16px_rgba(168,85,247,0.7)]",
+    wash: "bg-gradient-to-br from-purple-500/15 via-slate-950/60 to-black/70",
+    stroke: "#a855f7",
+    graphPath: "M0 20 Q 25 30, 50 10 T 100 25",
+  },
+  calendarWeek: {
+    border: "border-teal-500/40 hover:border-teal-500",
+    shadow:
+      "shadow-[inset_0_0_15px_rgba(20,184,166,0.08)] hover:shadow-[0_0_25px_rgba(20,184,166,0.4),inset_0_0_15px_rgba(20,184,166,0.15)]",
+    iconText: "text-teal-300",
+    iconBorder: "border-teal-300/60",
+    iconGlow: "shadow-[0_0_16px_rgba(20,184,166,0.7)]",
+    wash: "bg-gradient-to-br from-teal-500/15 via-slate-950/60 to-black/70",
+    stroke: "#14b8a6",
+    graphPath: "M0 35 Q 25 15, 50 25 T 100 5",
+  },
 };
-
-const DASHBOARD_TILE_CLASS =
-  "dashboard-tile group flex w-full min-h-[4.5rem] items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-all active:scale-[0.98]";
-
-const DASHBOARD_TILE_ICON_CLASS =
-  "relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border border-[var(--tile-accent)] bg-[radial-gradient(circle_at_30%_30%,color-mix(in_srgb,var(--tile-accent)_30%,transparent),transparent)]";
 
 function DashboardTile({
   icon,
@@ -98,14 +163,32 @@ function DashboardTile({
   href?: string;
   onClick?: () => void;
 }) {
-  const style = { "--tile-accent": TILE_ACCENTS[icon] } as React.CSSProperties;
+  const theme = TILE_THEMES[icon];
+  const gradId = `tile-grad-${icon}`;
+  const className = `group relative flex min-h-[5rem] w-full items-center overflow-hidden rounded-xl border px-4 py-3 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 active:scale-[0.98] ${theme.border} ${theme.shadow} ${theme.wash}`;
   const content = (
     <>
-      <span className="dashboard-tile-chart" aria-hidden="true" />
-      <span className={DASHBOARD_TILE_ICON_CLASS}>
+      <svg
+        className="pointer-events-none absolute inset-0 h-full w-full opacity-45 transition-opacity duration-300 group-hover:opacity-70"
+        viewBox="0 0 100 40"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={theme.stroke} stopOpacity="0.5" />
+            <stop offset="100%" stopColor={theme.stroke} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`${theme.graphPath} L100 40 L0 40 Z`} fill={`url(#${gradId})`} stroke="none" />
+        <path d={theme.graphPath} fill="none" stroke={theme.stroke} strokeWidth="1.5" />
+      </svg>
+      <span
+        className={`relative z-10 mr-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 bg-black/50 ${theme.iconText} ${theme.iconBorder} ${theme.iconGlow}`}
+      >
         <TileIconGlyph icon={icon} />
       </span>
-      <span className="relative z-[1] text-sm font-semibold leading-tight text-white">
+      <span className="relative z-10 text-[0.95rem] font-semibold leading-snug text-white">
         {children}
       </span>
     </>
@@ -113,14 +196,14 @@ function DashboardTile({
 
   if (href) {
     return (
-      <Link href={href} className={DASHBOARD_TILE_CLASS} style={style}>
+      <Link href={href} className={className}>
         {content}
       </Link>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} className={DASHBOARD_TILE_CLASS} style={style}>
+    <button type="button" onClick={onClick} className={className}>
       {content}
     </button>
   );
