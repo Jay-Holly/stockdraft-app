@@ -243,6 +243,12 @@ export async function applyIrSwap(
   const starter = state.state.picks.find((p) => p.id === starterPickId);
   const bench = state.state.picks.find((p) => p.id === benchPickId);
 
+  if (starter?.pick_type === "crypto") {
+    return {
+      error:
+        "Crypto can't be benched — it's a separate flex pool that's always active. Use the Starting crypto / rebalance section to swap it for another coin instead.",
+    };
+  }
   if (!starter || starter.pick_type !== "stock") {
     return { error: "Select a valid starter stock to bench." };
   }

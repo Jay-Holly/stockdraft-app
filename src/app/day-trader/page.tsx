@@ -6,6 +6,7 @@ import { Button } from "@/components/Button";
 import { PageWatermark } from "@/components/PageWatermark";
 import { DayTraderEnterForm } from "@/components/day-trader/DayTraderEnterForm";
 import { DayTraderLeaderboardLinks } from "@/components/day-trader/DayTraderLeaderboardLinks";
+import { DayTraderRulesButton } from "@/components/day-trader/DayTraderRulesButton";
 import { DayTraderTradingPanel } from "@/components/day-trader/DayTraderTradingPanel";
 import {
   DAY_TRADER_STARTING_VALUE,
@@ -25,6 +26,60 @@ import {
   markDayTraderJoined,
 } from "@/lib/profile/day-trader";
 import { formatDayTraderContestRange } from "@/lib/day-trader/format-contest";
+
+function DayTraderRulesCard() {
+  return (
+    <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-white">How it works</h2>
+        <ul className="text-sm text-muted mt-2 space-y-1.5 list-disc list-inside">
+          <li>
+            Enter with any league where your draft is complete — Day Trader
+            copies your team&apos;s 10 starter stocks into a fresh $
+            {(DAY_TRADER_STARTING_VALUE / 1000).toLocaleString()}K lineup ($
+            {(DAY_TRADER_STOCK_BUDGET / 1000).toLocaleString()}K per
+            position). Crypto and bench picks aren&apos;t included.
+          </li>
+          <li>Free to enter, every week.</li>
+          <li>
+            Trading runs Mon 9:30 AM – Fri 4:00 PM ET. Buy and sell your 10
+            positions as often as you want during that window.
+          </li>
+          <li>
+            Entry for the upcoming week opens Friday at 4:00 PM ET, right
+            after the current week closes.
+          </li>
+          <li>
+            Outside trading hours (nights, weekends) your portfolio is
+            locked — no trades until the next session opens.
+          </li>
+          <li>
+            Two leaderboards every week: $ Gainer and % Gainer, ranked on
+            performance from Monday&apos;s open to Friday&apos;s close.
+          </li>
+          <li>
+            Every week is a fresh contest — entering again resets your
+            lineup and starting value, it doesn&apos;t carry gains forward.
+          </li>
+        </ul>
+      </div>
+      <div>
+        <h2 className="text-sm font-semibold text-white">
+          How this differs from StockDraft Free Sim and Player Leagues
+        </h2>
+        <p className="text-sm text-muted mt-2">
+          No draft, no waiver wire, no season-long roster — it&apos;s active
+          trading of stocks you already own in a league, over a single week
+          instead of a full season, with full freedom to buy and sell rather
+          than locking in picks. Once you import your team, you can switch
+          out every stock if you want — you&apos;re not stuck with the
+          lineup you started with. Any eligible stock is fair game for every
+          player.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default async function DayTraderPage() {
   const supabase = await createClient();
@@ -64,23 +119,19 @@ export default async function DayTraderPage() {
             <Image
               src="/images/day-trader-logo.png"
               alt="StockDraft Day Trader"
-              width={260}
-              height={260}
+              width={320}
+              height={320}
               className="mx-auto"
               priority
             />
-            <h1 className="text-xl font-bold mt-4">Day Trader</h1>
+            <h1 className="text-xl font-bold mt-4">StockDraft Day Trader</h1>
             <p className="text-muted text-sm mt-2">
               Weekly contest: copy your 10 starters, trade Mon–Fri, compete on $
               and % gain.
             </p>
           </div>
-          <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-2 mb-6">
-            <h2 className="text-sm font-semibold text-white">Game rules</h2>
-            <p className="text-sm text-muted">
-              Rules and an explanation of how Day Trader differs from the
-              rest of StockDraft are coming soon.
-            </p>
+          <div className="mb-6">
+            <DayTraderRulesCard />
           </div>
           <form action={joinDayTrader} className="space-y-4 mt-auto">
             <Button type="submit" variant="primary" className="w-full">
@@ -134,13 +185,13 @@ export default async function DayTraderPage() {
           <Image
             src="/images/day-trader-logo.png"
             alt="StockDraft Day Trader"
-            width={260}
-            height={260}
+            width={320}
+            height={320}
             className="mx-auto"
             priority
           />
           <h1 className="text-xl font-bold mt-4">
-            {contest?.contest_name ?? "Day Trader"}
+            {contest?.contest_name ?? "StockDraft Day Trader"}
           </h1>
           {contest ? (
             <p className="text-muted text-sm mt-2">
@@ -155,6 +206,9 @@ export default async function DayTraderPage() {
               4:00 PM ET for the upcoming week.
             </p>
           )}
+          <div className="mt-3">
+            <DayTraderRulesButton />
+          </div>
         </div>
 
         <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-2">
@@ -238,13 +292,7 @@ export default async function DayTraderPage() {
           get $50 off your first stock purchase.
         </div>
 
-        <div className="rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 space-y-2">
-          <h2 className="text-sm font-semibold text-white">Game rules</h2>
-          <p className="text-sm text-muted">
-            Rules and an explanation of how Day Trader differs from the rest
-            of StockDraft are coming soon.
-          </p>
-        </div>
+        <DayTraderRulesCard />
 
         <Link
           href="/dashboard"

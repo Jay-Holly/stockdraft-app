@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dev3100",
+      "name": "dev-verify",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "dev", "--turbopack", "-p", "3100"],
-      "port": 3100
+      "runtimeArgs": ["next", "dev", "--turbopack"],
+      "autoPort": true
     }
   ]
 }

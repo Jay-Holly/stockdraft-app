@@ -368,3 +368,216 @@ export async function memberNeedsGenericMapClaim(
   if (!data) return true;
   return !isRowComplete(data as ClaimRow);
 }
+
+const BOT_COLOR_PAIRS: FranchiseColors[] = [
+  { primary: "#1d4ed8", secondary: "#f8fafc" },
+  { primary: "#b91c1c", secondary: "#f1f5f9" },
+  { primary: "#15803d", secondary: "#fef9c3" },
+  { primary: "#7c3aed", secondary: "#fde68a" },
+  { primary: "#0f766e", secondary: "#fee2e2" },
+  { primary: "#c2410c", secondary: "#e0f2fe" },
+];
+
+const BOT_TEAM_NAMES = [
+  "Northside Capital",
+  "Summit Street",
+  "Harborview FC",
+  "Lakeview Holdings",
+  "Metro Traders",
+  "Ridgeline Equity",
+  "Westport Markets",
+  "Cedar Point Capital",
+  "Ironwood Investors",
+  "Bayfront Trading",
+  "Highland Portfolio",
+  "Stonebridge FC",
+  "Clearwater Group",
+  "Pinecrest Markets",
+  "Eastgate Capital",
+  "Silverline Trading",
+  "Brookfield Equity",
+  "Redwood Street",
+  "Kingsport Markets",
+  "Fairview Holdings",
+  "Oakmont Traders",
+  "Riverbend Capital",
+  "Parkside Portfolio",
+  "Granite Hill FC",
+  "Seaview Markets",
+  "Meadowbrook Capital",
+  "Crosswind Trading",
+  "Blue Ridge Equity",
+  "Milltown Investors",
+  "Horizon Street",
+  "Beacon Hill Markets",
+  "Canyon View Capital",
+];
+
+function pickBotTeamName(usedTeamNames: Set<string>, slotIndex: number): string {
+  for (let offset = 0; offset < BOT_TEAM_NAMES.length; offset++) {
+    const candidate = BOT_TEAM_NAMES[(slotIndex + offset) % BOT_TEAM_NAMES.length];
+    if (!usedTeamNames.has(candidate.toLowerCase())) {
+      usedTeamNames.add(candidate.toLowerCase());
+      return candidate;
+    }
+  }
+  const fallback = `Team ${slotIndex + 1}`;
+  usedTeamNames.add(fallback.toLowerCase());
+  return fallback;
+}
+
+/** Slot keys already claimed (regardless of identity completeness) for one league. */
+export async function getClaimedGenericMapSlotKeys(
+  supabase: SupabaseClient,
+  leagueId: string
+): Promise<Set<string>> {
+  const { data } = await supabase
+    .from("league_map_slot_claims")
+    .select("slot_key")
+    .eq("league_id", leagueId);
+  return new Set((data ?? []).map((row) => row.slot_key as string));
+}
+
+export async function getOpenGenericMapSlots(
+  supabase: SupabaseClient,
+  leagueId: string,
+  sport: GenericMapSport
+): Promise<GenericMapMarker[]> {
+  const claimedKeys = await getClaimedGenericMapSlotKeys(supabase, leagueId);
+  return markersForSport(sport).filter((marker) => !claimedKeys.has(marker.key));
+}
+
+/**
+ * Bot equivalent of claimGenericMapSlot + submitGenericFranchiseIdentity —
+ * claims the first open map slot and completes its franchise identity in one
+ * step, bypassing the "waiting" status gate those two use (bots can be
+ * provisioned any time bot-fill runs, not just pre-draft). Writes directly to
+ * league_map_slot_claims and syncs league_members.display_name, mirroring
+ * assignBotSdflIdentity in sdfl-divisions.ts.
+ */
+export async function assignBotGenericMapIdentity(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  sport: GenericMapSport,
+  slotIndex: number,
+  usedTeamNames: Set<string>
+): Promise<{ error?: string }> {
+  const openSlots = await getOpenGenericMapSlots(supabase, leagueId, sport);
+  const slot = openSlots[0];
+  if (!slot) {
+    return { error: `No open ${sport.toUpperCase()} map slots remain.` };
+  }
+
+  const teamName = pickBotTeamName(usedTeamNames, slotIndex);
+  const colors = BOT_COLOR_PAIRS[slotIndex % BOT_COLOR_PAIRS.length];
+  const now = new Date().toISOString();
+
+  const { error } = await supabase.from("league_map_slot_claims").insert({
+    league_id: leagueId,
+    user_id: userId,
+    sport,
+    slot_key: slot.key,
+    city_label: slot.city,
+    franchise_city: slot.city,
+    team_name: teamName,
+    franchise_colors: colors,
+    identity_completed_at: now,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "That map slot was just claimed." };
+    }
+    return { error: error.message };
+  }
+
+  const { error: memberError } = await supabase
+    .from("league_members")
+    .update({ display_name: teamName })
+    .eq("league_id", leagueId)
+    .eq("user_id", userId);
+
+  if (memberError) return { error: memberError.message };
+  return {};
+}
+
+export async function getGenericMapIdentityFillStatus(
+  supabase: SupabaseClient,
+  leagueId: string,
+  target: number
+): Promise<{ complete: number; target: number }> {
+  const { data } = await supabase
+    .from("league_map_slot_claims")
+    .select("franchise_city, team_name, franchise_colors, identity_completed_at")
+    .eq("league_id", leagueId);
+
+  const rows = (data ?? []) as ClaimRow[];
+  const complete = rows.filter((row) => isRowComplete(row)).length;
+  return { complete, target };
+}
+
+export async function allGenericMapIdentitiesComplete(
+  supabase: SupabaseClient,
+  leagueId: string,
+  sport: GenericMapSport,
+  target: number
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("league_map_slot_claims")
+    .select("franchise_city, team_name, franchise_colors, identity_completed_at")
+    .eq("league_id", leagueId);
+
+  if (error) return false;
+  const rows = (data ?? []) as ClaimRow[];
+  if (rows.length < target) return false;
+  return rows.every((row) => isRowComplete(row));
+}
+
+/**
+ * Bots can end up with a league_members row but no league_map_slot_claims
+ * row if assignBotGenericMapIdentity failed mid-fill (same failure mode as
+ * backfillMissingSdflBotIdentities) — retry those before gating a draft.
+ */
+export async function backfillMissingGenericMapBotIdentities(
+  supabase: SupabaseClient,
+  leagueId: string,
+  sport: GenericMapSport
+): Promise<{ backfilled: number; error?: string }> {
+  const { data: members, error: membersError } = await supabase
+    .from("league_members")
+    .select("user_id, display_name, draft_slot")
+    .eq("league_id", leagueId)
+    .order("draft_slot", { ascending: true, nullsFirst: false });
+
+  if (membersError) return { backfilled: 0, error: membersError.message };
+
+  const { data: claims } = await supabase
+    .from("league_map_slot_claims")
+    .select("user_id")
+    .eq("league_id", leagueId);
+  const claimedUserIds = new Set((claims ?? []).map((row) => row.user_id as string));
+
+  const usedTeamNames = new Set(
+    (members ?? [])
+      .map((member) => member.display_name?.trim().toLowerCase())
+      .filter(Boolean) as string[]
+  );
+
+  let backfilled = 0;
+  for (const member of members ?? []) {
+    if (claimedUserIds.has(member.user_id)) continue;
+    const result = await assignBotGenericMapIdentity(
+      supabase,
+      leagueId,
+      member.user_id,
+      sport,
+      member.draft_slot ?? backfilled,
+      usedTeamNames
+    );
+    if (result.error) return { backfilled, error: result.error };
+    backfilled++;
+  }
+
+  return { backfilled };
+}

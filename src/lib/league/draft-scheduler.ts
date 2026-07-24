@@ -12,6 +12,11 @@ import { resolveDraftOrderForLeague } from "@/lib/league/draft-order-server";
 import { backfillMissingSdflBotIdentities, isSdflLeague } from "@/lib/league/sdfl-divisions";
 import { allSdflIdentitiesComplete } from "@/lib/league/team-identity";
 import {
+  allGenericMapIdentitiesComplete,
+  backfillMissingGenericMapBotIdentities,
+  genericMapSportForLeague,
+} from "@/lib/league/generic-team-map";
+import {
   clearScheduledDraftError,
   recordScheduledDraftAttempt,
 } from "@/lib/league/scheduled-draft-status";
@@ -262,6 +267,38 @@ async function runHumanLeagueDraftStartSequence(
         identitiesReady = await allSdflIdentitiesComplete(
           supabase,
           leagueId,
+          playerCount
+        );
+      }
+    }
+    if (!identitiesReady) {
+      const message = `${leagueLabel}: waiting for all franchise identities before the draft can start.`;
+      await recordScheduledDraftAttempt(supabase, leagueId, message);
+      return { started: false, identityFillInProgress: true };
+    }
+  }
+
+  const genericMapSport = genericMapSportForLeague(league.sports_league_id);
+  if (genericMapSport) {
+    let identitiesReady = await allGenericMapIdentitiesComplete(
+      supabase,
+      leagueId,
+      genericMapSport,
+      playerCount
+    );
+    if (!identitiesReady) {
+      // A bot can be missing its map-slot claim if identity assignment
+      // failed after its member row was already created — retry those.
+      const backfill = await backfillMissingGenericMapBotIdentities(
+        supabase,
+        leagueId,
+        genericMapSport
+      );
+      if (backfill.backfilled > 0) {
+        identitiesReady = await allGenericMapIdentitiesComplete(
+          supabase,
+          leagueId,
+          genericMapSport,
           playerCount
         );
       }

@@ -7,6 +7,10 @@ import { shouldFillEmptySlotsWithBots } from "@/lib/league/bot-fill";
 import type { LeagueOpponentType, LeagueVisibility } from "@/lib/league/league-config";
 import { isSdflLeague } from "@/lib/league/sdfl-divisions";
 import { getSdflIdentityFillStatus } from "@/lib/league/team-identity";
+import {
+  genericMapSportForLeague,
+  getGenericMapIdentityFillStatus,
+} from "@/lib/league/generic-team-map";
 
 export type ScheduledDraftRoomStatus = {
   rosterFill: { current: number; target: number } | null;
@@ -102,6 +106,11 @@ async function buildStatusFromLeague(
   let identityFill: { complete: number; target: number } | null = null;
   if (isSdflLeague(league.sports_league_id) && target > 0) {
     const fill = await getSdflIdentityFillStatus(supabase, leagueId, target);
+    if (fill.complete < fill.target) {
+      identityFill = fill;
+    }
+  } else if (genericMapSportForLeague(league.sports_league_id) && target > 0) {
+    const fill = await getGenericMapIdentityFillStatus(supabase, leagueId, target);
     if (fill.complete < fill.target) {
       identityFill = fill;
     }

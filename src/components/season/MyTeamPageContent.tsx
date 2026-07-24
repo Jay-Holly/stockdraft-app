@@ -424,15 +424,19 @@ export function MyTeamPageContent({
       )}
 
       <RosterBlock
-        title={roster.sportsSimIrEnabled ? "Starting lineup" : "Starting stocks"}
+        title="Starting stocks"
         subtitle={
           roster.sportsSimIrEnabled
-            ? "10 open slots · stocks or crypto · scores in matchups"
+            ? "Stock starters · scores in matchups · bench swap below"
             : "10 starters · scores in matchups"
         }
         tone="starters"
         scoringMode={roster.scoringMode}
-        picks={roster.starters}
+        picks={
+          roster.sportsSimIrEnabled
+            ? roster.starters.filter((p) => p.pick_type === "stock")
+            : roster.starters
+        }
         selectable={
           !viewingHistorical &&
           !lineupLocked &&
@@ -483,135 +487,22 @@ export function MyTeamPageContent({
       />
 
       <RosterBlock
-        title="Bench"
-        subtitle="Does not score · promote via IR swap"
-        tone="bench"
+        title={roster.sportsSimIrEnabled ? "Starting crypto" : "Crypto flex"}
+        subtitle={
+          roster.sportsSimIrEnabled
+            ? "Scores in matchups · always active · no bench or IR · tap Sell to rebalance"
+            : "Scores in matchups · tap Sell to rebalance · multiple coins OK"
+        }
+        tone="crypto"
         scoringMode={roster.scoringMode}
-        picks={roster.bench}
-        selectable={!viewingHistorical && !lineupLocked && !roster.irResolution?.required}
-        selectedId={irBenchId}
-        onSelect={(id) => setIrBenchId((prev) => (prev === id ? null : id))}
-        selectLabel="Promote"
+        picks={roster.crypto}
+        selectable={!viewingHistorical}
+        selectedId={cryptoPickId}
+        onSelect={(id) => setCryptoPickId((prev) => (prev === id ? null : id))}
+        selectLabel="Sell"
       />
 
-      {roster.sportsSimIrEnabled && (
-        <RosterBlock
-          title="Injured reserve"
-          subtitle="Up to 3 slots · does not score · injury-eligible stocks only"
-          tone="ir"
-          scoringMode={roster.scoringMode}
-          picks={roster.ir ?? []}
-          selectable={!viewingHistorical}
-          selectedId={irMoveSlotId ?? irReturnPickId}
-          onSelect={(id) => {
-            const pick = roster.ir?.find((row) => row.id === id);
-            if (!pick) return;
-            if (pick.symbol.toUpperCase() === "__OPEN__") {
-              setIrMoveSlotId((prev) => (prev === id ? null : id));
-              setIrReturnPickId(null);
-              return;
-            }
-            const stale = roster.irResolution?.picks.some((row) => row.pickId === id);
-            if (stale) {
-              setIrReturnPickId((prev) => (prev === id ? null : id));
-              setIrMoveSlotId(null);
-            }
-          }}
-          selectLabel={
-            roster.irResolution?.required ? "Return" : "IR slot"
-          }
-        />
-      )}
-
-      {roster.sportsSimIrEnabled && !viewingHistorical && (
-        <section className="season-card space-y-3">
-          <div>
-            <h2 className="season-card-title">Move to IR</h2>
-            <p className="text-sm text-muted">
-              Select an injury-eligible starter and an empty IR slot. The active
-              spot opens for a free-agent add. IR picks never score.
-            </p>
-          </div>
-          <Button
-            variant="primary"
-            className="w-full"
-            disabled={
-              busy ||
-              roster.irResolution?.required ||
-              !irMoveStarterId ||
-              !irMoveSlotId
-            }
-            onClick={handleMoveToIr}
-          >
-            {busy ? "Processing…" : "Move starter to IR"}
-          </Button>
-
-          {roster.irResolution?.required && (
-            <>
-              <div>
-                <h2 className="season-card-title">Return from IR</h2>
-                <p className="text-sm text-muted">
-                  Drop or bench a starter to open an active slot, then return the
-                  healed stock from IR.
-                </p>
-              </div>
-              <Button
-                variant="primary"
-                className="w-full"
-                disabled={busy || !irReturnPickId}
-                onClick={handleReturnFromIr}
-              >
-                {busy ? "Processing…" : "Return selected stock to active"}
-              </Button>
-            </>
-          )}
-        </section>
-      )}
-
       {!viewingHistorical && (
-      <section className="season-card">
-        <h2 className="season-card-title">Bench promote (IR swap)</h2>
-        <p className="text-sm text-muted mb-3">
-          Bench a starter and call up a bench player. The promoted stock receives
-          budget equal to the benched starter&apos;s current market value (not the
-          original $80K).
-        </p>
-        <Button
-          variant="primary"
-          className="w-full"
-          disabled={
-            busy ||
-            lineupLocked ||
-            roster.irResolution?.required ||
-            !irStarterId ||
-            !irBenchId
-          }
-          onClick={handleIrSwap}
-        >
-          {busy
-            ? "Processing…"
-            : lineupLocked
-              ? "Lineups locked until 4:00 PM ET"
-              : "Confirm bench promote"}
-        </Button>
-      </section>
-      )}
-
-      {!roster.sportsSimIrEnabled && (
-        <RosterBlock
-          title="Crypto flex"
-          subtitle="Scores in matchups · tap Sell to rebalance · multiple coins OK"
-          tone="crypto"
-          scoringMode={roster.scoringMode}
-          picks={roster.crypto}
-          selectable={!viewingHistorical}
-          selectedId={cryptoPickId}
-          onSelect={(id) => setCryptoPickId((prev) => (prev === id ? null : id))}
-          selectLabel="Sell"
-        />
-      )}
-
-      {!roster.sportsSimIrEnabled && !viewingHistorical && (
       <section className="season-card">
         <h2 className="season-card-title">Crypto rebalance</h2>
         <p className="text-sm text-muted mb-3">
@@ -623,7 +514,8 @@ export function MyTeamPageContent({
 
         {!cryptoPickId && (
           <p className="text-xs text-muted mb-3">
-            Select a coin under Crypto flex (tap <strong>Sell</strong>) to start.
+            Select a coin under {roster.sportsSimIrEnabled ? "Starting crypto" : "Crypto flex"} (tap{" "}
+            <strong>Sell</strong>) to start.
           </p>
         )}
 
@@ -743,6 +635,122 @@ export function MyTeamPageContent({
             : cryptoSellPercent === 100
               ? `Swap ${selectedCryptoPick?.symbol ?? "coin"} → ${cryptoTarget}`
               : `Rebalance ${cryptoSellPercent}% → ${cryptoTarget}`}
+        </Button>
+      </section>
+      )}
+
+
+      <RosterBlock
+        title="Bench"
+        subtitle="Does not score · promote via IR swap"
+        tone="bench"
+        scoringMode={roster.scoringMode}
+        picks={roster.bench}
+        selectable={!viewingHistorical && !lineupLocked && !roster.irResolution?.required}
+        selectedId={irBenchId}
+        onSelect={(id) => setIrBenchId((prev) => (prev === id ? null : id))}
+        selectLabel="Promote"
+      />
+
+      {roster.sportsSimIrEnabled && (
+        <RosterBlock
+          title="Injured reserve"
+          subtitle="Up to 3 slots · does not score · injury-eligible stocks only"
+          tone="ir"
+          scoringMode={roster.scoringMode}
+          picks={roster.ir ?? []}
+          selectable={!viewingHistorical}
+          selectedId={irMoveSlotId ?? irReturnPickId}
+          onSelect={(id) => {
+            const pick = roster.ir?.find((row) => row.id === id);
+            if (!pick) return;
+            if (pick.symbol.toUpperCase() === "__OPEN__") {
+              setIrMoveSlotId((prev) => (prev === id ? null : id));
+              setIrReturnPickId(null);
+              return;
+            }
+            const stale = roster.irResolution?.picks.some((row) => row.pickId === id);
+            if (stale) {
+              setIrReturnPickId((prev) => (prev === id ? null : id));
+              setIrMoveSlotId(null);
+            }
+          }}
+          selectLabel={
+            roster.irResolution?.required ? "Return" : "IR slot"
+          }
+        />
+      )}
+
+      {roster.sportsSimIrEnabled && !viewingHistorical && (
+        <section className="season-card space-y-3">
+          <div>
+            <h2 className="season-card-title">Move to IR</h2>
+            <p className="text-sm text-muted">
+              Select an injury-eligible starter and an empty IR slot. The active
+              spot opens for a free-agent add. IR picks never score.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            className="w-full"
+            disabled={
+              busy ||
+              roster.irResolution?.required ||
+              !irMoveStarterId ||
+              !irMoveSlotId
+            }
+            onClick={handleMoveToIr}
+          >
+            {busy ? "Processing…" : "Move starter to IR"}
+          </Button>
+
+          {roster.irResolution?.required && (
+            <>
+              <div>
+                <h2 className="season-card-title">Return from IR</h2>
+                <p className="text-sm text-muted">
+                  Drop or bench a starter to open an active slot, then return the
+                  healed stock from IR.
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                className="w-full"
+                disabled={busy || !irReturnPickId}
+                onClick={handleReturnFromIr}
+              >
+                {busy ? "Processing…" : "Return selected stock to active"}
+              </Button>
+            </>
+          )}
+        </section>
+      )}
+
+      {!viewingHistorical && (
+      <section className="season-card">
+        <h2 className="season-card-title">Bench promote (IR swap)</h2>
+        <p className="text-sm text-muted mb-3">
+          Bench a starter and call up a bench player. The promoted stock receives
+          budget equal to the benched starter&apos;s current market value (not the
+          original $80K).
+        </p>
+        <Button
+          variant="primary"
+          className="w-full"
+          disabled={
+            busy ||
+            lineupLocked ||
+            roster.irResolution?.required ||
+            !irStarterId ||
+            !irBenchId
+          }
+          onClick={handleIrSwap}
+        >
+          {busy
+            ? "Processing…"
+            : lineupLocked
+              ? "Lineups locked until 4:00 PM ET"
+              : "Confirm bench promote"}
         </Button>
       </section>
       )}

@@ -383,6 +383,23 @@ async function scoreSingleMatchup(
   const isSingleGame = Boolean(matchup.game_date);
 
   try {
+    // computeWeeklyScoreForUser silently scores an empty/unloadable roster as
+    // 0 (see computeScoringWeekInputs), which is indistinguishable from a
+    // real 0% week further up the call chain. Left unchecked, that lets a
+    // roster-load failure (RLS lockout, missing draft row, etc.) finalize as
+    // a bogus 0-0 tie with no winner instead of retrying later — this is
+    // what corrupted the SDAI-00040 Contrarian vs Bench Hoarder week 1 game.
+    const [homeState, awayState] = await Promise.all([
+      loadDraftStateDetailed(matchup.home_user_id, { leagueId: matchup.league_id }),
+      loadDraftStateDetailed(matchup.away_user_id, { leagueId: matchup.league_id }),
+    ]);
+    if (!homeState.ok || homeState.state.picks.length === 0) {
+      return { error: `Could not load roster for home team (${matchup.home_user_id})` };
+    }
+    if (!awayState.ok || awayState.state.picks.length === 0) {
+      return { error: `Could not load roster for away team (${matchup.away_user_id})` };
+    }
+
     if (isSingleGame) {
       homeScore = await computeGameScorePercentForUser(
         matchup.home_user_id,

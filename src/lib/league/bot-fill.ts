@@ -8,6 +8,10 @@ import {
 import { buildBotConfigForPersonality } from "@/lib/league/league-bots";
 import type { LeagueOpponentType, LeagueVisibility } from "@/lib/league/league-config";
 import { assignBotSdflIdentity, isSdflLeague } from "@/lib/league/sdfl-divisions";
+import {
+  assignBotGenericMapIdentity,
+  genericMapSportForLeague,
+} from "@/lib/league/generic-team-map";
 
 const SYNTHETIC_TEAM_NAMES = [
   "Northside Capital",
@@ -93,6 +97,7 @@ export async function fillEmptySlotsWithBots(
     .eq("id", leagueId)
     .maybeSingle();
   const sdflLeague = isSdflLeague(leagueRow?.sports_league_id);
+  const genericMapSport = genericMapSportForLeague(leagueRow?.sports_league_id);
 
   const { data: members, error: membersError } = await supabase
     .from("league_members")
@@ -129,7 +134,8 @@ export async function fillEmptySlotsWithBots(
 
     const personality =
       ALL_BOT_PERSONALITIES[slot % ALL_BOT_PERSONALITIES.length] as BotPersonality;
-    const displayName = sdflLeague ? "Pending" : pickTeamName(usedNames, slot);
+    const displayName =
+      sdflLeague || genericMapSport ? "Pending" : pickTeamName(usedNames, slot);
     const botConfig = buildBotConfigForPersonality(personality);
 
     const { data: botId, error } = await supabase.rpc("provision_league_bot", {
@@ -154,6 +160,23 @@ export async function fillEmptySlotsWithBots(
         supabase,
         leagueId,
         botId,
+        slot,
+        usedNames
+      );
+      if (identityResult.error) {
+        return {
+          filled,
+          remainingSlots: Math.max(0, playerCount - existingCount - filled),
+          resumedFrom: existingCount,
+          error: identityResult.error,
+        };
+      }
+    } else if (genericMapSport) {
+      const identityResult = await assignBotGenericMapIdentity(
+        supabase,
+        leagueId,
+        botId,
+        genericMapSport,
         slot,
         usedNames
       );
