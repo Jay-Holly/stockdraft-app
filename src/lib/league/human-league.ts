@@ -21,6 +21,7 @@ import {
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
 import { maybeStartHumanLeagueDraft } from "@/lib/league/draft-scheduler";
 import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
+import { isGenericMapLeague } from "@/lib/league/generic-team-map";
 import { buildInviteLink } from "@/lib/app-url";
 import {
   DEFAULT_LEAGUE_SCORING_MODE,
@@ -272,8 +273,10 @@ export async function joinPublicHumanLeague(
 
   const nextDraftSlot = memberCount ?? 0;
   const sdflLeague = isSdflLeague(leagueRow.sports_league_id);
+  const genericMapLeague = isGenericMapLeague(leagueRow.sports_league_id);
+  const deferredIdentityLeague = sdflLeague || genericMapLeague;
 
-  if (!sdflLeague) {
+  if (!deferredIdentityLeague) {
     if (!trimmedTeam) return { error: "Team name is required." };
     if (trimmedTeam.length > 40) {
       return { error: "Team name must be 40 characters or fewer." };
@@ -283,7 +286,7 @@ export async function joinPublicHumanLeague(
   const { error: memberError } = await supabase.from("league_members").insert({
     league_id: leagueId,
     user_id: userId,
-    display_name: sdflLeague ? "Pending" : trimmedTeam,
+    display_name: deferredIdentityLeague ? "Pending" : trimmedTeam,
     draft_slot: nextDraftSlot,
   });
 
@@ -317,7 +320,7 @@ export async function joinPublicHumanLeague(
   }
 
   const loaded = await loadHumanLeagueById(leagueId);
-  if (loaded.league && sdflLeague) {
+  if (loaded.league && deferredIdentityLeague) {
     return { ...loaded, redirectTo: sdflIdentityPath(leagueId) };
   }
   return loaded;
@@ -412,7 +415,11 @@ export async function createHumanLeague(
 
   const sdflLeague =
     config.formatType === "sports_league" && isSdflLeague(config.sportsLeagueId);
-  if (!sdflLeague) {
+  const genericMapLeague =
+    config.formatType === "sports_league" &&
+    isGenericMapLeague(config.sportsLeagueId);
+  const deferredIdentityLeague = sdflLeague || genericMapLeague;
+  if (!deferredIdentityLeague) {
     if (!teamName) return { error: "Team name is required." };
     if (teamName.length > 40) {
       return { error: "Team name must be 40 characters or fewer." };
@@ -472,7 +479,7 @@ export async function createHumanLeague(
   const { error: memberError } = await supabase.from("league_members").insert({
     league_id: league.id,
     user_id: userId,
-    display_name: sdflLeague ? "Pending" : teamName,
+    display_name: deferredIdentityLeague ? "Pending" : teamName,
     draft_slot: 0,
   });
 
@@ -495,7 +502,7 @@ export async function createHumanLeague(
     inviteLink: inviteToken
       ? buildInviteLink(inviteToken, options?.inviteBaseUrl)
       : null,
-    redirectTo: sdflLeague ? sdflIdentityPath(league.id) : undefined,
+    redirectTo: deferredIdentityLeague ? sdflIdentityPath(league.id) : undefined,
   };
 }
 
@@ -676,8 +683,12 @@ export async function joinHumanLeagueByToken(
   const sdflLeague = isSdflLeague(
     leagueRow.sports_league_id ?? preview.sportsLeagueId
   );
+  const genericMapLeague = isGenericMapLeague(
+    leagueRow.sports_league_id ?? preview.sportsLeagueId
+  );
+  const deferredIdentityLeague = sdflLeague || genericMapLeague;
 
-  if (!sdflLeague) {
+  if (!deferredIdentityLeague) {
     if (!trimmedTeam) return { error: "Team name is required." };
     if (trimmedTeam.length > 40) {
       return { error: "Team name must be 40 characters or fewer." };
@@ -687,7 +698,7 @@ export async function joinHumanLeagueByToken(
   const { error: memberError } = await supabase.from("league_members").insert({
     league_id: preview.leagueId,
     user_id: userId,
-    display_name: sdflLeague ? "Pending" : trimmedTeam,
+    display_name: deferredIdentityLeague ? "Pending" : trimmedTeam,
     draft_slot: nextDraftSlot,
   });
 
@@ -721,7 +732,7 @@ export async function joinHumanLeagueByToken(
   }
 
   const loaded = await loadHumanLeagueById(preview.leagueId);
-  if (loaded.league && sdflLeague) {
+  if (loaded.league && deferredIdentityLeague) {
     return { ...loaded, redirectTo: sdflIdentityPath(preview.leagueId) };
   }
   return loaded;

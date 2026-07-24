@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import type { HumanLeagueInvitePreview } from "@/lib/league/human-league";
 import { isSdflLeague } from "@/lib/league/sdfl-divisions";
+import { isGenericMapLeague } from "@/lib/league/generic-team-map";
 
 function formatScheduledDraftAt(iso: string | null): string | null {
   if (!iso) return null;
@@ -70,6 +71,8 @@ export function JoinLeaguePanel({
 
   const { preview, isMember } = inviteState;
   const isSdfl = isSdflLeague(preview.sportsLeagueId);
+  const isGenericMap = isGenericMapLeague(preview.sportsLeagueId);
+  const deferredIdentity = isSdfl || isGenericMap;
   const spotsLeft = preview.playerCount - preview.memberCount;
   const isFull = spotsLeft <= 0;
   const leagueStarted =
@@ -98,7 +101,7 @@ export function JoinLeaguePanel({
       const res = await fetch(`/api/leagues/join/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamName: isSdfl ? "" : teamName }),
+        body: JSON.stringify({ teamName: deferredIdentity ? "" : teamName }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -109,7 +112,7 @@ export function JoinLeaguePanel({
       router.push(
         typeof data.redirectTo === "string"
           ? data.redirectTo
-          : isSdfl
+          : deferredIdentity
             ? `/leagues/${data.activeLeagueId}/identity`
             : "/draft"
       );
@@ -182,11 +185,11 @@ export function JoinLeaguePanel({
       ) : isMember && preview.status === "waiting" ? (
         <div className="space-y-3">
           <div className="rounded-xl border border-dark-border bg-dark/40 p-4 text-sm text-muted">
-            {isSdfl
-              ? "You're on the roster. Set up your SDFL franchise identity while the league fills."
+            {deferredIdentity
+              ? "You're on the roster. Set up your franchise identity while the league fills."
               : "You're already on the roster. Waiting for the league to fill and reach the scheduled draft time."}
           </div>
-          {isSdfl ? (
+          {deferredIdentity ? (
             <Button
               variant="primary"
               className="w-full"
@@ -243,7 +246,7 @@ export function JoinLeaguePanel({
         )
       ) : canJoin ? (
         <form onSubmit={handleJoin} className="space-y-4">
-          {!isSdfl ? (
+          {!deferredIdentity ? (
             <div>
               <label className="block text-sm font-semibold mb-1.5" htmlFor="teamName">
                 Your team name
@@ -259,8 +262,9 @@ export function JoinLeaguePanel({
             </div>
           ) : (
             <p className="text-sm text-muted">
-              After joining, you&apos;ll pick your conference, division slot, and
-              franchise identity before the draft.
+              {isSdfl
+                ? "After joining, you'll pick your conference, division slot, and franchise identity before the draft."
+                : "After joining, you'll pick a city on the map and set your franchise identity before the draft."}
             </p>
           )}
           {error && <p className="text-sm text-red-400">{error}</p>}
@@ -272,7 +276,7 @@ export function JoinLeaguePanel({
           >
             {submitting
               ? "Joining…"
-              : isSdfl
+              : deferredIdentity
                 ? "Join league & set up franchise"
                 : "Join league & enter draft"}
           </Button>

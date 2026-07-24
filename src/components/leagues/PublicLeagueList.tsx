@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { isSdflLeague } from "@/lib/league/sdfl-divisions";
+import { isGenericMapLeague } from "@/lib/league/generic-team-map";
 import type { PublicHumanLeagueListItem } from "@/lib/league/human-league";
 
 const inputClass =
@@ -24,6 +25,8 @@ export function PublicLeagueList({
   const [teamNameById, setTeamNameById] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const isSdfl = sportsLeagueId ? isSdflLeague(sportsLeagueId) : false;
+  const isGenericMap = sportsLeagueId ? isGenericMapLeague(sportsLeagueId) : false;
+  const deferredIdentity = isSdfl || isGenericMap;
 
   if (leagues.length === 0) {
     return (
@@ -38,7 +41,9 @@ export function PublicLeagueList({
     setError(null);
     setJoiningId(leagueId);
     try {
-      const teamName = isSdfl ? "" : (teamNameById[leagueId] ?? defaultTeamName);
+      const teamName = deferredIdentity
+        ? ""
+        : (teamNameById[leagueId] ?? defaultTeamName);
       const res = await fetch("/api/leagues/join-public", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -52,7 +57,7 @@ export function PublicLeagueList({
       router.push(
         typeof data.redirectTo === "string"
           ? data.redirectTo
-          : isSdfl
+          : deferredIdentity
             ? `/leagues/${data.activeLeagueId}/identity`
             : "/draft"
       );
@@ -93,7 +98,7 @@ export function PublicLeagueList({
               </span>
             </div>
 
-            {!isSdfl && !isFull && (
+            {!deferredIdentity && !isFull && (
               <input
                 className={inputClass}
                 placeholder="Your team name"

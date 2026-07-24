@@ -8,6 +8,10 @@ import {
 import { isHumanLeagueDraftFinished } from "@/lib/league/human-league";
 import { memberNeedsSdflIdentity, sdflIdentityPath } from "@/lib/league/team-identity";
 import { isSdflLeague } from "@/lib/league/sdfl-divisions";
+import {
+  isGenericMapLeague,
+  memberNeedsGenericMapClaim,
+} from "@/lib/league/generic-team-map";
 import { DraftRoom } from "@/components/draft/DraftRoom";
 import { Logo } from "@/components/Logo";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
@@ -85,6 +89,15 @@ export default async function DraftPage({
       (await memberNeedsSdflIdentity(user.id, activeLeagueId, supabase))
     ) {
       redirect(sdflIdentityPath(activeLeagueId));
+    }
+
+    if (
+      activeLeagueId &&
+      humanLeague &&
+      isGenericMapLeague(humanLeague.sports_league_id) &&
+      (await memberNeedsGenericMapClaim(user.id, activeLeagueId, supabase))
+    ) {
+      redirect(`/leagues/${activeLeagueId}/identity`);
     }
 
     if (humanLeague && draftFinished) {

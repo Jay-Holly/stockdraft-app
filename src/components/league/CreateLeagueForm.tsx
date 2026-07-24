@@ -25,6 +25,7 @@ import {
   type DraftOrderMethodSetting,
 } from "@/lib/league/draft-order";
 import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
+import { isGenericMapLeague } from "@/lib/league/generic-team-map";
 
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
@@ -215,6 +216,9 @@ export function CreateLeagueForm({
   const allHumanLeague = config.opponentType === "all_human";
   const isSdfl =
     formatType === "sports_league" && isSdflLeague(sportsLeagueId);
+  const isGenericMap =
+    formatType === "sports_league" && isGenericMapLeague(sportsLeagueId);
+  const deferredIdentity = isSdfl || isGenericMap;
   const playerCountOptions = playerCountsForFormat(
     formatType,
     sportsLeagueId
@@ -269,7 +273,7 @@ export function CreateLeagueForm({
       const identityPath =
         typeof data.redirectTo === "string"
           ? data.redirectTo
-          : isSdfl && leagueId
+          : deferredIdentity && leagueId
             ? sdflIdentityPath(leagueId)
             : null;
 
@@ -309,7 +313,7 @@ export function CreateLeagueForm({
                 Share this invite link with up to {inviteSlotsRemaining} friend
                 {inviteSlotsRemaining === 1 ? "" : "s"}. Anyone with the link can
                 join until all {playerCount} roster spots are filled.
-                {isSdfl
+                {deferredIdentity
                   ? " Claim your franchise identity before sharing invites."
                   : needsSchedule && allHumanLeague
                     ? " The live draft begins at your scheduled time once the roster is full."
@@ -322,13 +326,15 @@ export function CreateLeagueForm({
                 Your league is created.
                 {isSdfl
                   ? " Set up your SDFL franchise identity next."
-                  : needsSchedule
-                    ? " Open slots will fill with managers at your scheduled draft time."
-                    : " Waiting for players to join."}
+                  : isGenericMap
+                    ? " Set up your franchise identity next."
+                    : needsSchedule
+                      ? " Open slots will fill with managers at your scheduled draft time."
+                      : " Waiting for players to join."}
               </>
             )}
           </p>
-          {isSdfl && createdLeagueId ? (
+          {deferredIdentity && createdLeagueId ? (
             <Button
               variant="primary"
               className="w-full"
@@ -519,7 +525,7 @@ export function CreateLeagueForm({
           <label className="block text-sm font-semibold mb-1.5" htmlFor="teamName">
             Your team name
           </label>
-          {!isSdfl ? (
+          {!deferredIdentity ? (
             <input
               id="teamName"
               className={inputClass}
@@ -531,8 +537,9 @@ export function CreateLeagueForm({
             />
           ) : (
             <p className="text-sm text-muted rounded-xl border border-dark-border bg-dark/40 px-4 py-3">
-              You&apos;ll set your franchise city, team name, and colors on the next
-              screen after creating the league.
+              {isSdfl
+                ? "You'll set your franchise city, team name, and colors on the next screen after creating the league."
+                : "You'll pick a city on the map, then set your team name and colors on the next screen after creating the league."}
             </p>
           )}
         </div>
