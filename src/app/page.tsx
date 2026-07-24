@@ -15,7 +15,7 @@ const LANDING_HERO_LOGGED_OUT = {
 const LANDING_HERO_LOGGED_IN = {
   src: "/images/landing/hero-logged-in.webp",
   width: 1178,
-  height: 1335,
+  height: 1055,
 } as const;
 
 const LANDING_HERO_MOBILE_LOGGED_IN = {
