@@ -4,10 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import {
-  getAvatarHex,
-  type Profile,
-} from "@/lib/types";
+import type { Profile } from "@/lib/types";
 import type {
   AiLeagueListItem,
   AiLeagueSummary,
@@ -175,8 +172,6 @@ export function DashboardContent({
   }, [router, searchParams]);
 
   const supabase = createClient();
-  const avatarHex = getAvatarHex(profile.avatar_color);
-  const initials = profile.username.slice(0, 2).toUpperCase();
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -293,12 +288,6 @@ export function DashboardContent({
 
       <section className="crest-card p-6">
         <div className="flex items-center gap-4">
-          <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-black text-white shrink-0 border border-gold/40"
-            style={{ backgroundColor: avatarHex }}
-          >
-            {initials}
-          </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold truncate">{profile.team_name}</h1>
             <p className="text-muted text-sm truncate">@{profile.username}</p>
