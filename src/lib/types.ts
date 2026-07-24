@@ -20,6 +20,8 @@ export const AVATAR_COLORS = [
 
 export type AvatarColorId = (typeof AVATAR_COLORS)[number]["id"];
 
-export function getAvatarHex(colorId: string): string {
-  return AVATAR_COLORS.find((c) => c.id === colorId)?.hex ?? "#0a3d8f";
+export function getAvatarHex(_colorId: string): string {
+  // Avatars are a single universal brand color everywhere now — no more
+  // per-user color choice. Argument kept for call-site compatibility.
+  return "#14213f";
 }

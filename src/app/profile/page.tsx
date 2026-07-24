@@ -73,12 +73,20 @@ export default async function ProfilePage() {
       </header>
 
       <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full space-y-4">
-        <Link
-          href="/dashboard"
-          className="inline-block text-sm text-muted hover:text-white transition-colors"
-        >
-          ← Back to dashboard
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard"
+            className="inline-block text-sm text-muted hover:text-white transition-colors"
+          >
+            ← Back to dashboard
+          </Link>
+          <Link
+            href="/my-account"
+            className="inline-block text-sm font-semibold text-gold hover:underline"
+          >
+            My Wallet
+          </Link>
+        </div>
 
         <ProfileContent profile={profile as Profile} email={user.email ?? ""} />
       </main>

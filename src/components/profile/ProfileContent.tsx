@@ -2,11 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import {
-  AVATAR_COLORS,
-  type AvatarColorId,
-  type Profile,
-} from "@/lib/types";
+import { type Profile } from "@/lib/types";
 import { Button } from "@/components/Button";
 
 const inputClass =
@@ -20,10 +16,6 @@ export function ProfileContent({
   email: string;
 }) {
   const [username, setUsername] = useState(profile.username);
-  const [teamName, setTeamName] = useState(profile.team_name);
-  const [avatarColor, setAvatarColor] = useState<AvatarColorId>(
-    profile.avatar_color as AvatarColorId
-  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -38,8 +30,6 @@ export function ProfileContent({
       .from("profiles")
       .update({
         username,
-        team_name: teamName,
-        avatar_color: avatarColor,
       })
       .eq("id", profile.id);
 
@@ -72,42 +62,6 @@ export function ProfileContent({
             onChange={(e) => setUsername(e.target.value)}
             className={inputClass}
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1.5">
-            Team name
-          </label>
-          <input
-            type="text"
-            required
-            maxLength={40}
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1.5">
-            Avatar color
-          </label>
-          <div className="flex gap-2 flex-wrap">
-            {AVATAR_COLORS.map((color) => (
-              <button
-                key={color.id}
-                type="button"
-                title={color.label}
-                onClick={() => setAvatarColor(color.id)}
-                className={`w-9 h-9 rounded-full transition-transform ${
-                  avatarColor === color.id
-                    ? "ring-2 ring-gold ring-offset-2 ring-offset-dark-card scale-110"
-                    : "hover:scale-105"
-                }`}
-                style={{ backgroundColor: color.hex }}
-              />
-            ))}
-          </div>
         </div>
 
         {message && (

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { AVATAR_COLORS, type AvatarColorId } from "@/lib/types";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/Button";
 
@@ -23,7 +22,6 @@ export function AuthForm({
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [teamName, setTeamName] = useState("My Team");
-  const [avatarColor, setAvatarColor] = useState<AvatarColorId>("blue");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(
     null
@@ -44,7 +42,7 @@ export function AuthForm({
           data: {
             username,
             team_name: teamName,
-            avatar_color: avatarColor,
+            avatar_color: "blue",
             day_trader_signup: variant === "daytrader" ? "true" : "false",
           },
         },
@@ -204,24 +202,6 @@ export function AuthForm({
                 />
               </Field>
 
-              <Field label="Avatar color">
-                <div className="flex gap-2 flex-wrap">
-                  {AVATAR_COLORS.map((color) => (
-                    <button
-                      key={color.id}
-                      type="button"
-                      title={color.label}
-                      onClick={() => setAvatarColor(color.id)}
-                      className={`w-9 h-9 rounded-full transition-transform ${
-                        avatarColor === color.id
-                          ? "ring-2 ring-gold ring-offset-2 ring-offset-dark-card scale-110"
-                          : "hover:scale-105"
-                      }`}
-                      style={{ backgroundColor: color.hex }}
-                    />
-                  ))}
-                </div>
-              </Field>
             </>
           )}
 
