@@ -1,27 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
-import { StockTickers } from "@/components/StockTickers";
 import { PerimeterTicker } from "@/components/PerimeterTicker";
-import { LandingActions } from "@/components/LandingActions";
-import { createClient } from "@/lib/supabase/server";
-import { hasJoinedDayTrader } from "@/lib/profile/day-trader";
 
 const LANDING_HERO_LOGGED_OUT = {
   src: "/images/landing/hero-logged-out.webp",
   width: 1536,
   height: 2752,
-} as const;
-
-const LANDING_HERO_LOGGED_IN = {
-  src: "/images/landing/hero-logged-in.webp",
-  width: 1178,
-  height: 1055,
-} as const;
-
-const LANDING_HERO_MOBILE_LOGGED_IN = {
-  src: "/images/landing/hero-mobile-logged-in.png",
-  width: 852,
-  height: 1290,
 } as const;
 
 // Percent-based hit zones matching the buttons drawn into
@@ -44,84 +28,36 @@ const LOGGED_OUT_HOTSPOTS = [
   },
 ] as const;
 
-export default async function HomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const isLoggedIn = Boolean(user);
-  const showDayTraderTeaser =
-    isLoggedIn && user ? !(await hasJoinedDayTrader(user.id)) : false;
+export default function HomePage() {
   const heroAlt =
     "StockDraft — Where Fantasy Sports Meet Real Markets. Draft stocks like players. Win your league. Learn the markets. You've never seen a season like this, until now!";
 
-  if (!isLoggedIn) {
-    return (
-      <div className="landing-screen sides-always">
-        <main className="landing-main landing-main--stacked">
-          <div className="landing-hero-panel">
-            <div className="landing-hero-frame">
-              <PerimeterTicker />
-              <div className="landing-hero-image-wrap" style={{ position: "relative" }}>
-                <Image
-                  src={LANDING_HERO_LOGGED_OUT.src}
-                  alt={heroAlt}
-                  width={LANDING_HERO_LOGGED_OUT.width}
-                  height={LANDING_HERO_LOGGED_OUT.height}
-                  priority
-                  className="landing-hero-image"
-                  sizes="(max-width: 767px) 100vw, calc(100vw - 120px)"
-                />
-                {LOGGED_OUT_HOTSPOTS.map((hotspot) => (
-                  <Link
-                    key={hotspot.href}
-                    href={hotspot.href}
-                    aria-label={hotspot.label}
-                    style={{ position: "absolute", ...hotspot.style }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
   return (
-    <div className="landing-screen">
-      <StockTickers />
-
+    <div className="landing-screen sides-always">
       <main className="landing-main landing-main--stacked">
         <div className="landing-hero-panel">
           <div className="landing-hero-frame">
-            <div className="landing-hero-image-wrap">
+            <PerimeterTicker />
+            <div className="landing-hero-image-wrap" style={{ position: "relative" }}>
               <Image
-                src={LANDING_HERO_LOGGED_IN.src}
+                src={LANDING_HERO_LOGGED_OUT.src}
                 alt={heroAlt}
-                width={LANDING_HERO_LOGGED_IN.width}
-                height={LANDING_HERO_LOGGED_IN.height}
+                width={LANDING_HERO_LOGGED_OUT.width}
+                height={LANDING_HERO_LOGGED_OUT.height}
                 priority
-                className="landing-hero-image landing-hero-image--desktop"
+                className="landing-hero-image"
                 sizes="(max-width: 767px) 100vw, calc(100vw - 120px)"
               />
-              <Image
-                src={LANDING_HERO_MOBILE_LOGGED_IN.src}
-                alt={heroAlt}
-                width={LANDING_HERO_MOBILE_LOGGED_IN.width}
-                height={LANDING_HERO_MOBILE_LOGGED_IN.height}
-                priority
-                className="landing-hero-image landing-hero-image--mobile"
-                sizes="100vw"
-              />
+              {LOGGED_OUT_HOTSPOTS.map((hotspot) => (
+                <Link
+                  key={hotspot.href}
+                  href={hotspot.href}
+                  aria-label={hotspot.label}
+                  style={{ position: "absolute", ...hotspot.style }}
+                />
+              ))}
             </div>
           </div>
-
-          <LandingActions
-            isLoggedIn={isLoggedIn}
-            showDayTraderTeaser={showDayTraderTeaser}
-          />
         </div>
       </main>
     </div>

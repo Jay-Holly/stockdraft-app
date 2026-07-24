@@ -788,16 +788,26 @@ body:has(.landing-screen) {
    selector specificity, regardless of viewport width. */
 .landing-screen.sides-always {
   --landing-ticker-width: 34px;
+  height: auto;
+  min-height: 100dvh;
+  max-height: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+body:has(.landing-screen.sides-always) {
+  overflow: auto;
 }
 
 .landing-screen.sides-always .landing-main {
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-top: calc(var(--landing-ticker-width) + env(safe-area-inset-top));
+  padding-bottom: calc(var(--landing-ticker-width) + env(safe-area-inset-bottom));
   padding-right: calc(var(--landing-ticker-width) + env(safe-area-inset-right));
   padding-left: calc(var(--landing-ticker-width) + env(safe-area-inset-left));
-}
-
-.landing-screen.sides-always .landing-main {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  flex: none;
   align-items: center;
   justify-content: center;
 }
