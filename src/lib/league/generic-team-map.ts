@@ -12,8 +12,14 @@ import {
   validateFranchiseTeamName,
   type FranchiseColors,
 } from "@/lib/league/generic-franchise-validation";
+import {
+  genericMapSportForLeague,
+  isGenericMapLeague,
+  type GenericMapSport,
+} from "@/lib/league/generic-map-sport";
 
-export type GenericMapSport = "nba" | "nhl" | "mlb";
+export type { GenericMapSport };
+export { genericMapSportForLeague, isGenericMapLeague };
 
 export type GenericMapMarker = {
   key: string;
@@ -28,19 +34,6 @@ const SPORT_MARKERS: Record<GenericMapSport, GenericMapMarker[]> = {
   nhl: SDHL_MAP_MARKERS,
   mlb: SDLB_MAP_MARKERS,
 };
-
-const SPORTS_LEAGUE_ID_TO_SPORT: Record<string, GenericMapSport> = {
-  sdba: "nba",
-  sdhl: "nhl",
-  sdlb: "mlb",
-};
-
-export function genericMapSportForLeague(
-  sportsLeagueId: string | null | undefined
-): GenericMapSport | null {
-  if (!sportsLeagueId) return null;
-  return SPORTS_LEAGUE_ID_TO_SPORT[sportsLeagueId] ?? null;
-}
 
 export function markersForSport(sport: GenericMapSport): GenericMapMarker[] {
   return SPORT_MARKERS[sport];
@@ -343,12 +336,6 @@ export async function submitGenericFranchiseIdentity(
 
   const refreshed = await loadGenericMapPayload(userId, leagueId, supabase);
   return { payload: refreshed.payload ?? undefined };
-}
-
-export function isGenericMapLeague(
-  sportsLeagueId: string | null | undefined
-): boolean {
-  return genericMapSportForLeague(sportsLeagueId) !== null;
 }
 
 export async function memberNeedsGenericMapClaim(

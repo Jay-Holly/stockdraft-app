@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import type { HumanLeagueInvitePreview } from "@/lib/league/human-league";
 import { isSdflLeague } from "@/lib/league/sdfl-divisions";
-import { isGenericMapLeague } from "@/lib/league/generic-team-map";
+import { isGenericMapLeague } from "@/lib/league/generic-map-sport";
 
 function formatScheduledDraftAt(iso: string | null): string | null {
   if (!iso) return null;

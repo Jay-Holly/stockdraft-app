@@ -25,7 +25,7 @@ import {
   type DraftOrderMethodSetting,
 } from "@/lib/league/draft-order";
 import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
-import { isGenericMapLeague } from "@/lib/league/generic-team-map";
+import { isGenericMapLeague } from "@/lib/league/generic-map-sport";
 
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";

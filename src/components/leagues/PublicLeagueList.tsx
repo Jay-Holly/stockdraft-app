@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { isSdflLeague } from "@/lib/league/sdfl-divisions";
-import { isGenericMapLeague } from "@/lib/league/generic-team-map";
+import { isGenericMapLeague } from "@/lib/league/generic-map-sport";
 import type { PublicHumanLeagueListItem } from "@/lib/league/human-league";
 
 const inputClass =
