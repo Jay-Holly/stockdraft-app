@@ -46,6 +46,8 @@ export type LeagueIdentityPayload = {
   openSlots: SdflDivisionSlot[];
   claimedSlots: Awaited<ReturnType<typeof getClaimedSdflSlots>>;
   myIdentity: MemberIdentityState | null;
+  isOwner: boolean;
+  scheduledDraftAt: string | null;
 };
 
 function parseMemberIdentity(row: {
@@ -117,7 +119,9 @@ export async function loadLeagueIdentityPayload(
 
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
-    .select("id, name, status, player_count, sports_league_id, league_type")
+    .select(
+      "id, name, status, player_count, sports_league_id, league_type, owner_user_id, scheduled_draft_at"
+    )
     .eq("id", leagueId)
     .maybeSingle();
 
@@ -164,6 +168,8 @@ export async function loadLeagueIdentityPayload(
       openSlots,
       claimedSlots,
       myIdentity: myRow ? parseMemberIdentity(myRow) : null,
+      isOwner: league.owner_user_id === userId,
+      scheduledDraftAt: league.scheduled_draft_at ?? null,
     },
   };
 }

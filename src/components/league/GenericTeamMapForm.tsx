@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { GenericFranchiseMap } from "@/components/league/GenericFranchiseMap";
+import { DraftScheduleControl } from "@/components/league/DraftScheduleControl";
 import type { GenericMapPayload, GenericMapSport } from "@/lib/league/generic-team-map";
 
 const MAP_IMAGE_BY_SPORT: Record<GenericMapSport, string> = {
@@ -164,6 +165,16 @@ export function GenericTeamMapForm({ leagueId }: { leagueId: string }) {
           every franchise is assigned.
         </p>
       </div>
+
+      {payload.isOwner && (
+        <DraftScheduleControl
+          leagueId={leagueId}
+          scheduledDraftAt={payload.scheduledDraftAt}
+          onUpdated={(scheduledDraftAt) =>
+            setPayload((prev) => (prev ? { ...prev, scheduledDraftAt } : prev))
+          }
+        />
+      )}
 
       {identityComplete && payload.myIdentity ? (
         <div className="rounded-2xl border border-gold/30 bg-gold/5 p-5 space-y-3">

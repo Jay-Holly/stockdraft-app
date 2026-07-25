@@ -9,6 +9,7 @@ import {
 } from "@/lib/league/sdfl-divisions";
 import type { LeagueIdentityPayload } from "@/lib/league/team-identity";
 import { SdflFranchiseMap } from "@/components/league/SdflFranchiseMap";
+import { DraftScheduleControl } from "@/components/league/DraftScheduleControl";
 
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
@@ -172,6 +173,16 @@ export function SdflIdentityForm({ leagueId }: { leagueId: string }) {
           </span>
         </p>
       </div>
+
+      {payload.isOwner && (
+        <DraftScheduleControl
+          leagueId={leagueId}
+          scheduledDraftAt={payload.scheduledDraftAt}
+          onUpdated={(scheduledDraftAt) =>
+            setPayload((prev) => (prev ? { ...prev, scheduledDraftAt } : prev))
+          }
+        />
+      )}
 
       {identityComplete && payload.myIdentity ? (
         <div className="rounded-2xl border border-gold/30 bg-gold/5 p-5 space-y-3">

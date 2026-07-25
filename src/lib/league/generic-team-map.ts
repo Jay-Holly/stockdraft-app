@@ -77,6 +77,8 @@ export type GenericMapPayload = {
   claims: GenericMapClaim[];
   mySlotKey: string | null;
   myIdentity: GenericMyIdentity | null;
+  isOwner: boolean;
+  scheduledDraftAt: string | null;
 };
 
 function isRowComplete(row: ClaimRow): boolean {
@@ -117,7 +119,9 @@ export async function loadGenericMapPayload(
 
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
-    .select("id, name, status, player_count, sports_league_id, league_type")
+    .select(
+      "id, name, status, player_count, sports_league_id, league_type, owner_user_id, scheduled_draft_at"
+    )
     .eq("id", leagueId)
     .maybeSingle();
 
@@ -194,6 +198,8 @@ export async function loadGenericMapPayload(
             complete: myClaim.identityComplete,
           }
         : null,
+      isOwner: league.owner_user_id === userId,
+      scheduledDraftAt: league.scheduled_draft_at ?? null,
     },
   };
 }
