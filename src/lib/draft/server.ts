@@ -783,31 +783,49 @@ export async function makeDraftPickForLeague(
     return { error: "Invalid turn type for this pick" };
   }
 
-  const { data: insertedPick, error: pickError } = await supabase
-    .from("draft_picks")
-    .insert({
-      draft_id: draft.id,
-      user_id: userId,
-      round_number: draft.current_round,
+  const updatedPicks = [
+    ...leaguePicks,
+    {
       pick_type: pickType,
-      symbol: upperSymbol,
-      price_at_pick: priceAtPick,
       budget_spent: budgetSpent,
-      shares,
-      surcharge_percent: surchargePercent,
-      effective_value: effectiveValue,
-      pick_order: pickOrder,
-      is_auto_pick: options?.isAutoPick ?? false,
-      auto_pick_reason: options?.autoPickReason ?? null,
-    })
-    .select("*")
-    .single();
+      round_number: draft.current_round,
+      symbol: upperSymbol,
+    } as DraftPick,
+  ];
+
+  const nextRound = getNextRoundAfterPick(draft, updatedPicks, pickType, draftRules);
+  const complete = isDraftComplete(updatedPicks, draftRules);
+
+  const { data: insertedPick, error: pickError } = await supabase
+    .rpc("insert_draft_pick_atomic", {
+      p_draft_id: draft.id,
+      p_user_id: userId,
+      p_round_number: draft.current_round,
+      p_pick_type: pickType,
+      p_symbol: upperSymbol,
+      p_price_at_pick: priceAtPick,
+      p_budget_spent: budgetSpent,
+      p_shares: shares,
+      p_surcharge_percent: surchargePercent,
+      p_effective_value: effectiveValue,
+      p_pick_order: pickOrder,
+      p_is_auto_pick: options?.isAutoPick ?? false,
+      p_auto_pick_reason: options?.autoPickReason ?? null,
+      p_next_round: nextRound,
+      p_pushback_skips_remaining: draft.pushback_skips_remaining + pushbackDelta,
+      p_draft_status: complete ? "complete" : "in_progress",
+      p_completed_at: complete ? new Date().toISOString() : null,
+    });
 
   if (pickError || !insertedPick) {
     // 23505 here means another concurrent request (e.g. the same user
     // double-submitting from two tabs, or a retried request) already took
     // this pick_order slot — draft_picks_draft_id_pick_order_key rejected the
     // duplicate. Surface a clear message instead of the raw constraint error.
+    // Because the insert and the current_round bump now happen in a single
+    // atomic function call, this rejection also guarantees current_round was
+    // NOT bumped, so a retry re-reads the correct (unchanged) round instead
+    // of duplicating it.
     if (pickError?.code === "23505") {
       return {
         error:
@@ -824,31 +842,6 @@ export async function makeDraftPickForLeague(
   if (pendingCryptoIncrement) {
     await pendingCryptoIncrement();
   }
-
-  const updatedPicks = [
-    ...leaguePicks,
-    {
-      pick_type: pickType,
-      budget_spent: budgetSpent,
-      round_number: draft.current_round,
-      symbol: upperSymbol,
-    } as DraftPick,
-  ];
-
-  const nextRound = getNextRoundAfterPick(draft, updatedPicks, pickType, draftRules);
-  const complete = isDraftComplete(updatedPicks, draftRules);
-
-  const { error: draftError } = await supabase
-    .from("drafts")
-    .update({
-      current_round: nextRound,
-      pushback_skips_remaining: draft.pushback_skips_remaining + pushbackDelta,
-      status: complete ? "complete" : "in_progress",
-      completed_at: complete ? new Date().toISOString() : null,
-    })
-    .eq("id", draft.id);
-
-  if (draftError) return { error: draftError.message };
 
   if (!options?.skipLiveAdvance) {
     const { isLiveDraftLeague, advanceAfterPick } = await import("./live-draft");
