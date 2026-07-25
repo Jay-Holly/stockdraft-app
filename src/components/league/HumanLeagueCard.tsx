@@ -5,6 +5,7 @@ import { Button } from "@/components/Button";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
 import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCountdown";
+import { DraftScheduleControl } from "@/components/league/DraftScheduleControl";
 import {
   canEnterScheduledDraftRoom,
   draftRoomHref,
@@ -99,6 +100,14 @@ export function HumanLeagueCard({
           leagueId={item.league.id}
           compact
           onEnterDraft={(leagueId, href) => onSelect(leagueId, href)}
+        />
+      )}
+
+      {waiting && isOwner && (
+        <DraftScheduleControl
+          leagueId={item.league.id}
+          scheduledDraftAt={item.league.scheduled_draft_at}
+          compact
         />
       )}
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 
 function toDatetimeLocalValue(iso: string | null): string {
@@ -16,11 +17,14 @@ export function DraftScheduleControl({
   leagueId,
   scheduledDraftAt,
   onUpdated,
+  compact = false,
 }: {
   leagueId: string;
   scheduledDraftAt: string | null;
-  onUpdated: (scheduledDraftAt: string | null) => void;
+  onUpdated?: (scheduledDraftAt: string | null) => void;
+  compact?: boolean;
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(() => toDatetimeLocalValue(scheduledDraftAt));
   const [saving, setSaving] = useState(false);
@@ -45,7 +49,8 @@ export function DraftScheduleControl({
         setError(data.error ?? "Could not update the draft time.");
         return;
       }
-      onUpdated(data.scheduledDraftAt ?? iso);
+      onUpdated?.(data.scheduledDraftAt ?? iso);
+      router.refresh();
       setEditing(false);
     } catch {
       setError("Network error — try again.");
@@ -56,8 +61,10 @@ export function DraftScheduleControl({
 
   if (!editing) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dark-border bg-dark/40 px-4 py-3">
-        <p className="text-sm text-muted">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dark-border bg-dark/40 ${compact ? "px-3 py-2" : "px-4 py-3"}`}
+      >
+        <p className={compact ? "text-xs text-muted" : "text-sm text-muted"}>
           Draft time:{" "}
           <span className="text-white font-medium">
             {scheduledDraftAt
@@ -75,6 +82,7 @@ export function DraftScheduleControl({
         <Button
           type="button"
           variant="secondary"
+          className={compact ? "text-xs px-3" : undefined}
           onClick={() => {
             setValue(toDatetimeLocalValue(scheduledDraftAt));
             setError(null);
