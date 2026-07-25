@@ -1915,3 +1915,73 @@ export async function setSafetyPickSymbol(
   if (result.error) return { error: result.error };
   return {};
 }
+
+/**
+ * Full-league draft reset for testing: wipes EVERY team's picks in the
+ * league, resets each team's individual drafts row, clears the live feed
+ * and crypto buyer counts, and rewinds league_draft_state back to pick 1
+ * so the whole draft can be re-run from scratch. Callers must verify
+ * authorization before invoking this — see the route that calls it.
+ */
+export async function resetEntireLeagueDraft(
+  leagueId: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const { data: draftRows, error: draftsError } = await supabase
+    .from("drafts")
+    .select("id")
+    .eq("league_id", leagueId);
+  if (draftsError) return { error: draftsError.message };
+
+  const draftIds = (draftRows ?? []).map((d) => d.id);
+
+  if (draftIds.length > 0) {
+    const { error: picksError } = await supabase
+      .from("draft_picks")
+      .delete()
+      .in("draft_id", draftIds);
+    if (picksError) return { error: picksError.message };
+
+    const { error: draftsUpdateError } = await supabase
+      .from("drafts")
+      .update({
+        status: "in_progress",
+        current_round: 1,
+        pushback_skips_remaining: 0,
+        completed_at: null,
+        safety_pick_symbol: null,
+        safety_pick_queue: [],
+      })
+      .in("id", draftIds);
+    if (draftsUpdateError) return { error: draftsUpdateError.message };
+  }
+
+  await supabase
+    .from("league_draft_events")
+    .delete()
+    .eq("league_id", leagueId);
+
+  await supabase
+    .from("league_crypto_buyer_counts")
+    .delete()
+    .eq("league_id", leagueId);
+
+  const { error: stateError } = await supabase
+    .from("league_draft_state")
+    .update({
+      current_pick_index: 0,
+      global_pick_number: 0,
+      on_clock_user_id: null,
+      pick_deadline_at: null,
+      status: "in_progress",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("league_id", leagueId);
+  if (stateError) return { error: stateError.message };
+
+  const assign = await assignOnClock(leagueId);
+  if (assign.error) return { error: assign.error };
+
+  return {};
+}

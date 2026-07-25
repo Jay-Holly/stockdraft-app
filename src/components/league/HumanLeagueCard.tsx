@@ -7,6 +7,11 @@ import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePan
 import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCountdown";
 import { DraftScheduleControl } from "@/components/league/DraftScheduleControl";
 import { ResetDraftClockButton } from "@/components/league/ResetDraftClockButton";
+import { ResetEntireDraftButton } from "@/components/league/ResetEntireDraftButton";
+
+// Testing-only account allowed to wipe an entire league's draft. Matches the
+// server-side check in /api/leagues/[id]/draft/reset-all.
+const FULL_RESET_ALLOWED_USER_ID = "534054c5-6789-47db-8241-d0549b4541db";
 import {
   canEnterScheduledDraftRoom,
   draftRoomHref,
@@ -182,6 +187,14 @@ export function HumanLeagueCard({
         {isOwner && isSportsSim && isDrafting && (
           <ResetDraftClockButton leagueId={item.league.id} />
         )}
+        {currentUserId === FULL_RESET_ALLOWED_USER_ID &&
+          isSportsSim &&
+          isDrafting && (
+            <ResetEntireDraftButton
+              leagueId={item.league.id}
+              leagueName={item.league.name}
+            />
+          )}
         {isOwner && onDelete && (
           <Button
             variant="ghost"
