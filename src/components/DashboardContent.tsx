@@ -87,6 +87,8 @@ export function DashboardContent({
   scoringNotice = null,
   pendingInvites = [],
   dayTrader,
+  dfsEntryCount = 0,
+  wfsEntryCount = 0,
 }: {
   profile: Profile;
   leagues?: AiLeagueListItem[];
@@ -97,6 +99,8 @@ export function DashboardContent({
   scoringNotice?: string | null;
   pendingInvites?: PendingHumanLeagueInvite[];
   dayTrader?: DayTraderDashboardSummary;
+  dfsEntryCount?: number;
+  wfsEntryCount?: number;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -401,7 +405,9 @@ export function DashboardContent({
               label="Daily Fantasy Sport"
               href="/stockdraft-dfs"
             />
-            <p className="text-muted text-xs text-center mt-1">View</p>
+            <p className="text-muted text-xs text-center mt-1">
+              {dfsEntryCount > 0 ? `${dfsEntryCount} active` : "None yet"}
+            </p>
           </div>
 
           <div>
@@ -410,7 +416,9 @@ export function DashboardContent({
               label="Weekly Fantasy Sport"
               href="/stockdraft-wfs"
             />
-            <p className="text-muted text-xs text-center mt-1">View</p>
+            <p className="text-muted text-xs text-center mt-1">
+              {wfsEntryCount > 0 ? `${wfsEntryCount} active` : "None yet"}
+            </p>
           </div>
         </div>
       </section>

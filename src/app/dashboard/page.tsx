@@ -17,6 +17,8 @@ import { DashboardContent } from "@/components/DashboardContent";
 import { Logo } from "@/components/Logo";
 import { PageWatermark } from "@/components/PageWatermark";
 import { loadDayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
+import { getMyDfsEntries } from "@/lib/dfs/my-teams";
+import { getMyWfsEntries } from "@/lib/wfs/my-teams";
 import type { Profile } from "@/lib/types";
 
 export default async function DashboardPage() {
@@ -93,13 +95,15 @@ export default async function DashboardPage() {
       "Scoring temporarily unavailable — live prices could not be loaded. We'll retry on your next visit.";
   }
 
-  const [aiLeagues, humanLeagues, activeLeagueId, pendingInvites, dayTrader] =
+  const [aiLeagues, humanLeagues, activeLeagueId, pendingInvites, dayTrader, dfsEntries, wfsEntries] =
     await Promise.all([
       listAiLeagueListItems(user.id),
       listHumanLeaguesForUser(user.id),
       resolveActiveLeagueId(user.id),
       listPendingHumanLeagueInvites(),
       loadDayTraderDashboardSummary(user.id),
+      getMyDfsEntries(),
+      getMyWfsEntries(),
     ]);
 
   const activeHumanLeague = humanLeagues.find((h) => h.league.id === activeLeagueId);
@@ -131,6 +135,8 @@ export default async function DashboardPage() {
             scoringNotice={scoringNotice}
             pendingInvites={pendingInvites}
             dayTrader={dayTrader}
+            dfsEntryCount={dfsEntries.length}
+            wfsEntryCount={wfsEntries.length}
           />
         </Suspense>
       </main>
