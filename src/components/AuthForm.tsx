@@ -230,6 +230,17 @@ export function AuthForm({
             />
           </Field>
 
+          {mode === "login" && (
+            <div className="text-right -mt-2">
+              <a
+                href="/auth/forgot-password"
+                className="text-sm text-muted hover:text-white transition-colors"
+              >
+                Forgot password?
+              </a>
+            </div>
+          )}
+
           {message && (
             <div
               className={`rounded-xl px-4 py-3 text-sm ${
