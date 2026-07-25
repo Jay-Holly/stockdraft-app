@@ -224,6 +224,11 @@ export function DraftBoard({
             type="button"
             className="draft-reset-btn"
             disabled={busy || realPicks.length === 0}
+            title={
+              busy && realPicks.length > 0
+                ? "Reset is unavailable while the live draft is in progress"
+                : undefined
+            }
             onClick={onReset}
           >
             Reset draft

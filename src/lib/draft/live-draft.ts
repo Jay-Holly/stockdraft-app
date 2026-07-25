@@ -1481,7 +1481,7 @@ async function executeAutoPick(
       advanceLiveDraft: true,
     });
     if (skip.error) {
-      await extendPickDeadlineForUser(leagueId, userId);
+      await extendPickDeadlineForUser(leagueId, userId, 5);
       console.error(
         `Auto-pick pushback skip failed league=${leagueId} user=${userId}: ${skip.error}`
       );
@@ -1491,7 +1491,7 @@ async function executeAutoPick(
   }
 
   if ("error" in resolved) {
-    await extendPickDeadlineForUser(leagueId, userId);
+    await extendPickDeadlineForUser(leagueId, userId, 5);
     console.error(
       `Auto-pick unresolved league=${leagueId} user=${userId}: ${resolved.error}`
     );
@@ -1517,7 +1517,7 @@ async function executeAutoPick(
   );
 
   if (result.error) {
-    await extendPickDeadlineForUser(leagueId, userId);
+    await extendPickDeadlineForUser(leagueId, userId, 5);
     console.error(
       `Auto-pick insert failed league=${leagueId} user=${userId} symbol=${resolved.symbol}: ${result.error}`
     );
@@ -1766,24 +1766,28 @@ export async function assertOnClock(
 /** Reset the pick timer after a rejected pick so validation retries don't lose the turn. */
 export async function extendPickDeadlineForUser(
   leagueId: string,
-  userId: string
+  userId: string,
+  overrideSeconds?: number
 ): Promise<void> {
   const supabase = await createClient();
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state || state.on_clock_user_id !== userId) return;
 
-  const { data: league } = await supabase
-    .from("leagues")
-    .select("pick_time_seconds")
-    .eq("id", leagueId)
-    .maybeSingle();
+  let deadlineSeconds = overrideSeconds ?? 120;
+  if (overrideSeconds === undefined) {
+    const { data: league } = await supabase
+      .from("leagues")
+      .select("pick_time_seconds")
+      .eq("id", leagueId)
+      .maybeSingle();
+    deadlineSeconds = league?.pick_time_seconds ?? 120;
+  }
 
-  const pickTimeSeconds = league?.pick_time_seconds ?? 120;
   await supabase
     .from("league_draft_state")
     .update({
       pick_deadline_at: new Date(
-        Date.now() + pickTimeSeconds * 1000
+        Date.now() + deadlineSeconds * 1000
       ).toISOString(),
       updated_at: new Date().toISOString(),
     })
