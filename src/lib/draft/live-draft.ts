@@ -1794,6 +1794,45 @@ export async function extendPickDeadlineForUser(
     .eq("league_id", leagueId);
 }
 
+/**
+ * Commissioner action: give whoever is currently on the clock a fresh full
+ * pick timer. Unlike extendPickDeadlineForUser, this doesn't require the
+ * caller to be the on-clock user — the API route calling this must verify
+ * the caller is the league owner before invoking it.
+ */
+export async function resetPickClockForCommissioner(
+  leagueId: string
+): Promise<{ ok?: true; error?: string }> {
+  const supabase = await createClient();
+  const state = await getLeagueDraftStateRow(leagueId);
+  if (!state || state.status !== "in_progress") {
+    return { error: "Live draft is not in progress" };
+  }
+  if (!state.on_clock_user_id) {
+    return { error: "No team is currently on the clock" };
+  }
+
+  const { data: league } = await supabase
+    .from("leagues")
+    .select("pick_time_seconds")
+    .eq("id", leagueId)
+    .maybeSingle();
+  const deadlineSeconds = league?.pick_time_seconds ?? 120;
+
+  const { error } = await supabase
+    .from("league_draft_state")
+    .update({
+      pick_deadline_at: new Date(
+        Date.now() + deadlineSeconds * 1000
+      ).toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("league_id", leagueId);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
 export async function describeLiveDraftClock(leagueId: string) {
   const state = await getLeagueDraftStateRow(leagueId);
   if (!state) return null;

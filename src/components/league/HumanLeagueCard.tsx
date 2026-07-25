@@ -6,12 +6,14 @@ import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
 import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCountdown";
 import { DraftScheduleControl } from "@/components/league/DraftScheduleControl";
+import { ResetDraftClockButton } from "@/components/league/ResetDraftClockButton";
 import {
   canEnterScheduledDraftRoom,
   draftRoomHref,
   isDraftCountdownVisible,
 } from "@/lib/league/scheduled-draft";
 import { SPORTS_LEAGUE_FORMATS, leagueThemeIdForSportsLeague } from "@/lib/league/league-config";
+import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import type { HumanLeagueListItem } from "@/lib/league/human-league";
 
 export function leagueStatusLabel(status: string): string {
@@ -50,6 +52,11 @@ export function HumanLeagueCard({
     (f) => f.id === item.league.sports_league_id
   )?.logoSrc;
   const themeId = leagueThemeIdForSportsLeague(item.league.sports_league_id);
+  const isDrafting = item.league.status === "drafting";
+  const isSportsSim = isSportsSimLeague({
+    formatType: item.league.format_type,
+    sportsLeagueId: item.league.sports_league_id,
+  });
 
   return (
     <div
@@ -171,6 +178,9 @@ export function HumanLeagueCard({
               Matchups
             </Button>
           </div>
+        )}
+        {isOwner && isSportsSim && isDrafting && (
+          <ResetDraftClockButton leagueId={item.league.id} />
         )}
         {isOwner && onDelete && (
           <Button
