@@ -3,7 +3,12 @@
 import { Button } from "@/components/Button";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { leagueStatusLabel } from "@/components/league/HumanLeagueCard";
+import { ResetEntireDraftButton } from "@/components/league/ResetEntireDraftButton";
 import type { AiLeagueListItem } from "@/lib/league/ai-league";
+
+// Testing-only account allowed to wipe an entire league's draft. Matches the
+// server-side check in /api/leagues/[id]/draft/reset-all.
+const FULL_RESET_ALLOWED_USER_ID = "534054c5-6789-47db-8241-d0549b4541db";
 
 export function canEnterSeasonLeague(
   status: string,
@@ -126,6 +131,13 @@ export function AiLeagueCard({
             </Button>
           </>
         )}
+        {currentUserId === FULL_RESET_ALLOWED_USER_ID &&
+          item.league.status === "drafting" && (
+            <ResetEntireDraftButton
+              leagueId={item.league.id}
+              leagueName={item.league.name}
+            />
+          )}
         {isOwner && onDelete && (
           <Button
             variant="ghost"

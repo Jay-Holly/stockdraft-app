@@ -187,14 +187,12 @@ export function HumanLeagueCard({
         {isOwner && isSportsSim && isDrafting && (
           <ResetDraftClockButton leagueId={item.league.id} />
         )}
-        {currentUserId === FULL_RESET_ALLOWED_USER_ID &&
-          isSportsSim &&
-          isDrafting && (
-            <ResetEntireDraftButton
-              leagueId={item.league.id}
-              leagueName={item.league.name}
-            />
-          )}
+        {currentUserId === FULL_RESET_ALLOWED_USER_ID && isDrafting && (
+          <ResetEntireDraftButton
+            leagueId={item.league.id}
+            leagueName={item.league.name}
+          />
+        )}
         {isOwner && onDelete && (
           <Button
             variant="ghost"
