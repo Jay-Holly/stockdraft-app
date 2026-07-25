@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUserId, loadDraftState } from "@/lib/draft/server";
+import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { toggleSafetyPickQueue } from "@/lib/draft/live-draft";
+import { resolveActiveLeagueId } from "@/lib/league/active-league";
 
 export async function POST(request: Request) {
   const { user } = await getAuthenticatedUserId();
@@ -9,20 +10,26 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { symbol } = body as { symbol?: string | null };
+  const { symbol, leagueId: bodyLeagueId } = body as {
+    symbol?: string | null;
+    leagueId?: string;
+  };
 
   if (!symbol || typeof symbol !== "string") {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
   }
 
-  const state = await loadDraftState(user.id);
-  if (!state) {
-    return NextResponse.json({ error: "Could not load draft" }, { status: 500 });
+  const leagueId = await resolveActiveLeagueId(user.id, bodyLeagueId ?? null);
+  if (!leagueId) {
+    return NextResponse.json(
+      { error: "No active draft league found. Select a league on the dashboard." },
+      { status: 400 }
+    );
   }
 
   const result = await toggleSafetyPickQueue(
     user.id,
-    state.leagueId,
+    leagueId,
     symbol.toUpperCase()
   );
   if (result.error) {

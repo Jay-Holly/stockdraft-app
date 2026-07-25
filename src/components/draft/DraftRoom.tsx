@@ -503,7 +503,7 @@ export function DraftRoom({
     const res = await fetch("/api/draft/safety-pick", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbol }),
+      body: JSON.stringify({ symbol, leagueId: state?.leagueId }),
     });
     const data = await res.json();
     if (!res.ok) {
