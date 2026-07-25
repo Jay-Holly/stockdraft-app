@@ -84,7 +84,7 @@ function onClockUserIdForPickIndex(
 
 export type { DraftFeedEvent, LiveDraftView };
 
-const BOT_PICK_DELAY_MS = 1500;
+const BOT_PICK_DELAY_MS = 0;
 
 /**
  * Auto-pick resolution (deciding a symbol, then inserting) can take a while
