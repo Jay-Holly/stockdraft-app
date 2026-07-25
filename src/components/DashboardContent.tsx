@@ -23,187 +23,55 @@ import { LiveTickerTape } from "@/components/LiveTickerTape";
 import type { DayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
 import Image from "next/image";
 
-type TileIcon = "chart" | "diamond" | "trophy" | "bolt" | "calendarDay" | "calendarWeek";
-
-const TILE_ICON_PATHS: Record<TileIcon, React.ReactNode> = {
-  chart: (
-    <path d="M3 17l5-5 4 4 8-8M20 8V4h-4" strokeLinecap="round" strokeLinejoin="round" />
-  ),
-  diamond: (
-    <path d="M6 3h12l3 6-9 12L3 9l3-6z" strokeLinecap="round" strokeLinejoin="round" />
-  ),
-  trophy: (
-    <path
-      d="M8 4h8v4a4 4 0 01-8 0V4zM8 4H4v2a4 4 0 004 4M16 4h4v2a4 4 0 01-4 4M12 12v4m-3 4h6m-3 0v-4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  ),
-  bolt: <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" strokeLinecap="round" strokeLinejoin="round" />,
-  calendarDay: (
-    <path
-      d="M7 3v3M17 3v3M4 9h16M5 6h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1z"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  ),
-  calendarWeek: (
-    <path
-      d="M7 3v3M17 3v3M4 9h16M5 6h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1zM8 13h2M14 13h2M8 17h2M14 17h2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  ),
-};
-
-function TileIconGlyph({ icon }: { icon: TileIcon }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      className="w-5 h-5 shrink-0"
-      aria-hidden="true"
-    >
-      {TILE_ICON_PATHS[icon]}
-    </svg>
-  );
-}
-
-const TILE_THEMES: Record<
-  TileIcon,
-  {
-    border: string;
-    shadow: string;
-    iconText: string;
-    iconBorder: string;
-    iconGlow: string;
-    wash: string;
-    stroke: string;
-    graphPath: string;
-  }
-> = {
-  chart: {
-    border: "border-blue-500/40 hover:border-blue-500",
-    shadow:
-      "shadow-[inset_0_0_15px_rgba(59,130,246,0.08)] hover:shadow-[0_0_25px_rgba(59,130,246,0.4),inset_0_0_15px_rgba(59,130,246,0.15)]",
-    iconText: "text-blue-300",
-    iconBorder: "border-blue-400/60",
-    iconGlow: "shadow-[0_0_16px_rgba(59,130,246,0.7)]",
-    wash: "bg-gradient-to-br from-blue-500/15 via-slate-950/60 to-black/70",
-    stroke: "#3b82f6",
-    graphPath: "M0 30 Q 25 10, 50 25 T 100 5",
-  },
-  diamond: {
-    border: "border-amber-500/40 hover:border-amber-500",
-    shadow:
-      "shadow-[inset_0_0_15px_rgba(234,179,8,0.08)] hover:shadow-[0_0_25px_rgba(234,179,8,0.4),inset_0_0_15px_rgba(234,179,8,0.15)]",
-    iconText: "text-amber-300",
-    iconBorder: "border-amber-300/60",
-    iconGlow: "shadow-[0_0_16px_rgba(234,179,8,0.7)]",
-    wash: "bg-gradient-to-br from-amber-500/15 via-slate-950/60 to-black/70",
-    stroke: "#eab308",
-    graphPath: "M0 35 Q 25 15, 50 20 T 100 10",
-  },
-  trophy: {
-    border: "border-red-500/40 hover:border-red-500",
-    shadow:
-      "shadow-[inset_0_0_15px_rgba(239,68,68,0.08)] hover:shadow-[0_0_25px_rgba(239,68,68,0.4),inset_0_0_15px_rgba(239,68,68,0.15)]",
-    iconText: "text-red-300",
-    iconBorder: "border-red-400/60",
-    iconGlow: "shadow-[0_0_16px_rgba(239,68,68,0.7)]",
-    wash: "bg-gradient-to-br from-red-500/15 via-slate-950/60 to-black/70",
-    stroke: "#ef4444",
-    graphPath: "M0 25 Q 25 35, 50 15 T 100 5",
-  },
-  bolt: {
-    border: "border-emerald-500/40 hover:border-emerald-500",
-    shadow:
-      "shadow-[inset_0_0_15px_rgba(34,197,94,0.08)] hover:shadow-[0_0_25px_rgba(34,197,94,0.4),inset_0_0_15px_rgba(34,197,94,0.15)]",
-    iconText: "text-emerald-300",
-    iconBorder: "border-emerald-400/60",
-    iconGlow: "shadow-[0_0_16px_rgba(34,197,94,0.7)]",
-    wash: "bg-gradient-to-br from-emerald-500/15 via-slate-950/60 to-black/70",
-    stroke: "#22c55e",
-    graphPath: "M0 30 Q 30 5, 60 25 T 100 12",
-  },
-  calendarDay: {
-    border: "border-purple-500/40 hover:border-purple-500",
-    shadow:
-      "shadow-[inset_0_0_15px_rgba(168,85,247,0.08)] hover:shadow-[0_0_25px_rgba(168,85,247,0.4),inset_0_0_15px_rgba(168,85,247,0.15)]",
-    iconText: "text-purple-300",
-    iconBorder: "border-purple-400/60",
-    iconGlow: "shadow-[0_0_16px_rgba(168,85,247,0.7)]",
-    wash: "bg-gradient-to-br from-purple-500/15 via-slate-950/60 to-black/70",
-    stroke: "#a855f7",
-    graphPath: "M0 20 Q 25 30, 50 10 T 100 25",
-  },
-  calendarWeek: {
-    border: "border-teal-500/40 hover:border-teal-500",
-    shadow:
-      "shadow-[inset_0_0_15px_rgba(20,184,166,0.08)] hover:shadow-[0_0_25px_rgba(20,184,166,0.4),inset_0_0_15px_rgba(20,184,166,0.15)]",
-    iconText: "text-teal-300",
-    iconBorder: "border-teal-300/60",
-    iconGlow: "shadow-[0_0_16px_rgba(20,184,166,0.7)]",
-    wash: "bg-gradient-to-br from-teal-500/15 via-slate-950/60 to-black/70",
-    stroke: "#14b8a6",
-    graphPath: "M0 35 Q 25 15, 50 25 T 100 5",
-  },
-};
+type TileArt =
+  | "create-free-sim"
+  | "create-player-league"
+  | "create-sports-sim"
+  | "create-day-trader"
+  | "create-daily-fantasy"
+  | "create-weekly-fantasy"
+  | "join-sports-sim"
+  | "join-player-league"
+  | "my-sim-leagues"
+  | "my-player-leagues"
+  | "my-sports-sim"
+  | "my-day-trader"
+  | "my-daily-fantasy"
+  | "my-weekly-fantasy";
 
 function DashboardTile({
-  icon,
-  children,
+  art,
+  label,
   href,
   onClick,
 }: {
-  icon: TileIcon;
-  children: React.ReactNode;
+  art: TileArt;
+  label: string;
   href?: string;
   onClick?: () => void;
 }) {
-  const theme = TILE_THEMES[icon];
-  const gradId = `tile-grad-${icon}`;
-  const className = `group relative flex min-h-[5rem] w-full items-center overflow-hidden rounded-xl border px-4 py-3 text-left backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 active:scale-[0.98] ${theme.border} ${theme.shadow} ${theme.wash}`;
+  const className =
+    "group relative block w-full overflow-hidden rounded-xl transition-transform duration-300 hover:-translate-y-0.5 active:scale-[0.98]";
   const content = (
-    <>
-      <svg
-        className="pointer-events-none absolute inset-0 h-full w-full opacity-45 transition-opacity duration-300 group-hover:opacity-70"
-        viewBox="0 0 100 40"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={theme.stroke} stopOpacity="0.5" />
-            <stop offset="100%" stopColor={theme.stroke} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={`${theme.graphPath} L100 40 L0 40 Z`} fill={`url(#${gradId})`} stroke="none" />
-        <path d={theme.graphPath} fill="none" stroke={theme.stroke} strokeWidth="1.5" />
-      </svg>
-      <span
-        className={`relative z-10 mr-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 bg-black/50 ${theme.iconText} ${theme.iconBorder} ${theme.iconGlow}`}
-      >
-        <TileIconGlyph icon={icon} />
-      </span>
-      <span className="relative z-10 text-[0.95rem] font-semibold leading-snug text-white">
-        {children}
-      </span>
-    </>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/images/dashboard-cards/${art}.png`}
+      alt={label}
+      className="h-auto w-full"
+      draggable={false}
+    />
   );
 
   if (href) {
     return (
-      <Link href={href} className={className}>
+      <Link href={href} className={className} aria-label={label}>
         {content}
       </Link>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} className={className}>
+    <button type="button" onClick={onClick} className={className} aria-label={label}>
       {content}
     </button>
   );
@@ -418,30 +286,35 @@ export function DashboardContent({
         <div className="grid grid-cols-2 gap-3">
           {!showBotSelection && (
             <DashboardTile
-              icon="chart"
+              art="create-free-sim"
+              label="Create Free Sim League"
               onClick={() => {
                 setLeagueError(null);
                 setShowBotSelection(true);
               }}
-            >
-              Create Free Sim League
-            </DashboardTile>
+            />
           )}
-          <DashboardTile icon="diamond" href="/leagues/create?entry=player">
-            Create Player League
-          </DashboardTile>
-          <DashboardTile icon="trophy" href="/leagues/create?entry=sports">
-            Create Sports Sim League
-          </DashboardTile>
-          <DashboardTile icon="bolt" href="/day-trader">
-            StockDraft Day Trader
-          </DashboardTile>
-          <DashboardTile icon="calendarDay" href="/stockdraft-dfs">
-            StockDraft Daily Fantasy Sport
-          </DashboardTile>
-          <DashboardTile icon="calendarWeek" href="/stockdraft-wfs">
-            StockDraft Weekly Fantasy Sport
-          </DashboardTile>
+          <DashboardTile
+            art="create-player-league"
+            label="Create Player League"
+            href="/leagues/create?entry=player"
+          />
+          <DashboardTile
+            art="create-sports-sim"
+            label="Create Sports Sim League"
+            href="/leagues/create?entry=sports"
+          />
+          <DashboardTile art="create-day-trader" label="StockDraft Day Trader" href="/day-trader" />
+          <DashboardTile
+            art="create-daily-fantasy"
+            label="StockDraft Daily Fantasy Sport"
+            href="/stockdraft-dfs"
+          />
+          <DashboardTile
+            art="create-weekly-fantasy"
+            label="StockDraft Weekly Fantasy Sport"
+            href="/stockdraft-wfs"
+          />
         </div>
 
         {leagueError && !showBotSelection && (
@@ -471,12 +344,16 @@ export function DashboardContent({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <DashboardTile icon="trophy" href="/leagues/join-public/sports-sim">
-            Join Sports Sim Leagues
-          </DashboardTile>
-          <DashboardTile icon="diamond" href="/leagues/join-public/player">
-            Join Player League
-          </DashboardTile>
+          <DashboardTile
+            art="join-sports-sim"
+            label="Join Sports Sim Leagues"
+            href="/leagues/join-public/sports-sim"
+          />
+          <DashboardTile
+            art="join-player-league"
+            label="Join Player League"
+            href="/leagues/join-public/player"
+          />
         </div>
       </section>
 
@@ -485,27 +362,25 @@ export function DashboardContent({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <DashboardTile icon="chart" href="/dashboard/sim-leagues">
-              Sim Leagues
-            </DashboardTile>
+            <DashboardTile art="my-sim-leagues" label="Sim Leagues" href="/dashboard/sim-leagues" />
             <p className="text-muted text-xs text-center mt-1">
               {leagues.length > 0 ? `${leagues.length} active` : "None yet"}
             </p>
           </div>
 
           <div>
-            <DashboardTile icon="diamond" href="/dashboard/player-leagues">
-              Player Leagues
-            </DashboardTile>
+            <DashboardTile
+              art="my-player-leagues"
+              label="Player Leagues"
+              href="/dashboard/player-leagues"
+            />
             <p className="text-muted text-xs text-center mt-1">
               {squadLeagues.length > 0 ? `${squadLeagues.length} active` : "None yet"}
             </p>
           </div>
 
           <div>
-            <DashboardTile icon="trophy" href="/dashboard/sports-sim">
-              Sports Sim
-            </DashboardTile>
+            <DashboardTile art="my-sports-sim" label="Sports Sim" href="/dashboard/sports-sim" />
             <p className="text-muted text-xs text-center mt-1">
               {sportsSimLeagues.length > 0
                 ? `${sportsSimLeagues.length} active`
@@ -514,25 +389,27 @@ export function DashboardContent({
           </div>
 
           <div>
-            <DashboardTile icon="bolt" href="/day-trader">
-              Day Trader
-            </DashboardTile>
+            <DashboardTile art="my-day-trader" label="Day Trader" href="/day-trader" />
             <p className="text-muted text-xs text-center mt-1">
               {dayTrader ? "1 active" : "View"}
             </p>
           </div>
 
           <div>
-            <DashboardTile icon="calendarDay" href="/stockdraft-dfs">
-              Daily Fantasy Sport
-            </DashboardTile>
+            <DashboardTile
+              art="my-daily-fantasy"
+              label="Daily Fantasy Sport"
+              href="/stockdraft-dfs"
+            />
             <p className="text-muted text-xs text-center mt-1">View</p>
           </div>
 
           <div>
-            <DashboardTile icon="calendarWeek" href="/stockdraft-wfs">
-              Weekly Fantasy Sport
-            </DashboardTile>
+            <DashboardTile
+              art="my-weekly-fantasy"
+              label="Weekly Fantasy Sport"
+              href="/stockdraft-wfs"
+            />
             <p className="text-muted text-xs text-center mt-1">View</p>
           </div>
         </div>
