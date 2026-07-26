@@ -77,6 +77,61 @@ function DashboardTile({
   );
 }
 
+type SheetHotspot = {
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  top: string;
+  left: string;
+  width: string;
+  height: string;
+  badge?: string;
+};
+
+function DashboardSheet({
+  src,
+  alt,
+  hotspots,
+}: {
+  src: string;
+  alt: string;
+  hotspots: SheetHotspot[];
+}) {
+  return (
+    <div className="relative w-full">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} className="h-auto w-full select-none" draggable={false} />
+      {hotspots.map((h) => {
+        const style = { top: h.top, left: h.left, width: h.width, height: h.height };
+        const inner = h.badge ? (
+          <span className="absolute bottom-1 right-2 text-[11px] font-semibold text-white/80 drop-shadow">
+            {h.badge}
+          </span>
+        ) : null;
+        if (h.href) {
+          return (
+            <Link key={h.label} href={h.href} aria-label={h.label} className="absolute" style={style}>
+              {inner}
+            </Link>
+          );
+        }
+        return (
+          <button
+            key={h.label}
+            type="button"
+            onClick={h.onClick}
+            aria-label={h.label}
+            className="absolute"
+            style={style}
+          >
+            {inner}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function DashboardContent({
   profile,
   leagues = [],
@@ -275,51 +330,66 @@ export function DashboardContent({
 
       <LiveTickerTape />
 
-      <section className="crest-card p-6 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold mb-1 text-gold">Create New League</h2>
-          <p className="text-muted text-sm">
-            Free Sim League to practice against bots, Player League with
-            friends, Sports League draft, Day Trader for prizes, our
-            ultimate game of skill the Daily/Weekly Fantasy Sport contests
-            to wager a flat fee for a shot at the pot. Private and Public
-            leagues we have it all!
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {!showBotSelection && (
-            <DashboardTile
-              art="create-free-sim"
-              label="Create Free Sim League"
-              onClick={() => {
-                setLeagueError(null);
-                setShowBotSelection(true);
-              }}
-            />
-          )}
-          <DashboardTile
-            art="create-player-league"
-            label="Create Player League"
-            href="/leagues/create?entry=player"
+      <section className="crest-card p-0.5 space-y-4">
+        {!showBotSelection && (
+          <DashboardSheet
+            src="/images/dashboard-cards/create-league-sheet.png"
+            alt="Create New League"
+            hotspots={[
+              {
+                label: "Create Free Sim League",
+                onClick: () => {
+                  setLeagueError(null);
+                  setShowBotSelection(true);
+                },
+                top: "43.2%",
+                left: "4.8%",
+                width: "43.9%",
+                height: "13.8%",
+              },
+              {
+                label: "Create Player League",
+                href: "/leagues/create?entry=player",
+                top: "43.2%",
+                left: "50.9%",
+                width: "44%",
+                height: "13.8%",
+              },
+              {
+                label: "Create Sports Sim League",
+                href: "/leagues/create?entry=sports",
+                top: "59.4%",
+                left: "4.8%",
+                width: "43.9%",
+                height: "14.8%",
+              },
+              {
+                label: "StockDraft Day Trader",
+                href: "/day-trader",
+                top: "59.4%",
+                left: "50.9%",
+                width: "44%",
+                height: "14.8%",
+              },
+              {
+                label: "StockDraft Daily Fantasy Sport",
+                href: "/stockdraft-dfs",
+                top: "76.5%",
+                left: "4.8%",
+                width: "43.9%",
+                height: "14.6%",
+              },
+              {
+                label: "StockDraft Weekly Fantasy Sport",
+                href: "/stockdraft-wfs",
+                top: "76.5%",
+                left: "50.9%",
+                width: "44%",
+                height: "14.6%",
+              },
+            ]}
           />
-          <DashboardTile
-            art="create-sports-sim"
-            label="Create Sports Sim League"
-            href="/leagues/create?entry=sports"
-          />
-          <DashboardTile art="create-day-trader" label="StockDraft Day Trader" href="/day-trader" />
-          <DashboardTile
-            art="create-daily-fantasy"
-            label="StockDraft Daily Fantasy Sport"
-            href="/stockdraft-dfs"
-          />
-          <DashboardTile
-            art="create-weekly-fantasy"
-            label="StockDraft Weekly Fantasy Sport"
-            href="/stockdraft-wfs"
-          />
-        </div>
+        )}
 
         {leagueError && !showBotSelection && (
           <p className="text-sm text-red-400">{leagueError}</p>
@@ -338,89 +408,93 @@ export function DashboardContent({
         )}
       </section>
 
-      <section className="crest-card p-6 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold mb-1 text-gold">Join Public League</h2>
-          <p className="text-muted text-sm">
-            Browse open leagues that are still waiting for players and jump
-            straight into the roster.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <DashboardTile
-            art="join-sports-sim"
-            label="Join Sports Sim Leagues"
-            href="/leagues/join-public/sports-sim"
-          />
-          <DashboardTile
-            art="join-player-league"
-            label="Join Player League"
-            href="/leagues/join-public/player"
-          />
-        </div>
+      <section className="crest-card p-0.5 space-y-4">
+        <DashboardSheet
+          src="/images/dashboard-cards/join-league-sheet.png"
+          alt="Join Public League"
+          hotspots={[
+            {
+              label: "Join Sports Sim Leagues",
+              href: "/leagues/join-public/sports-sim",
+              top: "53.3%",
+              left: "5%",
+              width: "43.6%",
+              height: "29.3%",
+            },
+            {
+              label: "Join Player League",
+              href: "/leagues/join-public/player",
+              top: "53.3%",
+              left: "50.9%",
+              width: "44%",
+              height: "29.3%",
+            },
+          ]}
+        />
       </section>
 
-      <section className="crest-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gold">My Leagues</h2>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <DashboardTile art="my-sim-leagues" label="Sim Leagues" href="/dashboard/sim-leagues" />
-            <p className="text-muted text-xs text-center mt-1">
-              {leagues.length > 0 ? `${leagues.length} active` : "None yet"}
-            </p>
-          </div>
-
-          <div>
-            <DashboardTile
-              art="my-player-leagues"
-              label="Player Leagues"
-              href="/dashboard/player-leagues"
-            />
-            <p className="text-muted text-xs text-center mt-1">
-              {squadLeagues.length > 0 ? `${squadLeagues.length} active` : "None yet"}
-            </p>
-          </div>
-
-          <div>
-            <DashboardTile art="my-sports-sim" label="Sports Sim" href="/dashboard/sports-sim" />
-            <p className="text-muted text-xs text-center mt-1">
-              {sportsSimLeagues.length > 0
-                ? `${sportsSimLeagues.length} active`
-                : "None yet"}
-            </p>
-          </div>
-
-          <div>
-            <DashboardTile art="my-day-trader" label="Day Trader" href="/day-trader" />
-            <p className="text-muted text-xs text-center mt-1">
-              {dayTrader ? "1 active" : "View"}
-            </p>
-          </div>
-
-          <div>
-            <DashboardTile
-              art="my-daily-fantasy"
-              label="Daily Fantasy Sport"
-              href="/stockdraft-dfs"
-            />
-            <p className="text-muted text-xs text-center mt-1">
-              {dfsEntryCount > 0 ? `${dfsEntryCount} active` : "None yet"}
-            </p>
-          </div>
-
-          <div>
-            <DashboardTile
-              art="my-weekly-fantasy"
-              label="Weekly Fantasy Sport"
-              href="/stockdraft-wfs"
-            />
-            <p className="text-muted text-xs text-center mt-1">
-              {wfsEntryCount > 0 ? `${wfsEntryCount} active` : "None yet"}
-            </p>
-          </div>
-        </div>
+      <section className="crest-card p-0.5 space-y-4">
+        <DashboardSheet
+          src="/images/dashboard-cards/my-league-sheet.png"
+          alt="My Leagues"
+          hotspots={[
+            {
+              label: "Sim Leagues",
+              href: "/dashboard/sim-leagues",
+              top: "21.2%",
+              left: "4.7%",
+              width: "44.1%",
+              height: "15.3%",
+              badge: leagues.length > 0 ? `${leagues.length} active` : "None yet",
+            },
+            {
+              label: "Player Leagues",
+              href: "/dashboard/player-leagues",
+              top: "21.2%",
+              left: "50.9%",
+              width: "43.8%",
+              height: "15.3%",
+              badge: squadLeagues.length > 0 ? `${squadLeagues.length} active` : "None yet",
+            },
+            {
+              label: "Sports Sim",
+              href: "/dashboard/sports-sim",
+              top: "45%",
+              left: "4.7%",
+              width: "44.1%",
+              height: "15%",
+              badge:
+                sportsSimLeagues.length > 0 ? `${sportsSimLeagues.length} active` : "None yet",
+            },
+            {
+              label: "Day Trader",
+              href: "/day-trader",
+              top: "45%",
+              left: "50.9%",
+              width: "43.8%",
+              height: "15%",
+              badge: dayTrader ? "1 active" : "View",
+            },
+            {
+              label: "Daily Fantasy Sport",
+              href: "/stockdraft-dfs",
+              top: "68.4%",
+              left: "4.7%",
+              width: "44.1%",
+              height: "16.5%",
+              badge: dfsEntryCount > 0 ? `${dfsEntryCount} active` : "None yet",
+            },
+            {
+              label: "Weekly Fantasy Sport",
+              href: "/stockdraft-wfs",
+              top: "68.4%",
+              left: "50.9%",
+              width: "43.8%",
+              height: "16.5%",
+              badge: wfsEntryCount > 0 ? `${wfsEntryCount} active` : "None yet",
+            },
+          ]}
+        />
       </section>
 
       {activeHumanLeague?.league.status === "waiting" &&
