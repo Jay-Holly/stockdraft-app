@@ -135,6 +135,18 @@ export async function finalizeSdwfsContest(
   );
 
   for (const payout of payouts) {
+    const { data: entry, error: fetchError } = await supabase
+      .from("sdwfs_entries")
+      .select("user_id")
+      .eq("id", payout.entryId)
+      .maybeSingle();
+
+    if (fetchError || !entry) {
+      throw new Error(
+        `Failed to fetch entry ${payout.entryId}: ${fetchError?.message}`
+      );
+    }
+
     const { error: updateError } = await supabase
       .from("sdwfs_entries")
       .update({
@@ -148,6 +160,25 @@ export async function finalizeSdwfsContest(
       throw new Error(
         `Failed to update entry ${payout.entryId}: ${updateError.message}`
       );
+    }
+
+    // Credit winner's wallet if they won prize money
+    if (payout.payout > 0) {
+      const { error: walletError } = await supabase
+        .from("wallet_transactions")
+        .insert({
+          user_id: entry.user_id,
+          type: "win",
+          amount: payout.payout,
+          status: "completed",
+          description: `SDWFS weekly contest win - Rank #${payout.finalRank}`,
+        });
+
+      if (walletError) {
+        throw new Error(
+          `Failed to credit wallet for entry ${payout.entryId}: ${walletError.message}`
+        );
+      }
     }
   }
 
