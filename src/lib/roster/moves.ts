@@ -397,11 +397,13 @@ export async function applyCryptoRebalance(
     buyShares = computeSharesFromBudget(soldBudget, targetQuote.price);
     buyEffective = soldBudget;
   } else {
-    const isSportsSim = isSportsSimLeague({
-      formatType: league.format_type,
-      sportsLeagueId: league.sports_league_id,
-      playerCount: league.player_count,
-    });
+    const isSportsSim =
+      "format_type" in league &&
+      isSportsSimLeague({
+        formatType: league.format_type,
+        sportsLeagueId: league.sports_league_id,
+        playerCount: league.player_count,
+      });
 
     const buyerCount = buyerCounts[upper] ?? 0;
 
