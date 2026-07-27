@@ -29,6 +29,8 @@ import {
   applyCryptoRebalanceWeekBaselines,
   applyIrSwapWeekBaselines,
   syncCryptoBaselinesAfterRebalance,
+  getCurrentWeek,
+  setPickWeekBaseline,
 } from "@/lib/roster/weekly";
 import { isMultiAssetSimLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
 import { isStockMoveWindowOpen } from "@/lib/market/hours";
@@ -279,7 +281,7 @@ export async function applyIrSwap(
     budget_spent: 0,
     effective_value: 0,
     price_at_pick: starterQuote.price,
-    shares: starter.shares,
+    shares: 0,
   });
   if (demoteResult.error) return demoteResult;
 
@@ -296,6 +298,8 @@ export async function applyIrSwap(
   // starts it at the transferred value instead of mixing symbols.
   await clearPickWeekBaselines(supabase, league.id, userId, bench.id);
 
+  const weekNumber = await getCurrentWeek(supabase, league.id, userId);
+  await setPickWeekBaseline(supabase, league.id, userId, weekNumber, starter.id, 0);
   await applyIrSwapWeekBaselines(
     supabase,
     league.id,
