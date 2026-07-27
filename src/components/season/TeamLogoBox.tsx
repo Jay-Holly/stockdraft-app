@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const MAX_BYTES = 7 * 1024 * 1024;
+const MAX_BYTES = 8 * 1024 * 1024;
 const ACCEPTED = ["image/png", "image/jpeg", "image/webp"];
 
 export function TeamLogoBox({
@@ -26,7 +26,7 @@ export function TeamLogoBox({
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError("Logo must be under 7 MB.");
+      setError("Logo must be under 8 MB.");
       return;
     }
 
