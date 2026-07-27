@@ -569,12 +569,6 @@ export function MyTeamPageContent({
           {cryptoBuyOptions.map((symbol) => (
             <option key={symbol} value={symbol}>
               {symbol}
-              {roster?.crypto.some(
-                (p) =>
-                  p.symbol.toUpperCase() === symbol && p.budget_spent > 0.01
-              )
-                ? " (already held — no surcharge)"
-                : ""}
             </option>
           ))}
         </select>
@@ -650,6 +644,33 @@ export function MyTeamPageContent({
         selectedId={irBenchId}
         onSelect={(id) => setIrBenchId((prev) => (prev === id ? null : id))}
         selectLabel="Promote"
+        footer={
+          !viewingHistorical ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted">
+                Bench a starter and call up a bench player.
+              </p>
+              <Button
+                variant="primary"
+                className="w-full"
+                disabled={
+                  busy ||
+                  lineupLocked ||
+                  roster.irResolution?.required ||
+                  !irStarterId ||
+                  !irBenchId
+                }
+                onClick={handleIrSwap}
+              >
+                {busy
+                  ? "Processing…"
+                  : lineupLocked
+                    ? "Lineups locked until 4:00 PM ET"
+                    : "Confirm bench promote"}
+              </Button>
+            </div>
+          ) : undefined
+        }
       />
 
       {roster.sportsSimIrEnabled && (
@@ -678,81 +699,46 @@ export function MyTeamPageContent({
           selectLabel={
             roster.irResolution?.required ? "Return" : "IR slot"
           }
-        />
-      )}
-
-      {roster.sportsSimIrEnabled && !viewingHistorical && (
-        <section className="season-card space-y-3">
-          <div>
-            <h2 className="season-card-title">Move to IR</h2>
-            <p className="text-sm text-muted">
-              Select an injury-eligible starter and an empty IR slot. The active
-              spot opens for a free-agent add. IR picks never score.
-            </p>
-          </div>
-          <Button
-            variant="primary"
-            className="w-full"
-            disabled={
-              busy ||
-              roster.irResolution?.required ||
-              !irMoveStarterId ||
-              !irMoveSlotId
-            }
-            onClick={handleMoveToIr}
-          >
-            {busy ? "Processing…" : "Move starter to IR"}
-          </Button>
-
-          {roster.irResolution?.required && (
-            <>
-              <div>
-                <h2 className="season-card-title">Return from IR</h2>
+          footer={
+            !viewingHistorical ? (
+              <div className="space-y-2">
                 <p className="text-sm text-muted">
-                  Drop or bench a starter to open an active slot, then return the
-                  healed stock from IR.
+                  Select an injury-eligible starter and an empty IR slot.
                 </p>
-              </div>
-              <Button
-                variant="primary"
-                className="w-full"
-                disabled={busy || !irReturnPickId}
-                onClick={handleReturnFromIr}
-              >
-                {busy ? "Processing…" : "Return selected stock to active"}
-              </Button>
-            </>
-          )}
-        </section>
-      )}
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  disabled={
+                    busy ||
+                    roster.irResolution?.required ||
+                    !irMoveStarterId ||
+                    !irMoveSlotId
+                  }
+                  onClick={handleMoveToIr}
+                >
+                  {busy ? "Processing…" : "Move starter to IR"}
+                </Button>
 
-      {!viewingHistorical && (
-      <section className="season-card">
-        <h2 className="season-card-title">Bench promote (IR swap)</h2>
-        <p className="text-sm text-muted mb-3">
-          Bench a starter and call up a bench player. The promoted stock receives
-          budget equal to the benched starter&apos;s current market value (not the
-          original $80K).
-        </p>
-        <Button
-          variant="primary"
-          className="w-full"
-          disabled={
-            busy ||
-            lineupLocked ||
-            roster.irResolution?.required ||
-            !irStarterId ||
-            !irBenchId
+                {roster.irResolution?.required && (
+                  <>
+                    <p className="text-sm text-muted">
+                      Drop or bench a starter to open an active slot, then return
+                      the healed stock from IR.
+                    </p>
+                    <Button
+                      variant="primary"
+                      className="w-full"
+                      disabled={busy || !irReturnPickId}
+                      onClick={handleReturnFromIr}
+                    >
+                      {busy ? "Processing…" : "Return selected stock to active"}
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : undefined
           }
-          onClick={handleIrSwap}
-        >
-          {busy
-            ? "Processing…"
-            : lineupLocked
-              ? "Lineups locked until 4:00 PM ET"
-              : "Confirm bench promote"}
-        </Button>
-      </section>
+        />
       )}
 
     </div>
@@ -802,6 +788,7 @@ function RosterBlock({
   onSelect,
   selectLabel,
   renderActions,
+  footer,
 }: {
   title: string;
   subtitle: string;
@@ -814,6 +801,8 @@ function RosterBlock({
   selectLabel?: string;
   /** Overrides the default single-button action with custom per-row actions. */
   renderActions?: (pick: RosterPickView) => ReactNode;
+  /** Optional content rendered inside the card, below the pick rows. */
+  footer?: ReactNode;
 }) {
   return (
     <section className="season-card overflow-hidden p-0">
@@ -878,6 +867,7 @@ function RosterBlock({
           ))
         )}
       </div>
+      {footer && <div className="px-4 py-3 border-t border-white/10">{footer}</div>}
     </section>
   );
 }
