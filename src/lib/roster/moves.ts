@@ -30,7 +30,7 @@ import {
   applyIrSwapWeekBaselines,
   syncCryptoBaselinesAfterRebalance,
 } from "@/lib/roster/weekly";
-import { isMultiAssetSimLeague } from "@/lib/season/sdpl-league";
+import { isMultiAssetSimLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
 import { isStockMoveWindowOpen } from "@/lib/market/hours";
 import { getSectorForSymbol } from "@/lib/market/gics-sector";
 
@@ -361,7 +361,7 @@ export async function applyCryptoRebalance(
   }
 
   const fraction = sellPercent / 100;
-  const soldBudget = source.budget_spent * fraction;
+  const soldBudget = source.effective_value * fraction;
   const soldShares = source.shares * fraction;
   const soldEffective = source.effective_value * fraction;
 
@@ -369,7 +369,7 @@ export async function applyCryptoRebalance(
     return { error: "Sell amount is too small." };
   }
 
-  const remainingBudget = source.budget_spent - soldBudget;
+  const remainingBudget = source.budget_spent * (1 - fraction);
   const remainingShares = source.shares - soldShares;
   const remainingEffective = source.effective_value - soldEffective;
 
@@ -397,12 +397,28 @@ export async function applyCryptoRebalance(
     buyShares = computeSharesFromBudget(soldBudget, targetQuote.price);
     buyEffective = soldBudget;
   } else {
+    const isSportsSim = isSportsSimLeague({
+      formatType: league.format_type,
+      sportsLeagueId: league.sports_league_id,
+      playerCount: league.player_count,
+    });
+
     const buyerCount = buyerCounts[upper] ?? 0;
-    const computed = computeCryptoPick(soldBudget, targetQuote.price, buyerCount);
-    buyBudget = computed.budgetSpent;
-    buyEffective = computed.effectiveValue;
-    buyShares = computed.shares;
-    buySurcharge = computed.surchargePercent;
+
+    if (isSportsSim) {
+      // Sports sim leagues have no surcharge on crypto purchases
+      buyShares = computeSharesFromBudget(soldBudget, targetQuote.price);
+      buyBudget = soldBudget;
+      buyEffective = soldBudget;
+      buySurcharge = 0;
+    } else {
+      // SDPL/SDAI and other leagues apply surcharge on first-time crypto purchases
+      const computed = computeCryptoPick(soldBudget, targetQuote.price, buyerCount);
+      buyBudget = computed.budgetSpent;
+      buyEffective = computed.effectiveValue;
+      buyShares = computed.shares;
+      buySurcharge = computed.surchargePercent;
+    }
     await incrementLeagueCryptoCount(supabase, league.id, upper, buyerCount);
   }
 
