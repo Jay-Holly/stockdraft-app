@@ -252,7 +252,13 @@ export function isOpenPhaseComplete(
     return countStarterSlotPicks(picks, rules) >= c.starterRounds;
   }
   const summary = summarizePicks(picks, rules);
-  return countOpenSlotPicks(summary, rules) >= STOCK_ROUNDS;
+  const openRoundPicksMade = picks.filter(
+    (p) => p.round_number <= OPEN_ROUNDS
+  ).length;
+  return (
+    countOpenSlotPicks(summary, rules) >= STOCK_ROUNDS &&
+    openRoundPicksMade >= OPEN_ROUNDS
+  );
 }
 
 export function hasRosterStructureComplete(
@@ -280,10 +286,7 @@ export function isDraftComplete(
   if (rules === "sports_sim") {
     return hasRosterStructureComplete(picks, rules);
   }
-  const summary = summarizePicks(picks, rules);
-  return (
-    hasRosterStructureComplete(picks, rules) && summary.cryptoRemaining <= 0
-  );
+  return hasRosterStructureComplete(picks, rules);
 }
 
 export function calculatePushback(cryptoPicksInOpenPhase: DraftPick[]): number {
@@ -430,28 +433,12 @@ export function getTurn(
 
   if (summary.benchPicks < BENCH_ROUNDS) {
     const benchRound = Math.max(round, BENCH_START_ROUND);
-    const canPickCrypto = summary.cryptoRemaining > 0;
     return {
       type: "bench",
       round: benchRound,
-      label: canPickCrypto
-        ? `Round ${benchRound} — bench pick or crypto (${formatMoney(summary.cryptoRemaining)} left)`
-        : `Round ${benchRound} — bench pick (free)`,
+      label: `Round ${benchRound} — bench pick (free)`,
       canPickStock: true,
-      canPickCrypto,
-      stockBudget: 0,
-      cryptoRemaining: summary.cryptoRemaining,
-    };
-  }
-
-  if (summary.cryptoRemaining > 0) {
-    const cryptoRound = Math.max(round, BENCH_START_ROUND);
-    return {
-      type: "crypto",
-      round: cryptoRound,
-      label: `Spend remaining crypto (${formatMoney(summary.cryptoRemaining)})`,
-      canPickStock: false,
-      canPickCrypto: true,
+      canPickCrypto: false,
       stockBudget: 0,
       cryptoRemaining: summary.cryptoRemaining,
     };
