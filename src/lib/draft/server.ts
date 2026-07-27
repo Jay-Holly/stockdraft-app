@@ -445,22 +445,25 @@ export async function processPushbackSkipForLeague(
   const nextRound = getNextRoundAfterPick(draft, picks, "skip", draftRules);
 
   const { data: insertedPick, error: pickError } = await supabase
-    .from("draft_picks")
-    .insert({
-      draft_id: draft.id,
-      user_id: userId,
-      round_number: draft.current_round,
-      pick_type: "skip",
-      symbol: "SKIP",
-      price_at_pick: 0,
-      budget_spent: 0,
-      shares: 0,
-      surcharge_percent: 0,
-      effective_value: 0,
-      pick_order: pickOrder,
-    })
-    .select("*")
-    .single();
+    .rpc("insert_draft_pick_atomic", {
+      p_draft_id: draft.id,
+      p_user_id: userId,
+      p_round_number: draft.current_round,
+      p_pick_type: "skip",
+      p_symbol: "SKIP",
+      p_price_at_pick: 0,
+      p_budget_spent: 0,
+      p_shares: 0,
+      p_surcharge_percent: 0,
+      p_effective_value: 0,
+      p_pick_order: pickOrder,
+      p_is_auto_pick: false,
+      p_auto_pick_reason: null,
+      p_next_round: nextRound,
+      p_pushback_skips_remaining: Math.max(0, draft.pushback_skips_remaining - 1),
+      p_draft_status: "in_progress",
+      p_completed_at: null,
+    });
 
   if (pickError || !insertedPick) {
     return {
@@ -469,16 +472,6 @@ export async function processPushbackSkipForLeague(
         "Pushback skip insert failed (0 rows). Confirm draft_picks RLS allows insert.",
     };
   }
-
-  const { error: draftError } = await supabase
-    .from("drafts")
-    .update({
-      current_round: nextRound,
-      pushback_skips_remaining: Math.max(0, draft.pushback_skips_remaining - 1),
-    })
-    .eq("id", draft.id);
-
-  if (draftError) return { error: draftError.message };
 
   if (options?.advanceLiveDraft) {
     const { advanceAfterPick, isLiveDraftLeague } = await import("./live-draft");
