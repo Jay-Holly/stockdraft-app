@@ -37,13 +37,38 @@ export async function fetchLiveSddfsQuotes(
   ]);
 
   const prices: Record<string, number> = {};
+  const missing: { symbol: string; type: string }[] = [];
 
   for (const symbol of stockSymbols) {
     const live = stockQuotes[symbol]?.price;
-    prices[symbol] = live && live > 0 ? live : getFallbackStockQuote(symbol)?.price ?? 0;
+    if (live && live > 0) {
+      prices[symbol] = live;
+    } else {
+      const fallback = getFallbackStockQuote(symbol);
+      if (fallback?.price && fallback.price > 0) {
+        prices[symbol] = fallback.price;
+      } else {
+        missing.push({ symbol, type: "stock" });
+        prices[symbol] = 0;
+      }
+    }
   }
+
   for (const symbol of cryptoSymbols) {
-    prices[symbol] = cryptoQuotes[symbol]?.price ?? 0;
+    const price = cryptoQuotes[symbol]?.price;
+    if (price && price > 0) {
+      prices[symbol] = price;
+    } else {
+      missing.push({ symbol, type: "crypto" });
+      prices[symbol] = 0;
+    }
+  }
+
+  if (missing.length > 0) {
+    console.warn(
+      `[fetchLiveSddfsQuotes] Missing prices for ${missing.length} symbols:`,
+      missing.map((m) => `${m.symbol}(${m.type})`).join(", ")
+    );
   }
 
   return prices;
