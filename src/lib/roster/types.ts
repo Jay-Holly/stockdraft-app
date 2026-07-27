@@ -86,6 +86,7 @@ export type LeaguePageData = {
   leagueStatus: string;
   isLeagueOwner: boolean;
   isSportsSim: boolean;
+  isAiLeague: boolean;
   sportsLeagueId: string | null;
   scoringMode: LeagueScoringMode;
   currentWeek: number;

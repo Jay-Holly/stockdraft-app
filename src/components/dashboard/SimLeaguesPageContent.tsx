@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import { AiLeagueCard } from "@/components/league/AiLeagueCard";
 import { useLeagueSelection } from "@/hooks/useLeagueSelection";
@@ -33,12 +34,21 @@ export function SimLeaguesPageContent({
         onClose={() => setDeleteTarget(null)}
       />
 
-      <div>
-        <h1 className="text-xl font-bold">Sim Leagues</h1>
-        <p className="text-muted text-sm mt-1">
-          {leagues.length} league{leagues.length === 1 ? "" : "s"} vs. platform
-          bot managers
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Sim Leagues</h1>
+          <p className="text-muted text-sm mt-1">
+            {leagues.length} league{leagues.length === 1 ? "" : "s"} vs. platform
+            bot managers
+          </p>
+        </div>
+        <Image
+          src="/images/leagues/sdai.png"
+          alt=""
+          width={96}
+          height={144}
+          className="shrink-0 rounded-lg"
+        />
       </div>
 
       {leagueError && (

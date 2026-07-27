@@ -4,10 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { PageWatermark } from "@/components/PageWatermark";
-import { leagueThemeLogoSrc, type LeagueThemeId } from "@/lib/league/league-config";
+import {
+  LEAGUE_THEMES,
+  leagueThemeLogoSrc,
+  type LeagueThemeId,
+} from "@/lib/league/league-config";
 
-const LINKS = [
-  { href: "/dashboard", label: "Dashboard" },
+const REST_OF_LINKS = [
   { href: "/league", label: "League" },
   { href: "/my-team", label: "My Team" },
   { href: "/matchups", label: "Matchups" },
@@ -31,9 +34,19 @@ export function SeasonShell({
   themeId?: LeagueThemeId;
 }) {
   const pathname = usePathname();
+  const backLink = isSportsSim
+    ? {
+        href: `/dashboard/sports-sim?sport=${themeId}`,
+        label: LEAGUE_THEMES[themeId]?.label ?? "Dashboard",
+      }
+    : themeId === "sdpl"
+      ? { href: "/dashboard/player-leagues", label: LEAGUE_THEMES.sdpl.label }
+      : themeId === "sdai"
+        ? { href: "/dashboard/sim-leagues", label: LEAGUE_THEMES.sdai.label }
+        : { href: "/dashboard", label: "Dashboard" };
   const links = isSportsSim
-    ? LINKS.filter((link) => link.href !== "/awards")
-    : LINKS;
+    ? [backLink, ...REST_OF_LINKS.filter((link) => link.href !== "/awards")]
+    : [backLink, ...REST_OF_LINKS];
 
   return (
     <div className="min-h-screen flex flex-col" data-league-theme={themeId}>

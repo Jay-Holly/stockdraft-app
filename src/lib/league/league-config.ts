@@ -178,9 +178,18 @@ export function leagueThemeIdForSportsLeague(
   return "sdpl";
 }
 
+/** Logos for non-sports-league themes (sports leagues keep theirs in SPORTS_LEAGUE_FORMATS). */
+const EXTRA_LEAGUE_THEME_LOGOS: Partial<Record<LeagueThemeId, string>> = {
+  sdai: "/images/leagues/sdai.png",
+};
+
 /** Sport-shield logo for a league theme's faded page watermark, if one exists yet. */
 export function leagueThemeLogoSrc(themeId: LeagueThemeId): string | null {
-  return SPORTS_LEAGUE_FORMATS.find((f) => f.id === themeId)?.logoSrc ?? null;
+  return (
+    SPORTS_LEAGUE_FORMATS.find((f) => f.id === themeId)?.logoSrc ??
+    EXTRA_LEAGUE_THEME_LOGOS[themeId] ??
+    null
+  );
 }
 
 export function withAlpha(hex: string, alpha: number): string {

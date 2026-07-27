@@ -458,7 +458,7 @@ export function DashboardContent({
             },
             {
               label: "Sports Sim",
-              href: "/dashboard/sports-sim",
+              href: "/dashboard/sports-sim-selector",
               top: "45%",
               left: "4.7%",
               width: "44.1%",

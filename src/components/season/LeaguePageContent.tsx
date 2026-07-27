@@ -92,6 +92,12 @@ export function LeaguePageContent({
     );
   }
 
+  const themeLogoSrc = data.isSportsSim
+    ? SPORTS_LEAGUE_FORMATS.find((f) => f.id === data.sportsLeagueId)?.logoSrc ?? null
+    : data.isAiLeague
+      ? "/images/leagues/sdai.png"
+      : null;
+
   return (
     <div className="space-y-4">
       <DeleteLeagueModal
@@ -105,8 +111,17 @@ export function LeaguePageContent({
       <section className="season-card">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="mb-2">
+            <div className="mb-2 flex items-center gap-2">
               <LeagueSupportId code={data.leagueSupportCode} size="md" />
+              {themeLogoSrc && data.isLeagueOwner && (
+                <Button
+                  variant="ghost"
+                  className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 !w-auto"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  Delete League
+                </Button>
+              )}
             </div>
             <h1 className="text-xl font-bold">{data.leagueName}</h1>
             <p className="text-muted text-sm mt-1 capitalize">
@@ -114,25 +129,18 @@ export function LeaguePageContent({
               {scoringModeShortLabel(data.scoringMode)} matchups
             </p>
           </div>
-          {data.isSportsSim ? (
-            (() => {
-              const logoSrc = SPORTS_LEAGUE_FORMATS.find(
-                (f) => f.id === data.sportsLeagueId
-              )?.logoSrc;
-              return logoSrc ? (
-                <Image
-                  src={logoSrc}
-                  alt=""
-                  width={96}
-                  height={120}
-                  className="shrink-0 rounded-lg"
-                />
-              ) : null;
-            })()
+          {themeLogoSrc ? (
+            <Image
+              src={themeLogoSrc}
+              alt=""
+              width={120}
+              height={180}
+              className="shrink-0 rounded-lg"
+            />
           ) : data.isLeagueOwner ? (
             <Button
               variant="ghost"
-              className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 shrink-0"
+              className="text-xs px-3 text-red-400 border-red-500/30 hover:border-red-400/50 shrink-0 !w-auto"
               onClick={() => setDeleteOpen(true)}
             >
               Delete League

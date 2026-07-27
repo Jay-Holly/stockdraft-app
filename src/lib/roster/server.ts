@@ -756,6 +756,7 @@ export async function loadLeaguePageData(
       leagueStatus: league.status,
       isLeagueOwner: league.owner_user_id === userId,
       isSportsSim,
+      isAiLeague: !isHumanLeague,
       sportsLeagueId: leagueMeta?.sports_league_id ?? null,
       scoringMode,
       currentWeek,

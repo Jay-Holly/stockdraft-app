@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Button } from "@/components/Button";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { leagueStatusLabel } from "@/components/league/HumanLeagueCard";
@@ -64,14 +65,23 @@ export function AiLeagueCard({
             vs {item.botNames.join(", ")}
           </p>
         </div>
-        {item.standings && (
-          <div className="text-right shrink-0">
-            <p className="text-xl font-black text-gold">
-              {item.standings.wins}-{item.standings.losses}
-            </p>
-            <p className="text-[10px] text-muted uppercase tracking-wider">W-L</p>
-          </div>
-        )}
+        <div className="flex items-start gap-2 shrink-0">
+          {item.standings && (
+            <div className="text-right">
+              <p className="text-xl font-black text-gold">
+                {item.standings.wins}-{item.standings.losses}
+              </p>
+              <p className="text-[10px] text-muted uppercase tracking-wider">W-L</p>
+            </div>
+          )}
+          <Image
+            src="/images/leagues/sdai.png"
+            alt=""
+            width={44}
+            height={66}
+            className="shrink-0 rounded-md"
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
