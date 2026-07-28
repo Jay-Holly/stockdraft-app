@@ -318,7 +318,7 @@ export function DashboardContent({
             </div>
           </div>
           <Image
-            src="/images/brand/sdlogo.png"
+            src={showBotSelection ? "/images/leagues/sdai.png" : "/images/brand/sdlogo.png"}
             alt="StockDraft"
             width={140}
             height={210}
