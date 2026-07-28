@@ -22,7 +22,7 @@ export type MyWfsEntry = {
   picks: MyWfsEntryPick[];
 };
 
-export async function getMyWfsEntries(): Promise<MyWfsEntry[]> {
+export async function getMyWfsEntries(daysBack: number = 30): Promise<MyWfsEntry[]> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -30,12 +30,17 @@ export async function getMyWfsEntries(): Promise<MyWfsEntry[]> {
 
   if (!user) return [];
 
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+  const isoDate = cutoffDate.toISOString().split("T")[0];
+
   const { data: entries, error } = await supabase
     .from("sdwfs_entries")
     .select(
       "id, contest_id, total_score, final_rank, payout, sdwfs_contests(buy_in, week_start_date, status)"
     )
     .eq("user_id", user.id)
+    .gte("entered_at", `${isoDate}T00:00:00Z`)
     .order("entered_at", { ascending: false });
 
   if (error || !entries || entries.length === 0) return [];

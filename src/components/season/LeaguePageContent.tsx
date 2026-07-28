@@ -153,6 +153,29 @@ export function LeaguePageContent({
         </p>
       </section>
 
+      <div className="grid grid-cols-2 gap-3">
+        <Link
+          href="/stockdraft-dfs/my-teams"
+          className="season-card border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition"
+        >
+          <div className="space-y-1">
+            <h3 className="font-semibold text-amber-200">SDDFS</h3>
+            <p className="text-xs text-muted">Past week contests</p>
+            <p className="text-sm text-amber-300 mt-2">View history →</p>
+          </div>
+        </Link>
+        <Link
+          href="/stockdraft-wfs/my-teams"
+          className="season-card border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 transition"
+        >
+          <div className="space-y-1">
+            <h3 className="font-semibold text-blue-200">SDWFS</h3>
+            <p className="text-xs text-muted">Past month contests</p>
+            <p className="text-sm text-blue-300 mt-2">View history →</p>
+          </div>
+        </Link>
+      </div>
+
       {data.bonusPool.awardsEnabled && (
         <section className="season-card border-[var(--color-league-primary)]/30 bg-[var(--color-league-primary)]/5">
           <div className="flex flex-wrap items-start justify-between gap-3">
