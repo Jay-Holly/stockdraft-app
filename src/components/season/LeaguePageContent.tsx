@@ -160,8 +160,8 @@ export function LeaguePageContent({
         >
           <div className="space-y-1">
             <h3 className="font-semibold text-amber-200">SDDFS</h3>
-            <p className="text-xs text-muted">Past week contests</p>
-            <p className="text-sm text-amber-300 mt-2">View history →</p>
+            <p className="text-xs text-muted">My past week contests</p>
+            <p className="text-sm text-amber-300 mt-2">My entries →</p>
           </div>
         </Link>
         <Link
@@ -170,8 +170,8 @@ export function LeaguePageContent({
         >
           <div className="space-y-1">
             <h3 className="font-semibold text-blue-200">SDWFS</h3>
-            <p className="text-xs text-muted">Past month contests</p>
-            <p className="text-sm text-blue-300 mt-2">View history →</p>
+            <p className="text-xs text-muted">My past month contests</p>
+            <p className="text-sm text-blue-300 mt-2">My entries →</p>
           </div>
         </Link>
       </div>
