@@ -34,19 +34,24 @@ export function SeasonShell({
   themeId?: LeagueThemeId;
 }) {
   const pathname = usePathname();
-  const backLink = isSportsSim
+  const dashboardLink = { href: "/dashboard", label: "Dashboard" };
+  const categoryLink = isSportsSim
     ? {
         href: `/dashboard/sports-sim?sport=${themeId}`,
-        label: LEAGUE_THEMES[themeId]?.label ?? "Dashboard",
+        label: LEAGUE_THEMES[themeId]?.label ?? null,
       }
     : themeId === "sdpl"
       ? { href: "/dashboard/player-leagues", label: LEAGUE_THEMES.sdpl.label }
       : themeId === "sdai"
         ? { href: "/dashboard/sim-leagues", label: LEAGUE_THEMES.sdai.label }
-        : { href: "/dashboard", label: "Dashboard" };
-  const links = isSportsSim
-    ? [backLink, ...REST_OF_LINKS.filter((link) => link.href !== "/awards")]
-    : [backLink, ...REST_OF_LINKS];
+        : null;
+  const links = [
+    dashboardLink,
+    ...(categoryLink ? [categoryLink] : []),
+    ...(isSportsSim
+      ? REST_OF_LINKS.filter((link) => link.href !== "/awards")
+      : REST_OF_LINKS),
+  ];
 
   return (
     <div className="min-h-screen flex flex-col" data-league-theme={themeId}>
