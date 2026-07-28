@@ -4,6 +4,7 @@ import { WfsShell } from "@/components/dfs/WfsShell";
 import { WfsFreeAgentPanel } from "@/components/wfs/WfsFreeAgentPanel";
 import { SdwfsRulesButton } from "@/components/wfs/SdwfsRulesButton";
 import { getMyWfsEntries } from "@/lib/wfs/my-teams";
+import { tierNameForBuyIn } from "@/lib/wfs/contests";
 import { getSdwfsContestLeaderboard } from "@/lib/sdwfs/leaderboard";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,24 +29,58 @@ export default async function WfsEntryLeaguePage({
 
   const entries = await getMyWfsEntries();
   const myEntry = entries.find((e) => e.entryId === entryId);
-  if (!myEntry) notFound();
+
+  // Viewing someone else's entry: look it up directly (RLS allows any
+  // authenticated user to read any entry/picks within a contest) and reuse
+  // the leaderboard row for their contest metadata + picks.
+  let contestId = myEntry?.contestId;
+  let contestName = myEntry?.contestName;
+  let buyIn = myEntry?.buyIn;
+  let weekStartDate = myEntry?.weekStartDate;
+  let contestStatus = myEntry?.contestStatus;
+
+  if (!myEntry) {
+    const { data: otherEntry } = await supabase
+      .from("sdwfs_entries")
+      .select("id, contest_id, sdwfs_contests(buy_in, week_start_date, status)")
+      .eq("id", entryId)
+      .maybeSingle();
+
+    if (!otherEntry) notFound();
+
+    const contest = Array.isArray(otherEntry.sdwfs_contests)
+      ? otherEntry.sdwfs_contests[0]
+      : otherEntry.sdwfs_contests;
+    if (!contest) notFound();
+
+    contestId = otherEntry.contest_id;
+    buyIn = Number(contest.buy_in);
+    contestName = tierNameForBuyIn(buyIn);
+    weekStartDate = contest.week_start_date;
+    contestStatus = contest.status as typeof contestStatus;
+  }
+
+  if (!contestId) notFound();
 
   const { prizePool, isFinal, rows } = await getSdwfsContestLeaderboard(
-    myEntry.contestId,
+    contestId,
     user.id
   );
 
+  const viewedRow = rows.find((r) => r.entryId === entryId);
+  const isViewingOwnEntry = viewedRow?.isMe ?? false;
+
   return (
-    <WfsShell title={`SDWFS — ${myEntry.contestName}`}>
+    <WfsShell title={`SDWFS — ${contestName}`}>
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold">{myEntry.contestName}</h1>
+            <h1 className="text-3xl font-bold">{contestName}</h1>
             <p className="text-muted text-sm">
-              ${myEntry.buyIn} buy-in — {myEntry.weekStartDate} —{" "}
-              {myEntry.contestStatus === "open"
+              ${buyIn} buy-in — {weekStartDate} —{" "}
+              {contestStatus === "open"
                 ? "Open — editable until Monday 9:00 AM ET lock"
-                : myEntry.contestStatus === "locked"
+                : contestStatus === "locked"
                   ? "Locked — live standings below"
                   : "Final — contest scored"}
             </p>
@@ -77,11 +112,12 @@ export default async function WfsEntryLeaguePage({
               </p>
             ) : (
               rows.map((row) => (
-                <div
+                <a
                   key={row.entryId}
-                  className={`flex items-center justify-between py-3 ${
-                    row.isMe ? "bg-gold/5 -mx-4 px-4 rounded-lg" : ""
-                  }`}
+                  href={`/stockdraft-wfs/entry/${row.entryId}`}
+                  className={`flex items-center justify-between py-3 hover:bg-white/5 transition rounded-lg ${
+                    row.isMe ? "bg-gold/5 -mx-4 px-4" : ""
+                  } ${row.entryId === entryId ? "ring-1 ring-white/20 -mx-4 px-4" : ""}`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="w-6 text-center font-semibold text-muted">
@@ -104,16 +140,18 @@ export default async function WfsEntryLeaguePage({
                       {!isFinal && row.payout > 0 ? " proj." : ""}
                     </div>
                   </div>
-                </div>
+                </a>
               ))
             )}
           </div>
         </div>
 
         <div className="bg-dark-card border border-white/10 rounded-xl p-4">
-          <h2 className="font-semibold mb-3">Your Lineup</h2>
+          <h2 className="font-semibold mb-3">
+            {isViewingOwnEntry ? "Your Lineup" : `${viewedRow?.username ?? "Their"} Lineup`}
+          </h2>
           <div className="flex flex-wrap gap-1.5">
-            {myEntry.picks.map((pick) => (
+            {(viewedRow?.picks ?? myEntry?.picks ?? []).map((pick) => (
               <span
                 key={pick.sector}
                 className="text-xs bg-white/5 border border-white/10 rounded-full px-2 py-0.5"
@@ -125,21 +163,23 @@ export default async function WfsEntryLeaguePage({
           </div>
         </div>
 
-        <div>
-          <h2 className="font-semibold mb-3">
-            {myEntry.contestStatus === "open"
-              ? "Free Agents — Make a Move"
-              : "Free Agents"}
-          </h2>
-          {myEntry.contestStatus === "open" ? (
-            <WfsFreeAgentPanel entries={[myEntry]} />
-          ) : (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center text-muted text-sm">
-              This contest is {myEntry.contestStatus} — moves are no longer
-              allowed.
-            </div>
-          )}
-        </div>
+        {isViewingOwnEntry && myEntry && (
+          <div>
+            <h2 className="font-semibold mb-3">
+              {myEntry.contestStatus === "open"
+                ? "Free Agents — Make a Move"
+                : "Free Agents"}
+            </h2>
+            {myEntry.contestStatus === "open" ? (
+              <WfsFreeAgentPanel entries={[myEntry]} />
+            ) : (
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center text-muted text-sm">
+                This contest is {myEntry.contestStatus} — moves are no longer
+                allowed.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </WfsShell>
   );

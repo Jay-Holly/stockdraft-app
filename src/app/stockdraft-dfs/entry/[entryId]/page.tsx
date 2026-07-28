@@ -4,6 +4,7 @@ import { DfsShell } from "@/components/dfs/DfsShell";
 import { FreeAgentPanel } from "@/components/dfs/FreeAgentPanel";
 import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
 import { getMyDfsEntries } from "@/lib/dfs/my-teams";
+import { tierNameForBuyIn } from "@/lib/dfs/contests";
 import { getSddfsContestLeaderboard } from "@/lib/sddfs/leaderboard";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,24 +29,58 @@ export default async function DfsEntryLeaguePage({
 
   const entries = await getMyDfsEntries();
   const myEntry = entries.find((e) => e.entryId === entryId);
-  if (!myEntry) notFound();
+
+  // Viewing someone else's entry: look it up directly (RLS allows any
+  // authenticated user to read any entry/picks within a contest) and reuse
+  // the leaderboard row for their contest metadata + picks.
+  let contestId = myEntry?.contestId;
+  let contestName = myEntry?.contestName;
+  let buyIn = myEntry?.buyIn;
+  let contestDate = myEntry?.contestDate;
+  let contestStatus = myEntry?.contestStatus;
+
+  if (!myEntry) {
+    const { data: otherEntry } = await supabase
+      .from("sddfs_entries")
+      .select("id, contest_id, sddfs_contests(buy_in, contest_date, status)")
+      .eq("id", entryId)
+      .maybeSingle();
+
+    if (!otherEntry) notFound();
+
+    const contest = Array.isArray(otherEntry.sddfs_contests)
+      ? otherEntry.sddfs_contests[0]
+      : otherEntry.sddfs_contests;
+    if (!contest) notFound();
+
+    contestId = otherEntry.contest_id;
+    buyIn = Number(contest.buy_in);
+    contestName = tierNameForBuyIn(buyIn);
+    contestDate = contest.contest_date;
+    contestStatus = contest.status as typeof contestStatus;
+  }
+
+  if (!contestId) notFound();
 
   const { prizePool, isFinal, rows } = await getSddfsContestLeaderboard(
-    myEntry.contestId,
+    contestId,
     user.id
   );
 
+  const viewedRow = rows.find((r) => r.entryId === entryId);
+  const isViewingOwnEntry = viewedRow?.isMe ?? false;
+
   return (
-    <DfsShell title={`SDDFS — ${myEntry.contestName}`}>
+    <DfsShell title={`SDDFS — ${contestName}`}>
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold">{myEntry.contestName}</h1>
+            <h1 className="text-3xl font-bold">{contestName}</h1>
             <p className="text-muted text-sm">
-              ${myEntry.buyIn} buy-in — {myEntry.contestDate} —{" "}
-              {myEntry.contestStatus === "open"
+              ${buyIn} buy-in — {contestDate} —{" "}
+              {contestStatus === "open"
                 ? "Open — editable until 9:00 AM ET lock"
-                : myEntry.contestStatus === "locked"
+                : contestStatus === "locked"
                   ? "Locked — live standings below"
                   : "Final — contest scored"}
             </p>
@@ -77,11 +112,12 @@ export default async function DfsEntryLeaguePage({
               </p>
             ) : (
               rows.map((row) => (
-                <div
+                <a
                   key={row.entryId}
-                  className={`flex items-center justify-between py-3 ${
-                    row.isMe ? "bg-gold/5 -mx-4 px-4 rounded-lg" : ""
-                  }`}
+                  href={`/stockdraft-dfs/entry/${row.entryId}`}
+                  className={`flex items-center justify-between py-3 hover:bg-white/5 transition rounded-lg ${
+                    row.isMe ? "bg-gold/5 -mx-4 px-4" : ""
+                  } ${row.entryId === entryId ? "ring-1 ring-white/20 -mx-4 px-4" : ""}`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="w-6 text-center font-semibold text-muted">
@@ -104,16 +140,18 @@ export default async function DfsEntryLeaguePage({
                       {!isFinal && row.payout > 0 ? " proj." : ""}
                     </div>
                   </div>
-                </div>
+                </a>
               ))
             )}
           </div>
         </div>
 
         <div className="bg-dark-card border border-white/10 rounded-xl p-4">
-          <h2 className="font-semibold mb-3">Your Lineup</h2>
+          <h2 className="font-semibold mb-3">
+            {isViewingOwnEntry ? "Your Lineup" : `${viewedRow?.username ?? "Their"} Lineup`}
+          </h2>
           <div className="flex flex-wrap gap-1.5">
-            {myEntry.picks.map((pick) => (
+            {(viewedRow?.picks ?? myEntry?.picks ?? []).map((pick) => (
               <span
                 key={pick.sector}
                 className="text-xs bg-white/5 border border-white/10 rounded-full px-2 py-0.5"
@@ -125,21 +163,23 @@ export default async function DfsEntryLeaguePage({
           </div>
         </div>
 
-        <div>
-          <h2 className="font-semibold mb-3">
-            {myEntry.contestStatus === "open"
-              ? "Free Agents — Make a Move"
-              : "Free Agents"}
-          </h2>
-          {myEntry.contestStatus === "open" ? (
-            <FreeAgentPanel entries={[myEntry]} />
-          ) : (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center text-muted text-sm">
-              This contest is {myEntry.contestStatus} — moves are no longer
-              allowed.
-            </div>
-          )}
-        </div>
+        {isViewingOwnEntry && myEntry && (
+          <div>
+            <h2 className="font-semibold mb-3">
+              {myEntry.contestStatus === "open"
+                ? "Free Agents — Make a Move"
+                : "Free Agents"}
+            </h2>
+            {myEntry.contestStatus === "open" ? (
+              <FreeAgentPanel entries={[myEntry]} />
+            ) : (
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center text-muted text-sm">
+                This contest is {myEntry.contestStatus} — moves are no longer
+                allowed.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </DfsShell>
   );
