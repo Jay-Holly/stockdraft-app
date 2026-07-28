@@ -6,9 +6,27 @@ import {
 } from "@/lib/wfs/contests";
 import { WfsShell } from "@/components/dfs/WfsShell";
 import { SdwfsRulesButton } from "@/components/wfs/SdwfsRulesButton";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function StockDraftWfsLobbyPage() {
-  const contests = await getWfsContestsForThisWeek();
+  const allContests = await getWfsContestsForThisWeek();
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let enteredContestIds = new Set<string>();
+  if (user) {
+    const { data: entries } = await supabase
+      .from("sdwfs_entries")
+      .select("contest_id")
+      .eq("user_id", user.id)
+      .in("contest_id", allContests.map((c) => c.id));
+    enteredContestIds = new Set((entries ?? []).map((e) => e.contest_id));
+  }
+
+  const contests = allContests.filter((c) => !enteredContestIds.has(c.id));
 
   return (
     <WfsShell title="SDWFS" hideWatermark hideHeaderLogo>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useDraftPool } from "@/hooks/useDraftPool";
 import { useCryptoPool } from "@/hooks/useCryptoPool";
 import { usePoolQuotes } from "@/hooks/usePoolQuotes";
@@ -32,7 +33,10 @@ function formatChange(changePercent: number) {
   return `${sign}${changePercent.toFixed(1)}%`;
 }
 
+const REUSE_LINEUP_KEY = "sdwfs-reuse-picks";
+
 export function WfsLineupBuilder({ contestId }: { contestId: string }) {
+  const router = useRouter();
   const { stocks, loading: poolLoading } = useDraftPool();
   const { coins, loading: cryptoLoading } = useCryptoPool();
   const [activeSector, setActiveSector] = useState<WfsSector>(WFS_SECTORS[0]);
@@ -41,12 +45,81 @@ export function WfsLineupBuilder({ contestId }: { contestId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [entered, setEntered] = useState(false);
+  const [lastEntryPicks, setLastEntryPicks] = useState<
+    { sector: string; symbol: string }[] | null
+  >(null);
+
+  function applyPickList(list: { sector: string; symbol: string }[]) {
+    setPicks((prev) => {
+      const next = { ...prev };
+      for (const { sector, symbol } of list) {
+        if (WFS_SECTORS.includes(sector as WfsSector)) {
+          next[sector as WfsSector] = {
+            symbol,
+            name: "",
+            price: 0,
+            changePercent: 0,
+          };
+        }
+      }
+      return next;
+    });
+    const nextUnfilled = WFS_SECTORS.find(
+      (s) => !list.some((p) => p.sector === s)
+    );
+    if (nextUnfilled) setActiveSector(nextUnfilled);
+  }
+
+  // Pick up a lineup carried over from "Bet Lineup Again" on another contest.
+  useEffect(() => {
+    const raw = sessionStorage.getItem(REUSE_LINEUP_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(REUSE_LINEUP_KEY);
+    try {
+      const list = JSON.parse(raw) as { sector: string; symbol: string }[];
+      applyPickList(list);
+    } catch {
+      // ignore malformed storage value
+    }
+  }, []);
+
+  // Look up the most recent past entry so "Use Yesterday's Lineup" can offer it.
+  useEffect(() => {
+    fetch(`/api/sdwfs/last-entry?excludeContestId=${contestId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.picks?.length) setLastEntryPicks(data.picks);
+      })
+      .catch(() => {});
+  }, [contestId]);
 
   const stockSymbols = useMemo(() => stocks.map((s) => s.symbol), [stocks]);
   const cryptoSymbols = useMemo(() => coins.map((c) => c.symbol), [coins]);
 
   const { quotes: stockQuotes } = usePoolQuotes(stockSymbols);
   const { quotes: cryptoQuotes } = useCryptoQuotes(cryptoSymbols);
+
+  // Fill in live price/change for picks carried over without quote data.
+  useEffect(() => {
+    setPicks((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const sector of WFS_SECTORS) {
+        const pick = next[sector];
+        if (pick && pick.price === 0) {
+          const quote =
+            sector === "Crypto"
+              ? cryptoQuotes[pick.symbol]
+              : stockQuotes[pick.symbol];
+          if (quote) {
+            next[sector] = { ...pick, price: quote.price, changePercent: quote.changePercent };
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [stockQuotes, cryptoQuotes]);
 
   const pickedSymbols = useMemo(
     () => new Set(Object.values(picks).map((p) => p!.symbol)),
@@ -116,6 +189,16 @@ export function WfsLineupBuilder({ contestId }: { contestId: string }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function betLineupAgain() {
+    sessionStorage.setItem(
+      REUSE_LINEUP_KEY,
+      JSON.stringify(
+        WFS_SECTORS.map((sector) => ({ sector, symbol: picks[sector]!.symbol }))
+      )
+    );
+    router.push("/stockdraft-wfs");
   }
 
   return (
@@ -263,18 +346,38 @@ export function WfsLineupBuilder({ contestId }: { contestId: string }) {
         </div>
 
         {entered ? (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center text-green-400 font-semibold">
-            You&apos;re entered!
+          <div className="space-y-2">
+            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center text-green-400 font-semibold">
+              You&apos;re entered!
+            </div>
+            <button
+              type="button"
+              onClick={betLineupAgain}
+              className="w-full rounded-xl border border-gold text-gold font-semibold py-3 hover:bg-gold/10"
+            >
+              Bet Lineup Again
+            </button>
           </div>
         ) : (
-          <button
-            type="button"
-            disabled={!lineupComplete || submitting}
-            onClick={submitLineup}
-            className="w-full rounded-xl bg-gold text-black font-semibold py-3 disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-95"
-          >
-            {submitting ? "Entering..." : "Enter Team"}
-          </button>
+          <>
+            {filledCount === 0 && lastEntryPicks && (
+              <button
+                type="button"
+                onClick={() => applyPickList(lastEntryPicks)}
+                className="w-full rounded-xl border border-white/20 text-sm font-medium py-2.5 hover:border-white/40"
+              >
+                Use Yesterday&apos;s Lineup
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={!lineupComplete || submitting}
+              onClick={submitLineup}
+              className="w-full rounded-xl bg-gold text-black font-semibold py-3 disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-95"
+            >
+              {submitting ? "Entering..." : "Enter Team"}
+            </button>
+          </>
         )}
         {submitError && (
           <p className="text-red-400 text-sm text-center">{submitError}</p>

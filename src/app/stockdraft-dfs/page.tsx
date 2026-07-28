@@ -6,9 +6,27 @@ import {
 } from "@/lib/dfs/contests";
 import { DfsShell } from "@/components/dfs/DfsShell";
 import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function StockDraftDfsLobbyPage() {
-  const contests = await getDfsContestsForToday();
+  const allContests = await getDfsContestsForToday();
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let enteredContestIds = new Set<string>();
+  if (user) {
+    const { data: entries } = await supabase
+      .from("sddfs_entries")
+      .select("contest_id")
+      .eq("user_id", user.id)
+      .in("contest_id", allContests.map((c) => c.id));
+    enteredContestIds = new Set((entries ?? []).map((e) => e.contest_id));
+  }
+
+  const contests = allContests.filter((c) => !enteredContestIds.has(c.id));
 
   return (
     <DfsShell title="SDDFS" hideWatermark hideHeaderLogo>
