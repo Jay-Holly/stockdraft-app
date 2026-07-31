@@ -88,6 +88,15 @@ type SheetHotspot = {
   badge?: string;
 };
 
+/**
+ * Badge text for a dashboard tile, or nothing at all when the category is
+ * empty. An empty category needs no label — the tile stays clickable either
+ * way, and "None yet" only added noise to a board full of them.
+ */
+function activeBadge(count: number): string | undefined {
+  return count > 0 ? `${count} active` : undefined;
+}
+
 function DashboardSheet({
   src,
   alt,
@@ -445,7 +454,7 @@ export function DashboardContent({
               left: "4.7%",
               width: "44.1%",
               height: "15.3%",
-              badge: leagues.length > 0 ? `${leagues.length} active` : "None yet",
+              badge: activeBadge(leagues.length),
             },
             {
               label: "Player Leagues",
@@ -454,7 +463,7 @@ export function DashboardContent({
               left: "50.9%",
               width: "43.8%",
               height: "15.3%",
-              badge: squadLeagues.length > 0 ? `${squadLeagues.length} active` : "None yet",
+              badge: activeBadge(squadLeagues.length),
             },
             {
               label: "Sports Sim",
@@ -463,8 +472,7 @@ export function DashboardContent({
               left: "4.7%",
               width: "44.1%",
               height: "15%",
-              badge:
-                sportsSimLeagues.length > 0 ? `${sportsSimLeagues.length} active` : "None yet",
+              badge: activeBadge(sportsSimLeagues.length),
             },
             {
               label: "Day Trader",
@@ -473,7 +481,7 @@ export function DashboardContent({
               left: "50.9%",
               width: "43.8%",
               height: "15%",
-              badge: dayTrader ? "1 active" : "View",
+              badge: activeBadge(dayTrader ? 1 : 0),
             },
             {
               label: "Daily Fantasy Sport",
@@ -482,7 +490,7 @@ export function DashboardContent({
               left: "4.7%",
               width: "44.1%",
               height: "16.5%",
-              badge: dfsEntryCount > 0 ? `${dfsEntryCount} active` : "None yet",
+              badge: activeBadge(dfsEntryCount),
             },
             {
               label: "Weekly Fantasy Sport",
@@ -491,7 +499,7 @@ export function DashboardContent({
               left: "50.9%",
               width: "43.8%",
               height: "16.5%",
-              badge: wfsEntryCount > 0 ? `${wfsEntryCount} active` : "None yet",
+              badge: activeBadge(wfsEntryCount),
             },
           ]}
         />
