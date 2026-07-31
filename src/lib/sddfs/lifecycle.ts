@@ -56,13 +56,6 @@ async function lockDueContests(
     const symbols = [...new Set((picks ?? []).map((p) => p.symbol))];
     const prices = await fetchLiveSddfsQuotes(symbols);
 
-    const zeroCount = Object.values(prices).filter((p) => p === 0).length;
-    if (zeroCount > 0) {
-      console.error(
-        `[lockDueContests] Contest ${contest.id}: ${zeroCount}/${symbols.length} prices came back as 0`
-      );
-    }
-
     for (const pick of picks ?? []) {
       const openPrice = prices[pick.symbol.toUpperCase()] ?? 0;
       await supabase
@@ -123,13 +116,6 @@ async function scoreClosedContests(
 
       const symbols = [...new Set((picks ?? []).map((p) => p.symbol))];
       const prices = await fetchLiveSddfsQuotes(symbols);
-
-      const zeroCount = Object.values(prices).filter((p) => p === 0).length;
-      if (zeroCount > 0) {
-        console.error(
-          `[scoreClosedContests] Contest ${contest.id}: ${zeroCount}/${symbols.length} close prices came back as 0`
-        );
-      }
 
       for (const pick of picks ?? []) {
         const closePrice = prices[pick.symbol.toUpperCase()] ?? 0;

@@ -6,7 +6,7 @@ import {
   type CryptoQuote,
 } from "@/lib/coingecko/service";
 import { fetchFinnhubQuotes, type FinnhubQuote } from "@/lib/finnhub/service";
-import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
+import { mergeQuotesWithFallback } from "@/lib/market/fallback-quotes";
 
 /**
  * SDWFS needs true snapshots (Monday 9 AM ET open, Friday 4 PM ET close)
@@ -36,14 +36,21 @@ export async function fetchLiveSdwfsQuotes(
       : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
+  // Fill in missing stock prices from fallback data (S&P 500 snapshot)
+  const mergedStocks = mergeQuotesWithFallback(stockSymbols, stockQuotes);
+
   const prices: Record<string, number> = {};
 
+  // All stocks should now have prices (live or fallback)
   for (const symbol of stockSymbols) {
-    const live = stockQuotes[symbol]?.price;
-    prices[symbol] = live && live > 0 ? live : getFallbackStockQuote(symbol)?.price ?? 0;
+    const quote = mergedStocks[symbol];
+    prices[symbol] = quote?.price ?? 0;
   }
+
+  // Crypto relies on live data only; no fallback available
   for (const symbol of cryptoSymbols) {
-    prices[symbol] = cryptoQuotes[symbol]?.price ?? 0;
+    const quote = cryptoQuotes[symbol];
+    prices[symbol] = quote?.price ?? 0;
   }
 
   return prices;

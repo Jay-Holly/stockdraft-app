@@ -22,6 +22,31 @@ export type MyDfsEntry = {
   picks: MyDfsEntryPick[];
 };
 
+/**
+ * Count only entries whose contest is still live (not yet scored).
+ *
+ * getMyDfsEntries() is a *recent history* list — it spans the last 7 days and
+ * includes scored contests. Counting it as "active" reports a week of finished
+ * entries as if they were in progress.
+ */
+export async function getMyActiveDfsEntryCount(): Promise<number> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return 0;
+
+  const { count, error } = await supabase
+    .from("sddfs_entries")
+    .select("id, sddfs_contests!inner(status)", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .in("sddfs_contests.status", ["open", "locked"]);
+
+  if (error) return 0;
+  return count ?? 0;
+}
+
 export async function getMyDfsEntries(daysBack: number = 7): Promise<MyDfsEntry[]> {
   const supabase = await createClient();
   const {

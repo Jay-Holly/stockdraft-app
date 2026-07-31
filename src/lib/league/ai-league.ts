@@ -29,7 +29,8 @@ import {
   normalizePlayerCount,
 } from "@/lib/matchup/schedule";
 import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
-import { getLeagueTeamIds } from "@/lib/matchup/league-teams";
+import { getLeagueTeamIds, loadStandingSeeds } from "@/lib/matchup/league-teams";
+import { sortStandingsForSeeding } from "@/lib/matchup/schedule";
 import {
   findHumanMatchupForWeek,
   getOpponentUserId,
@@ -88,6 +89,7 @@ export type AiLeagueListItem = {
     losses: number;
     currentWeek: number;
   } | null;
+  championName: string | null;
 };
 
 export { listAiLeaguesForUser } from "@/lib/league/active-league";
@@ -114,9 +116,23 @@ export async function listAiLeagueListItems(
         .eq("user_id", userId)
         .maybeSingle();
 
+      const humanTeamName = await getLeagueMemberTeamName(league.id, userId);
+
+      let championName: string | null = null;
+      if (league.status === "complete") {
+        const seeds = await loadStandingSeeds(league.id, supabase);
+        if (seeds.length > 0) {
+          const championUserId = sortStandingsForSeeding(seeds)[0].userId;
+          championName =
+            championUserId === userId
+              ? humanTeamName
+              : leagueBots.find((b) => b.id === championUserId)?.displayName ?? null;
+        }
+      }
+
       return {
         league,
-        humanTeamName: await getLeagueMemberTeamName(league.id, userId),
+        humanTeamName,
         botNames: leagueBots.map((b) => b.displayName),
         humanDraftComplete:
           humanDraft.ok && humanDraft.state.draft.status === "complete",
@@ -127,6 +143,7 @@ export async function listAiLeagueListItems(
               currentWeek: standingsRow.current_week,
             }
           : null,
+        championName,
       };
     })
   );

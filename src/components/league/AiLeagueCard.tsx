@@ -41,9 +41,11 @@ export function AiLeagueCard({
   const isActive = item.league.id === activeLeagueId;
   const busy = switchingLeagueId === item.league.id;
   const isOwner = item.league.owner_user_id === currentUserId;
+  const isComplete = item.league.status === "complete";
   const hasActionRow =
-    item.league.status === "drafting" ||
-    canEnterSeasonLeague(item.league.status, item.humanDraftComplete);
+    !isComplete &&
+    (item.league.status === "drafting" ||
+      canEnterSeasonLeague(item.league.status, item.humanDraftComplete));
 
   return (
     <div
@@ -84,8 +86,14 @@ export function AiLeagueCard({
         </div>
       </div>
 
+      {isComplete && (
+        <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm font-semibold text-gold">
+          🏆 {item.championName ?? "The champion"} {item.championName ? "is" : "was crowned"} the league champion!
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2">
-        {!isActive && !hasActionRow && (
+        {!isActive && !isComplete && !hasActionRow && (
           <Button
             variant="ghost"
             className="text-xs px-3"
@@ -105,7 +113,7 @@ export function AiLeagueCard({
             Enter Draft Room
           </Button>
         )}
-        {canEnterSeasonLeague(item.league.status, item.humanDraftComplete) && (
+        {!isComplete && canEnterSeasonLeague(item.league.status, item.humanDraftComplete) && (
           <>
             <Button
               variant="primary"

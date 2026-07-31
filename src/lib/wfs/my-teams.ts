@@ -22,6 +22,31 @@ export type MyWfsEntry = {
   picks: MyWfsEntryPick[];
 };
 
+/**
+ * Count only entries whose contest is still live (not yet scored).
+ *
+ * getMyWfsEntries() is a *recent history* list — it spans the last 30 days and
+ * includes scored contests. Counting it as "active" reports roughly a month of
+ * finished entries as if they were in progress.
+ */
+export async function getMyActiveWfsEntryCount(): Promise<number> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return 0;
+
+  const { count, error } = await supabase
+    .from("sdwfs_entries")
+    .select("id, sdwfs_contests!inner(status)", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .in("sdwfs_contests.status", ["open", "locked"]);
+
+  if (error) return 0;
+  return count ?? 0;
+}
+
 export async function getMyWfsEntries(daysBack: number = 30): Promise<MyWfsEntry[]> {
   const supabase = await createClient();
   const {

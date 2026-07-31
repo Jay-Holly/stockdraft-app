@@ -56,8 +56,9 @@ async function lockDueContests(
     const symbols = [...new Set((picks ?? []).map((p) => p.symbol))];
     const prices = await fetchLiveSdwfsQuotes(symbols);
 
+
     for (const pick of picks ?? []) {
-      const openPrice = prices[pick.symbol.toUpperCase()] ?? 0;
+      const openPrice = prices[pick.symbol.toUpperCase()];
       await supabase
         .from("sdwfs_entry_picks")
         .update({ open_price: openPrice })
@@ -116,7 +117,7 @@ async function scoreClosedContests(
       const prices = await fetchLiveSdwfsQuotes(symbols);
 
       for (const pick of picks ?? []) {
-        const closePrice = prices[pick.symbol.toUpperCase()] ?? 0;
+        const closePrice = prices[pick.symbol.toUpperCase()];
         const openPrice = pick.open_price ?? 0;
         const pctChange =
           openPrice > 0 ? ((closePrice - openPrice) / openPrice) * 100 : 0;

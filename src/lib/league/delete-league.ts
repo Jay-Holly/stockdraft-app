@@ -25,11 +25,30 @@ export async function assertLeagueOwnerForDelete(
   const supabase = await createClient();
   const { data } = await supabase
     .from("leagues")
-    .select("league_type, owner_user_id, name, support_code")
+    .select("league_type, owner_user_id, name, support_code, status")
     .eq("id", leagueId)
     .maybeSingle();
 
-  if (!data?.owner_user_id || data.owner_user_id !== userId) {
+  if (!data) {
+    return { error: "League not found." };
+  }
+
+  const isOwner = data.owner_user_id === userId;
+
+  // Once a season is over, any member can clear it off their board — not
+  // just the owner. Non-owners can only delete leagues that are complete.
+  let isMemberOfCompletedLeague = false;
+  if (!isOwner && data.status === "complete") {
+    const { data: membership } = await supabase
+      .from("league_members")
+      .select("user_id")
+      .eq("league_id", leagueId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    isMemberOfCompletedLeague = !!membership;
+  }
+
+  if (!isOwner && !isMemberOfCompletedLeague) {
     return { error: "League not found." };
   }
 

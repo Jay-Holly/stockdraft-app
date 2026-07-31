@@ -6,7 +6,7 @@ import {
   type CryptoQuote,
 } from "@/lib/coingecko/service";
 import { fetchFinnhubQuotes, type FinnhubQuote } from "@/lib/finnhub/service";
-import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
+import { mergeQuotesWithFallback } from "@/lib/market/fallback-quotes";
 
 /**
  * SDDFS needs a true intraday snapshot (lock at 9 AM ET, close at 4 PM ET)
@@ -36,39 +36,21 @@ export async function fetchLiveSddfsQuotes(
       : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
+  // Fill in missing stock prices from fallback data (S&P 500 snapshot)
+  const mergedStocks = mergeQuotesWithFallback(stockSymbols, stockQuotes);
+
   const prices: Record<string, number> = {};
-  const missing: { symbol: string; type: string }[] = [];
 
+  // All stocks should now have prices (live or fallback)
   for (const symbol of stockSymbols) {
-    const live = stockQuotes[symbol]?.price;
-    if (live && live > 0) {
-      prices[symbol] = live;
-    } else {
-      const fallback = getFallbackStockQuote(symbol);
-      if (fallback?.price && fallback.price > 0) {
-        prices[symbol] = fallback.price;
-      } else {
-        missing.push({ symbol, type: "stock" });
-        prices[symbol] = 0;
-      }
-    }
+    const quote = mergedStocks[symbol];
+    prices[symbol] = quote?.price ?? 0;
   }
 
+  // Crypto relies on live data only; no fallback available
   for (const symbol of cryptoSymbols) {
-    const price = cryptoQuotes[symbol]?.price;
-    if (price && price > 0) {
-      prices[symbol] = price;
-    } else {
-      missing.push({ symbol, type: "crypto" });
-      prices[symbol] = 0;
-    }
-  }
-
-  if (missing.length > 0) {
-    console.warn(
-      `[fetchLiveSddfsQuotes] Missing prices for ${missing.length} symbols:`,
-      missing.map((m) => `${m.symbol}(${m.type})`).join(", ")
-    );
+    const quote = cryptoQuotes[symbol];
+    prices[symbol] = quote?.price ?? 0;
   }
 
   return prices;

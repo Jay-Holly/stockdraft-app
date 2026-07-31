@@ -58,6 +58,7 @@ export function HumanLeagueCard({
   )?.logoSrc;
   const themeId = leagueThemeIdForSportsLeague(item.league.sports_league_id);
   const isDrafting = item.league.status === "drafting";
+  const isComplete = item.league.status === "complete";
   const isSportsSim = isSportsSimLeague({
     formatType: item.league.format_type,
     sportsLeagueId: item.league.sports_league_id,
@@ -123,8 +124,14 @@ export function HumanLeagueCard({
         />
       )}
 
+      {isComplete && (
+        <p className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-sm font-semibold text-gold">
+          🏆 {item.championName ?? "The champion"} {item.championName ? "is" : "was crowned"} the league champion!
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2">
-        {!waiting && !enterDraft && (
+        {!waiting && !enterDraft && !isComplete && (
           <Button
             variant="secondary"
             className="flex-1 text-sm"
@@ -134,7 +141,7 @@ export function HumanLeagueCard({
             My Team
           </Button>
         )}
-        {waiting ? (
+        {isComplete ? null : waiting ? (
           canEnterScheduledDraftRoom(item.league.scheduled_draft_at) ? (
             <Button
               variant="primary"

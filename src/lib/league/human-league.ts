@@ -22,6 +22,8 @@ import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
 import { maybeStartHumanLeagueDraft } from "@/lib/league/draft-scheduler";
 import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
 import { isGenericMapLeague } from "@/lib/league/generic-team-map";
+import { loadStandingSeeds } from "@/lib/matchup/league-teams";
+import { sortStandingsForSeeding } from "@/lib/matchup/schedule";
 import { buildInviteLink } from "@/lib/app-url";
 import {
   DEFAULT_LEAGUE_SCORING_MODE,
@@ -73,6 +75,7 @@ export type HumanLeagueListItem = {
   humanDraftComplete: boolean;
   inviteToken: string | null;
   inviteLink: string | null;
+  championName: string | null;
 };
 
 export type OpponentDraftBoard = {
@@ -768,6 +771,16 @@ export async function listHumanLeaguesForUser(
         userId
       );
 
+      let championName: string | null = null;
+      if (league.status === "complete") {
+        const seeds = await loadStandingSeeds(league.id, supabase);
+        if (seeds.length > 0) {
+          const championUserId = sortStandingsForSeeding(seeds)[0].userId;
+          championName =
+            members.find((m) => m.userId === championUserId)?.displayName ?? null;
+        }
+      }
+
       return {
         league: league as HumanLeague,
         humanTeamName: await getLeagueMemberTeamName(league.id, userId),
@@ -777,6 +790,7 @@ export async function listHumanLeaguesForUser(
         inviteLink: league.invite_token
           ? buildInviteLink(league.invite_token)
           : null,
+        championName,
       };
     })
   );
