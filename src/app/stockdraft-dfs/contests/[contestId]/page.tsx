@@ -64,12 +64,12 @@ export default async function DfsContestBoardPage({
         {!isFinal && (
           <div className="bg-gold/10 border border-gold/20 rounded-xl p-4">
             <p className="text-sm text-gold">
-              Want to enter a contest for{" "}
+              Want to enter an upcoming contest?{" "}
               <Link
                 href="/stockdraft-dfs"
                 className="font-semibold hover:underline"
               >
-                tomorrow's contests?
+                Go to the lobby →
               </Link>
             </p>
           </div>
@@ -82,7 +82,11 @@ export default async function DfsContestBoardPage({
               No entries yet.
             </div>
           ) : (
-            <ContestBigBoard contestId={contestId} initialData={{ prizePool, isFinal, rows }} />
+            <ContestBigBoard
+              contestId={contestId}
+              initialData={{ prizePool, isFinal, rows }}
+              league="sddfs"
+            />
           )}
         </div>
       </div>

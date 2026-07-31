@@ -1,7 +1,20 @@
+import { tierNameForBuyIn } from "@/lib/wfs/contests";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-export const revalidate = 300;
+// Per-user data keyed off the auth cookie — must never be cached and served
+// to a different viewer.
+export const dynamic = "force-dynamic";
+
+type WeekEntry = {
+  contestId: string;
+  contestName: string;
+  buyIn: number;
+  weekStartDate: string;
+  contestStatus: "open" | "locked" | "scored";
+  finalRank: number | null;
+  payout: number | null;
+};
 
 export async function GET() {
   const supabase = await createClient();
@@ -17,32 +30,22 @@ export async function GET() {
   oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
   const isoDate = oneMonthAgo.toISOString().split("T")[0];
 
+  // !inner is required for the embedded week_start_date filter to apply —
+  // without it PostgREST ignores the .gte() and returns every entry.
   const { data: entries, error } = await supabase
     .from("sdwfs_entries")
     .select(
-      "id, contest_id, total_score, final_rank, payout, sdwfs_contests(buy_in, start_date, end_date, status)"
+      "id, contest_id, total_score, final_rank, payout, sdwfs_contests!inner(buy_in, week_start_date, status)"
     )
     .eq("user_id", user.id)
-    .gte("sdwfs_contests.start_date", isoDate)
-    .order("sdwfs_contests.start_date", { ascending: false });
+    .gte("sdwfs_contests.week_start_date", isoDate)
+    .order("entered_at", { ascending: false });
 
   if (error || !entries || entries.length === 0) {
     return NextResponse.json({ entriesByWeek: {} });
   }
 
-  const { data: tierNames } = await supabase
-    .from("sdwfs_contests")
-    .select("id, buy_in")
-    .in(
-      "id",
-      entries.map((e) => e.contest_id)
-    );
-
-  const tierMap = new Map(
-    (tierNames ?? []).map((t) => [t.id, tierNameForBuyIn(Number(t.buy_in))])
-  );
-
-  const entriesByWeek: Record<string, any[]> = {};
+  const entriesByWeek: Record<string, WeekEntry[]> = {};
 
   for (const entry of entries) {
     const contest = Array.isArray(entry.sdwfs_contests)
@@ -51,32 +54,22 @@ export async function GET() {
 
     if (!contest) continue;
 
-    const weekKey = `${contest.start_date}_${contest.end_date}`;
+    const buyIn = Number(contest.buy_in);
+    const weekKey = contest.week_start_date;
     if (!entriesByWeek[weekKey]) {
       entriesByWeek[weekKey] = [];
     }
 
     entriesByWeek[weekKey].push({
       contestId: entry.contest_id,
-      contestName: tierMap.get(entry.contest_id) ?? "Contest",
-      buyIn: Number(contest.buy_in),
-      startDate: contest.start_date,
-      endDate: contest.end_date,
-      contestStatus: contest.status,
+      contestName: tierNameForBuyIn(buyIn),
+      buyIn,
+      weekStartDate: contest.week_start_date,
+      contestStatus: contest.status as WeekEntry["contestStatus"],
       finalRank: entry.final_rank,
-      payout: entry.payout ? Number(entry.payout) : undefined,
+      payout: entry.payout == null ? null : Number(entry.payout),
     });
   }
 
   return NextResponse.json({ entriesByWeek });
-}
-
-function tierNameForBuyIn(buyIn: number): string {
-  if (buyIn === 2) return "The $2 Bill";
-  if (buyIn === 5) return "The 5 Spot";
-  if (buyIn === 10) return "The 10'er";
-  if (buyIn === 25) return "The 25 Spot";
-  if (buyIn === 50) return "The Fiddy Hundred Cent";
-  if (buyIn === 100) return "The Big Ciento";
-  return `$${buyIn} Contest`;
 }

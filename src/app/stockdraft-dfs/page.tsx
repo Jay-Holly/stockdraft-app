@@ -26,7 +26,10 @@ export default async function StockDraftDfsLobbyPage() {
     enteredContestIds = new Set((entries ?? []).map((e) => e.contest_id));
   }
 
-  const contests = allContests.filter((c) => !enteredContestIds.has(c.id));
+  // Show every contest. Ones you haven't entered link to the lineup builder;
+  // ones you're already in link to the big board. Filtering entered contests
+  // out would leave their standings unreachable from the lobby.
+  const contests = allContests;
 
   return (
     <DfsShell title="SDDFS" hideWatermark hideHeaderLogo>
@@ -59,26 +62,35 @@ export default async function StockDraftDfsLobbyPage() {
         )}
 
         <div className="space-y-3">
-          {contests.map((contest) => (
-            <Link
-              key={contest.id}
-              href={`/stockdraft-dfs/contests/${contest.id}`}
-              className="block rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 hover:bg-white/5"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">{contest.name}</div>
-                  <div className="text-xs text-muted mt-1">
-                    ${contest.buyIn} buy-in — {contest.entrants} /{" "}
-                    {contest.maxEntrants} entered
+          {contests.map((contest) => {
+            const canEnter =
+              contest.status === "open" && !enteredContestIds.has(contest.id);
+
+            return (
+              <Link
+                key={contest.id}
+                href={
+                  canEnter
+                    ? `/stockdraft-dfs/${contest.id}`
+                    : `/stockdraft-dfs/contests/${contest.id}`
+                }
+                className="block rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 hover:bg-white/5"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold">{contest.name}</div>
+                    <div className="text-xs text-muted mt-1">
+                      ${contest.buyIn} buy-in — {contest.entrants} /{" "}
+                      {contest.maxEntrants} entered
+                    </div>
                   </div>
+                  <span className="text-[var(--color-league-accent)] text-sm font-medium">
+                    {canEnter ? "Enter →" : "View →"}
+                  </span>
                 </div>
-                <span className="text-[var(--color-league-accent)] text-sm font-medium">
-                  View →
-                </span>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       </div>
     </DfsShell>

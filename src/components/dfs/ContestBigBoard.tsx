@@ -26,13 +26,23 @@ interface ContestData {
   rows: LeaderboardRow[];
 }
 
+/**
+ * Shared by SDDFS and SDWFS. `league` selects which contest family's API and
+ * entry routes to talk to — without it the WFS board silently polls the DFS
+ * endpoint and links to DFS entries.
+ */
 export function ContestBigBoard({
   contestId,
   initialData,
+  league,
 }: {
   contestId: string;
   initialData: ContestData;
+  league: "sddfs" | "sdwfs";
 }) {
+  const apiBase = league === "sddfs" ? "/api/sddfs" : "/api/sdwfs";
+  const entryBase =
+    league === "sddfs" ? "/stockdraft-dfs/entry" : "/stockdraft-wfs/entry";
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
@@ -46,7 +56,7 @@ export function ContestBigBoard({
     const interval = setInterval(async () => {
       setLoading(true);
       try {
-        const resp = await fetch(`/api/sddfs/contest/${contestId}/leaderboard`);
+        const resp = await fetch(`${apiBase}/contest/${contestId}/leaderboard`);
         if (resp.ok) {
           const newData = await resp.json();
           setData(newData);
@@ -60,7 +70,7 @@ export function ContestBigBoard({
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [contestId, data.isFinal]);
+  }, [contestId, data.isFinal, apiBase]);
 
 
   const formatPct = (pct: number | null) => {
@@ -141,6 +151,7 @@ export function ContestBigBoard({
         <PlayerDetailsModal
           player={selectedPlayer}
           allPlayers={data.rows}
+          entryBase={entryBase}
           onClose={() => setSelectedPlayer(null)}
           onPlayerChange={setSelectedPlayer}
         />

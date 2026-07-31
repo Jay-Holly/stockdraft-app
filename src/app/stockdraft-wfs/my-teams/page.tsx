@@ -4,24 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { WfsShell } from "@/components/dfs/WfsShell";
 
-function formatWeekHeading(startDate: string, endDate: string) {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T00:00:00`);
-  return `${start.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })} — ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+/** SDWFS weeks run Monday → Friday, keyed by the Monday. */
+function formatWeekHeading(weekStartDate: string) {
+  const start = new Date(`${weekStartDate}T00:00:00`);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 4);
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${fmt(start)} — ${fmt(end)}`;
 }
 
 interface ContestEntry {
   contestId: string;
   contestName: string;
   buyIn: number;
-  startDate: string;
-  endDate: string;
+  weekStartDate: string;
   contestStatus: "open" | "locked" | "scored";
-  finalRank?: number;
-  payout?: number;
+  finalRank: number | null;
+  payout: number | null;
 }
 
 interface WeekData {
@@ -42,17 +42,13 @@ export default function WfsMyTeamsPage() {
         return;
       }
       const data = await resp.json();
-      const entriesByWeek = data.entriesByWeek || {};
+      const entriesByWeek: Record<string, ContestEntry[]> =
+        data.entriesByWeek || {};
 
-      const weeksArray: WeekData[] = Object.entries(entriesByWeek).map(
-        ([weekKey, contests]: [string, any]) => {
-          const [startDate] = weekKey.split("_");
-          return {
-            week: weekKey,
-            contests: contests as ContestEntry[],
-          };
-        }
-      );
+      // Most recent week first — object key order isn't guaranteed to be sorted.
+      const weeksArray: WeekData[] = Object.entries(entriesByWeek)
+        .map(([week, contests]) => ({ week, contests }))
+        .sort((a, b) => b.week.localeCompare(a.week));
 
       setWeeks(weeksArray);
       setLoading(false);
@@ -98,7 +94,6 @@ export default function WfsMyTeamsPage() {
           <div className="space-y-2">
             {weeks.map((weekData) => {
               const isExpanded = expandedWeeks.has(weekData.week);
-              const [startDate, endDate] = weekData.week.split("_");
 
               return (
                 <div key={weekData.week}>
@@ -112,7 +107,7 @@ export default function WfsMyTeamsPage() {
                       </span>
                       <div>
                         <h2 className="font-semibold">
-                          Week of {formatWeekHeading(startDate, endDate)}
+                          Week of {formatWeekHeading(weekData.week)}
                         </h2>
                         <p className="text-xs text-muted">
                           {weekData.contests.length} contest

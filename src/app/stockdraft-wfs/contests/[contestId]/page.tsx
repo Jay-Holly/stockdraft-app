@@ -3,7 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { WfsShell } from "@/components/dfs/WfsShell";
 import { ContestBigBoard } from "@/components/dfs/ContestBigBoard";
-import { getSdwfsContestById, tierNameForBuyIn } from "@/lib/wfs/contests";
+import { SdwfsRulesButton } from "@/components/wfs/SdwfsRulesButton";
+import {
+  formatWfsContestWeekLabel,
+  getWfsContestById,
+  tierNameForBuyIn,
+} from "@/lib/wfs/contests";
 import { getSdwfsContestLeaderboard } from "@/lib/sdwfs/leaderboard";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,7 +21,7 @@ export default async function WfsContestBoardPage({
 }) {
   const { contestId } = await params;
 
-  const contest = await getSdwfsContestById(contestId);
+  const contest = await getWfsContestById(contestId);
   if (!contest) {
     notFound();
   }
@@ -40,13 +45,17 @@ export default async function WfsContestBoardPage({
           <div>
             <h1 className="text-3xl font-bold">{contestName}</h1>
             <p className="text-muted text-sm">
-              ${contest.buyIn} buy-in — {contest.startDate} to {contest.endDate} —{" "}
-              {contest.status === "active"
-                ? "Active — live scoring updates every 30 seconds"
+              ${contest.buyIn} buy-in —{" "}
+              {formatWfsContestWeekLabel(contest.weekStartDate)} —{" "}
+              {contest.status === "open"
+                ? "Open — editable until Monday lock"
                 : contest.status === "locked"
-                  ? "Locked — final standings"
-                  : "Completed — contest scored"}
+                  ? "Locked — live standings, updating every 30 seconds"
+                  : "Final — contest scored"}
             </p>
+            <div className="mt-2">
+              <SdwfsRulesButton />
+            </div>
           </div>
           <Image
             src="/images/leagues/sdwfs.png"
@@ -60,12 +69,12 @@ export default async function WfsContestBoardPage({
         {!isFinal && (
           <div className="bg-gold/10 border border-gold/20 rounded-xl p-4">
             <p className="text-sm text-gold">
-              Want to enter a contest for{" "}
+              Want to enter next week&apos;s contests?{" "}
               <Link
                 href="/stockdraft-wfs"
                 className="font-semibold hover:underline"
               >
-                the next week's contests?
+                Go to the lobby →
               </Link>
             </p>
           </div>
@@ -78,7 +87,11 @@ export default async function WfsContestBoardPage({
               No entries yet.
             </div>
           ) : (
-            <ContestBigBoard contestId={contestId} initialData={{ prizePool, isFinal, rows }} />
+            <ContestBigBoard
+              contestId={contestId}
+              initialData={{ prizePool, isFinal, rows }}
+              league="sdwfs"
+            />
           )}
         </div>
       </div>

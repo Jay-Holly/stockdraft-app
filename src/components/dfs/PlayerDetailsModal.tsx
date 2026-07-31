@@ -22,11 +22,14 @@ interface LeaderboardRow {
 export function PlayerDetailsModal({
   player,
   allPlayers,
+  entryBase,
   onClose,
   onPlayerChange,
 }: {
   player: LeaderboardRow;
   allPlayers: LeaderboardRow[];
+  /** Route prefix for entry detail pages, e.g. "/stockdraft-dfs/entry". */
+  entryBase: string;
   onClose: () => void;
   onPlayerChange: (player: LeaderboardRow) => void;
 }) {
@@ -39,6 +42,18 @@ export function PlayerDetailsModal({
       p.username.toLowerCase().includes(query)
     );
   }, [searchQuery, allPlayers]);
+
+  /**
+   * Shortcut ranks for the jump menu, always including the rank being viewed —
+   * a <select> whose value isn't among its options renders blank.
+   */
+  const jumpRanks = useMemo(() => {
+    const existing = new Set(allPlayers.map((p) => p.rank));
+    const shortcuts = [1, 2, 3, 5, 10, 20, 50, 100].filter((r) =>
+      existing.has(r)
+    );
+    return [...new Set([...shortcuts, player.rank])].sort((a, b) => a - b);
+  }, [allPlayers, player.rank]);
 
   const currentIndex = filteredPlayers.findIndex(
     (p) => p.entryId === player.entryId
@@ -157,15 +172,11 @@ export function PlayerDetailsModal({
                 <option value="" disabled>
                   Jump to rank...
                 </option>
-                {[1, 2, 3, 5, 10, 20, 50, 100].map((rank) => {
-                  const hasRank = allPlayers.some((p) => p.rank === rank);
-                  if (!hasRank) return null;
-                  return (
-                    <option key={rank} value={rank}>
-                      #{rank}
-                    </option>
-                  );
-                })}
+                {jumpRanks.map((rank) => (
+                  <option key={rank} value={rank}>
+                    #{rank}
+                  </option>
+                ))}
               </select>
 
               <button
@@ -211,7 +222,7 @@ export function PlayerDetailsModal({
           </div>
 
           <Link
-            href={`/stockdraft-dfs/entry/${player.entryId}`}
+            href={`${entryBase}/${player.entryId}`}
             className="inline-block text-sm text-gold hover:underline"
           >
             View full entry details →
