@@ -2,18 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DfsShell } from "@/components/dfs/DfsShell";
+import { ContestBigBoard } from "@/components/dfs/ContestBigBoard";
 import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
 import { getDfsContestById, tierNameForBuyIn } from "@/lib/dfs/contests";
 import { getSddfsContestLeaderboard } from "@/lib/sddfs/leaderboard";
 import { createClient } from "@/lib/supabase/server";
 
-export const revalidate = 300;
-
-function formatPct(pct: number | null) {
-  if (pct == null) return "—";
-  const sign = pct >= 0 ? "+" : "";
-  return `${sign}${pct.toFixed(2)}%`;
-}
+export const revalidate = 60;
 
 export default async function DfsContestBoardPage({
   params,
@@ -48,7 +43,7 @@ export default async function DfsContestBoardPage({
             <p className="text-muted text-sm">
               ${contest.buyIn} buy-in — {contest.contestDate} —{" "}
               {contest.status === "open"
-                ? "Open — live scoring updates every 5 minutes"
+                ? "Open — live scoring updates every 30 seconds"
                 : contest.status === "locked"
                   ? "Locked — live standings"
                   : "Final — contest scored"}
@@ -80,53 +75,15 @@ export default async function DfsContestBoardPage({
           </div>
         )}
 
-        <div className="bg-dark-card border border-white/10 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="font-semibold">Standings & Money Split</h2>
-            <span className="text-xs text-muted">
-              {isFinal ? "Final" : "Live projection"} — pool $
-              {prizePool.toFixed(2)}
-            </span>
-          </div>
-          <div className="divide-y divide-white/5">
-            {rows.length === 0 ? (
-              <p className="py-4 text-center text-muted text-sm">
-                No entries yet.
-              </p>
-            ) : (
-              rows.map((row) => (
-                <Link
-                  key={row.entryId}
-                  href={`/stockdraft-dfs/entry/${row.entryId}`}
-                  className="flex items-center justify-between py-3 hover:bg-white/5 transition rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 text-center font-semibold text-muted">
-                      #{row.rank}
-                    </span>
-                    <span
-                      className={row.isMe ? "font-semibold text-gold" : ""}
-                    >
-                      {row.isMe ? "You" : row.username}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <div
-                      className={
-                        row.totalScore >= 0 ? "text-green-400" : "text-red-400"
-                      }
-                    >
-                      {formatPct(row.totalScore)}
-                    </div>
-                    <div className="text-xs text-muted">
-                      ${row.payout.toFixed(2)}
-                      {!isFinal && row.payout > 0 ? " proj." : ""}
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
+        <div>
+          <h2 className="font-semibold mb-4">Live Standings</h2>
+          {rows.length === 0 ? (
+            <div className="bg-dark-card border border-white/10 rounded-xl p-8 text-center text-muted">
+              No entries yet.
+            </div>
+          ) : (
+            <ContestBigBoard contestId={contestId} initialData={{ prizePool, isFinal, rows }} />
+          )}
         </div>
       </div>
     </DfsShell>
