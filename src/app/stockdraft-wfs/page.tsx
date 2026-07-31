@@ -62,7 +62,7 @@ export default async function StockDraftWfsLobbyPage() {
           {contests.map((contest) => (
             <Link
               key={contest.id}
-              href={`/stockdraft-wfs/${contest.id}`}
+              href={`/stockdraft-wfs/contests/${contest.id}`}
               className="block rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 hover:bg-white/5"
             >
               <div className="flex items-center justify-between">
@@ -74,7 +74,7 @@ export default async function StockDraftWfsLobbyPage() {
                   </div>
                 </div>
                 <span className="text-[var(--color-league-accent)] text-sm font-medium">
-                  Enter →
+                  View →
                 </span>
               </div>
             </Link>
