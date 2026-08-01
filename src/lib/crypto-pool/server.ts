@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { CryptoPoolCoin } from "@/lib/crypto-pool/types";
 import { setCryptoPoolCache } from "@/lib/crypto-pool/symbols";
 
@@ -32,8 +33,26 @@ export async function fetchCryptoPool(options?: {
     return cachedPool;
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  // crypto_pool's RLS grants SELECT to `authenticated` only, so the
+  // user-scoped client reads zero rows in every background context — cron
+  // runs, week finalization, close capture. That emptied the pool, which
+  // emptied getCryptoQuotesMap, which left every crypto quote missing, which
+  // the old price fallback then papered over with the draft-day price. Since
+  // shares = budget / price_at_pick, that produced a close of exactly the
+  // book value ($100,000) every single week: crypto never compounded and ten
+  // weeks of season gain read as one week's move. Read the pool with the
+  // service client — it is a public reference table of coin names and ranks,
+  // and fetchCachedCryptoQuotes already reads crypto_prices the same way.
+  const supabase = (() => {
+    try {
+      return createServiceClient();
+    } catch {
+      return null;
+    }
+  })();
+
+  const client = supabase ?? (await createClient());
+  const { data, error } = await client
     .from("crypto_pool")
     .select("symbol, name, coingecko_id, market_cap_rank, reference_price_usd")
     .order("market_cap_rank", { ascending: true });
