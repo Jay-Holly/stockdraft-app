@@ -1,13 +1,21 @@
 /**
- * Canonical baseline capture functions — single source of truth for all
- * baseline writes across season leagues, sports-sim leagues, day-trader,
- * and DFS/WFS contests. All baseline paths converge here.
+ * Canonical baseline capture — single source of truth for all baseline writes
+ * across season leagues, sports-sim leagues, and per-game multi-asset leagues.
  *
- * Design decisions:
- * - Baselines only write if trustworthy (>0 value for stocks with shares)
- * - Opening values never clobber existing values (new baselines fill gaps only)
- * - Closing values can overwrite but guard against degeneracy (open==close fallback)
- * - When prior period's close exists, new period's open inherits it (no gaps)
+ * Rules enforced here so no caller can skip them:
+ * - Only trustworthy values persist ($0 for a position holding shares means the
+ *   quote failed, and storing it fabricates a -100% period).
+ * - A period's open is filled once and never clobbered.
+ * - A period's open inherits the prior period's close whenever one exists, so
+ *   the week-to-week chain has no gaps.
+ * - A close that moved more than MAX_ABS_PCT_CHANGE from its own open is a
+ *   corrupted price, not a trade.
+ *
+ * These are BATCH functions on purpose. Per-pick round trips are what took the
+ * matchups page down: one league page render fans out to every manager, and a
+ * 32-team roster is ~500 picks, so a query per pick is ~1000 sequential round
+ * trips inside a single request. Each function issues exactly one read and one
+ * write per manager-period regardless of roster size.
  */
 
 import "server-only";
@@ -16,32 +24,61 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DraftPick } from "@/lib/draft/types";
 import { MAX_ABS_PCT_CHANGE } from "@/lib/market/quote-guards";
 
-/**
- * Canonical market value for a pick: shares × price.
- * Used wherever a pick's current value is needed.
- */
+/** Identifies one manager's slice of one scoring period. */
+export type BaselineScope =
+  | {
+      table: "roster_week_baselines";
+      leagueId: string;
+      userId: string;
+      weekNumber: number;
+    }
+  | {
+      table: "roster_day_baselines";
+      leagueId: string;
+      userId: string;
+      gameDate: string;
+    };
+
+function scopeColumns(scope: BaselineScope): Record<string, string | number> {
+  return scope.table === "roster_week_baselines"
+    ? {
+        league_id: scope.leagueId,
+        user_id: scope.userId,
+        week_number: scope.weekNumber,
+      }
+    : {
+        league_id: scope.leagueId,
+        user_id: scope.userId,
+        game_date: scope.gameDate,
+      };
+}
+
+function conflictTarget(scope: BaselineScope): string {
+  return scope.table === "roster_week_baselines"
+    ? "league_id,user_id,week_number,pick_id"
+    : "league_id,user_id,game_date,pick_id";
+}
+
+/** Canonical market value for a position: shares × price. */
 export function computePickMarketValue(pick: DraftPick, price: number): number {
   if (price <= 0) return 0;
   return pick.shares * price;
 }
 
 /**
- * Guard: is this value trustworthy to persist as a baseline?
- * A $0 market value for a pick that actually holds shares means quote fetch failed —
- * persisting it poisons weekly/season math with fake -100% weeks.
- * Empty slots (__OPEN__, 0-share bench) genuinely are $0 and are safe to record.
+ * A $0 value for a position that actually holds shares means the quote fetch
+ * failed — persisting it poisons weekly and season math with a fake -100%.
+ * Genuinely empty slots (__OPEN__, 0-share bench) really are $0.
  */
 export function isTrustworthyValue(pick: DraftPick, value: number): boolean {
   if (value > 0) return true;
-  // Allow $0 only for truly empty slots
   return pick.shares <= 0 || pick.symbol.toUpperCase() === "__OPEN__";
 }
 
 /**
- * A close more than MAX_ABS_PCT_CHANGE away from its own open is a corrupted
- * price, not a trade — the same guard SDDFS/SDWFS apply per pick, extended to
- * season and per-game baselines. Persisting one poisons every season-to-date
- * total that sums this week's delta.
+ * A close more than MAX_ABS_PCT_CHANGE from its own open is a corrupted price.
+ * Same guard SDDFS/SDWFS apply per pick, extended to season and per-game
+ * baselines — one bad row poisons every season-to-date total that sums it.
  */
 export function isPlausibleMove(openValue: number, closeValue: number): boolean {
   if (openValue <= 0) return true;
@@ -49,146 +86,137 @@ export function isPlausibleMove(openValue: number, closeValue: number): boolean 
   return pct <= MAX_ABS_PCT_CHANGE;
 }
 
+export type OpeningEntry = {
+  pick: DraftPick;
+  /** The prior period's close, carried forward verbatim when present. */
+  priorClose: number | null;
+  /** Price PER SHARE. Omit (null) when the quote failed — nothing is written. */
+  livePrice: number | null;
+};
+
 /**
- * Capture a pick's opening value for a period (week or day).
- * - If prior period's close exists, inherit it (ensures chain continuity)
- * - Else fetch live price
- * - Never overwrite an existing opening value (fill only)
- * - Only write if trustworthy
+ * Fill in this period's opening value for every pick that lacks one.
+ * One read, one write, regardless of how many picks are passed.
  */
-export async function captureOpeningValueForPick(
+export async function captureOpeningValues(
   supabase: SupabaseClient,
-  table: "roster_week_baselines" | "roster_day_baselines",
-  periodKey: { league_id: string; user_id: string; pick_id: string } & (
-    | { week_number: number }
-    | { game_date: string }
-  ),
-  pick: DraftPick,
-  priorPeriodClose: number | null,
-  livePrice: number
+  scope: BaselineScope,
+  entries: OpeningEntry[]
 ): Promise<void> {
-  // Determine this period's opening: prior close if available, else live price
-  const openValue =
-    priorPeriodClose !== null ? priorPeriodClose : livePrice;
+  if (entries.length === 0) return;
 
-  if (!isTrustworthyValue(pick, openValue)) return;
-
-  // Check if opening already exists for this pick in this period
-  const whereClause: Record<string, string | number> = {
-    league_id: periodKey.league_id,
-    user_id: periodKey.user_id,
-    pick_id: periodKey.pick_id,
-  };
-  if ("week_number" in periodKey) {
-    whereClause.week_number = periodKey.week_number;
-  } else {
-    whereClause.game_date = periodKey.game_date;
-  }
+  const scopeCols = scopeColumns(scope);
 
   const { data: existing } = await supabase
-    .from(table)
-    .select("value_at_open")
-    .match(whereClause)
-    .maybeSingle();
+    .from(scope.table)
+    .select("pick_id, value_at_open")
+    .match(scopeCols);
 
-  // Only fill if missing; never overwrite
-  if (existing?.value_at_open != null) return;
+  const alreadyOpen = new Set(
+    (existing ?? [])
+      .filter((row) => row.value_at_open != null)
+      .map((row) => row.pick_id as string)
+  );
 
-  // Insert or update, but only fill the opening value
-  const row: Record<string, string | number> = {
-    ...periodKey,
-    value_at_open: openValue,
-  };
+  const rows: Record<string, string | number>[] = [];
+  for (const { pick, priorClose, livePrice } of entries) {
+    if (alreadyOpen.has(pick.id)) continue;
 
-  const { onConflict, ignoreDuplicates } =
-    table === "roster_week_baselines"
-      ? {
-          onConflict: "league_id,user_id,week_number,pick_id",
-          ignoreDuplicates: true,
-        }
-      : {
-          onConflict: "league_id,user_id,game_date,pick_id",
-          ignoreDuplicates: true,
-        };
+    // A prior close is already a position value and carries across untouched.
+    // A live price is per share and must be converted, or an $80,000 position
+    // records an opening value of ~$348 and the period scores as a wipeout.
+    const openValue =
+      priorClose !== null
+        ? priorClose
+        : livePrice !== null
+          ? computePickMarketValue(pick, livePrice)
+          : null;
 
-  await supabase.from(table).upsert(row as never, {
-    onConflict,
-    ignoreDuplicates,
+    if (openValue === null) continue;
+    if (!isTrustworthyValue(pick, openValue)) continue;
+
+    rows.push({ ...scopeCols, pick_id: pick.id, value_at_open: openValue });
+  }
+
+  if (rows.length === 0) return;
+
+  // ignoreDuplicates keeps a concurrent writer's real open from being replaced
+  // by whatever price happens to be live when this path re-runs.
+  await supabase.from(scope.table).upsert(rows as never, {
+    onConflict: conflictTarget(scope),
+    ignoreDuplicates: true,
   });
 }
 
+export type ClosingEntry = {
+  pick: DraftPick;
+  /** Price PER SHARE. Omit (null) when the quote failed — nothing is written. */
+  closePrice: number | null;
+};
+
 /**
- * Capture a pick's closing value for a period.
- * - Can overwrite an existing closing value
- * - Guards against fallback scenario (live price fetch failed, open==close)
- * - Only write if trustworthy
+ * Snapshot this period's closing value. One read, one write.
+ * A pick with no opening row yet gets one written at the same value, matching
+ * the long-standing behaviour of the week-close path.
  */
-export async function captureClosingValueForPick(
+export async function captureClosingValues(
   supabase: SupabaseClient,
-  table: "roster_week_baselines" | "roster_day_baselines",
-  periodKey: { league_id: string; user_id: string; pick_id: string } & (
-    | { week_number: number }
-    | { game_date: string }
-  ),
-  pick: DraftPick,
-  closePrice: number
+  scope: BaselineScope,
+  entries: ClosingEntry[]
 ): Promise<void> {
-  const closeValue = computePickMarketValue(pick, closePrice);
+  if (entries.length === 0) return;
 
-  if (!isTrustworthyValue(pick, closeValue)) return;
+  const scopeCols = scopeColumns(scope);
 
-  const whereClause: Record<string, string | number> = {
-    league_id: periodKey.league_id,
-    user_id: periodKey.user_id,
-    pick_id: periodKey.pick_id,
-  };
-  if ("week_number" in periodKey) {
-    whereClause.week_number = periodKey.week_number;
-  } else {
-    whereClause.game_date = periodKey.game_date;
-  }
-
-  // Check if there's already data for this period
   const { data: existing } = await supabase
-    .from(table)
-    .select("value_at_open, value_at_close")
-    .match(whereClause)
-    .maybeSingle();
+    .from(scope.table)
+    .select("pick_id, value_at_open, value_at_close")
+    .match(scopeCols);
 
-  if (!existing) return; // No opening baseline exists; nothing to close
+  const existingByPick = new Map(
+    (existing ?? []).map((row) => [row.pick_id as string, row])
+  );
 
-  const existingClose =
-    existing.value_at_close != null ? Number(existing.value_at_close) : null;
-  const openValue = Number(existing.value_at_open);
+  const rows: Record<string, string | number>[] = [];
+  for (const { pick, closePrice } of entries) {
+    if (closePrice === null) continue;
 
-  // Guard: if there's already a real close and we're about to replace it
-  // with open==close (fallback), keep the original
-  if (
-    existingClose != null &&
-    existingClose !== openValue &&
-    closeValue === openValue
-  ) {
-    return;
+    const closeValue = computePickMarketValue(pick, closePrice);
+    if (!isTrustworthyValue(pick, closeValue)) continue;
+
+    const prior = existingByPick.get(pick.id);
+    const openValue =
+      prior?.value_at_open != null ? Number(prior.value_at_open) : closeValue;
+    const existingClose =
+      prior?.value_at_close != null ? Number(prior.value_at_close) : null;
+
+    // Never flatten a real close back to open == close.
+    if (
+      existingClose !== null &&
+      existingClose !== openValue &&
+      closeValue === openValue
+    ) {
+      continue;
+    }
+
+    if (!isPlausibleMove(openValue, closeValue)) {
+      console.error(
+        `[scoring] implausible close for ${pick.symbol} (pick ${pick.id}): open=${openValue} close=${closeValue}; skipping`
+      );
+      continue;
+    }
+
+    rows.push({
+      ...scopeCols,
+      pick_id: pick.id,
+      value_at_open: openValue,
+      value_at_close: closeValue,
+    });
   }
 
-  if (!isPlausibleMove(openValue, closeValue)) {
-    console.error(
-      `[scoring] implausible close for pick ${pick.symbol} (${periodKey.pick_id}): open=${openValue} close=${closeValue}; skipping write`
-    );
-    return;
-  }
+  if (rows.length === 0) return;
 
-  // Update only the closing value
-  const row: Record<string, string | number> = {
-    ...periodKey,
-    value_at_close: closeValue,
-  };
-
-  const { onConflict } =
-    table === "roster_week_baselines"
-      ? { onConflict: "league_id,user_id,week_number,pick_id" }
-      : { onConflict: "league_id,user_id,game_date,pick_id" };
-
-  await supabase.from(table).upsert(row as never, { onConflict });
+  await supabase.from(scope.table).upsert(rows as never, {
+    onConflict: conflictTarget(scope),
+  });
 }
-

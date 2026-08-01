@@ -12,6 +12,7 @@ import {
   getMyCryptoSymbols,
   getMyDraftedSymbols,
   getMyStockSymbols,
+  getSurchargePercent,
   getTurn,
   isCryptoSymbol,
   isStockPickEligible,
@@ -19,7 +20,11 @@ import {
   draftRulesModeFromFlag,
   getDraftRuleConstants,
 } from "@/lib/draft/engine";
-import type { DraftPick, DraftState } from "@/lib/draft/types";
+import type {
+  CryptoBuyerCounts,
+  DraftPick,
+  DraftState,
+} from "@/lib/draft/types";
 import { CRYPTO_POOL } from "@/lib/draft/types";
 import type { BotConfig, BotPersonality } from "@/lib/league/bots";
 import { getStockHomerRegion, type HomerRegion } from "@/lib/league/homer-regions";
@@ -248,6 +253,24 @@ async function pickByMomentum(
   return fallback[0] ?? null;
 }
 
+/**
+ * The price actually written onto a pick must come from the same quote source
+ * the league values that position with, or the roster opens the season already
+ * up or down. Fast mode screens candidates against the static fallback table
+ * to avoid N network round trips inside the bot's time budget — that is fine
+ * for *choosing* a stock, but the chosen one still needs one authoritative
+ * lookup before it is recorded. Skipping it left bot teams holding positions
+ * priced off a stale snapshot: one opened week 1 down $160,013 against a
+ * roster it had paid $920,000 for.
+ */
+async function resolvePickPrice(
+  symbol: string,
+  screenedPrice: number
+): Promise<number> {
+  const { price } = await getStockQuote(symbol);
+  return price > 0 ? price : screenedPrice;
+}
+
 async function stockDecisionFromPool(
   stock: DraftPoolStock | null,
   fast = false
@@ -255,7 +278,11 @@ async function stockDecisionFromPool(
   if (!stock) return null;
   if (fast) {
     const fallback = getFallbackStockQuote(stock.symbol);
-    const price = fallback?.price ?? 0;
+    const screened = fallback?.price ?? 0;
+    if (screened <= 0 || !isStockPickEligible(stock.symbol, screened)) {
+      return null;
+    }
+    const price = await resolvePickPrice(stock.symbol, screened);
     if (price <= 0 || !isStockPickEligible(stock.symbol, price)) return null;
     return { symbol: stock.symbol, price };
   }
@@ -268,24 +295,54 @@ async function stockDecisionFromCandidate(
   candidate: StockCandidate | null
 ): Promise<AiPickDecision | null> {
   if (!candidate || candidate.price <= 0) return null;
-  return { symbol: candidate.symbol, price: candidate.price };
+  // Candidates built by buildStockCandidatesFast carry fallback-table prices.
+  // Re-resolve so the recorded price is the live one; a cache hit costs
+  // nothing and a miss keeps the screened price rather than losing the turn.
+  const price = await resolvePickPrice(candidate.symbol, candidate.price);
+  if (price <= 0 || !isStockPickEligible(candidate.symbol, price)) return null;
+  return { symbol: candidate.symbol, price };
 }
 
 async function defaultCryptoChunk(
   summary: ReturnType<typeof summarizePicks>,
   symbolIndex = 0,
-  chunkSize = 50_000
+  chunkSize = 50_000,
+  buyerCounts: CryptoBuyerCounts = {}
 ): Promise<AiPickDecision | null> {
   const pool = await fetchCryptoPool();
   const symbols =
     pool.length > 0
       ? pool.map((coin) => coin.symbol)
       : ["BTC", "ETH", "SOL", "DOGE"];
-  const symbol = symbols[symbolIndex] ?? symbols[0];
-  const price = await getCryptoPrice(symbol);
-  if (price <= 0 || !isCryptoPickEligible(symbol, price)) return null;
+
+  // Buy the coin that isn't marked up. Every bot used to take symbols[0] —
+  // always BTC — no matter how many managers had already bought it, so the
+  // bots drafting last paid the 40% and 80% surcharge tiers: one turned
+  // $200,000 of budget into a $40,000 position. Ranking by surcharge makes
+  // the bots spread out across the pool the way the tiers intend, and
+  // symbolIndex still varies the choice between personalities.
+  const ranked = [...symbols].sort((a, b) => {
+    const bySurcharge =
+      getSurchargePercent(buyerCounts[a.toUpperCase()] ?? 0) -
+      getSurchargePercent(buyerCounts[b.toUpperCase()] ?? 0);
+    return bySurcharge !== 0
+      ? bySurcharge
+      : symbols.indexOf(a) - symbols.indexOf(b);
+  });
+
   const chunk = Math.min(summary.cryptoRemaining, chunkSize);
-  return { symbol, allocation: chunk, price };
+
+  // Start at the requested slot, then fall through the rest of the ranking so
+  // an unpriced coin costs a cheaper alternative rather than the whole turn.
+  for (let offset = 0; offset < ranked.length; offset++) {
+    const symbol = ranked[(symbolIndex + offset) % ranked.length];
+    const price = await getCryptoPrice(symbol);
+    if (price > 0 && isCryptoPickEligible(symbol, price)) {
+      return { symbol, allocation: chunk, price };
+    }
+  }
+
+  return null;
 }
 
 async function pickStockForPersonality(
@@ -381,7 +438,8 @@ export async function decideAiPick(
   options?: { fast?: boolean }
 ): Promise<AiPickDecision | null> {
   const fast = options?.fast ?? false;
-  const { turn, picks, leagueOffBoard, sportsSimDraftRules } = state;
+  const { turn, picks, leagueOffBoard, sportsSimDraftRules, buyerCounts } =
+    state;
   if (turn.type === "complete" || turn.type === "pushback_skip") return null;
 
   const rules = draftRulesModeFromFlag(sportsSimDraftRules);
@@ -415,7 +473,7 @@ export async function decideAiPick(
   }
 
   if (!sportsSimDraftRules && turn.type === "crypto" && turn.canPickCrypto && summary.cryptoRemaining > 0) {
-    return defaultCryptoChunk(summary, 0, summary.cryptoRemaining);
+    return defaultCryptoChunk(summary, 0, summary.cryptoRemaining, buyerCounts);
   }
 
   if (!sportsSimDraftRules && personality === "crypto_king") {
@@ -470,7 +528,7 @@ export async function decideAiPick(
     }
 
     if (turn.canPickCrypto && summary.cryptoRemaining > 0) {
-      return defaultCryptoChunk(summary, 0, 50_000);
+      return defaultCryptoChunk(summary, 0, 50_000, buyerCounts);
     }
   }
 
@@ -489,7 +547,7 @@ export async function decideAiPick(
     }
 
     if (turn.canPickCrypto && summary.cryptoRemaining > 0) {
-      return defaultCryptoChunk(summary, 1, 75_000);
+      return defaultCryptoChunk(summary, 1, 75_000, buyerCounts);
     }
   }
 
@@ -509,7 +567,7 @@ export async function decideAiPick(
 
     if (turn.canPickCrypto && summary.cryptoRemaining > 0) {
       const cryptoIndex = picks.filter((p) => p.pick_type === "crypto").length % 4;
-      return defaultCryptoChunk(summary, cryptoIndex, 25_000);
+      return defaultCryptoChunk(summary, cryptoIndex, 25_000, buyerCounts);
     }
   }
 
@@ -527,7 +585,7 @@ export async function decideAiPick(
   }
 
   if (!sportsSimDraftRules && turn.canPickCrypto && summary.cryptoRemaining > 0) {
-    return defaultCryptoChunk(summary, 0, 40_000);
+    return defaultCryptoChunk(summary, 0, 40_000, buyerCounts);
   }
 
   return null;

@@ -275,7 +275,12 @@ export function hasRosterStructureComplete(
   const summary = summarizePicks(picks, rules);
   return (
     countOpenSlotPicks(summary, rules) >= STOCK_ROUNDS &&
-    summary.benchPicks >= BENCH_ROUNDS
+    summary.benchPicks >= BENCH_ROUNDS &&
+    // The $200k crypto pool is part of the roster, not an optional extra.
+    // Without this a draft ended the moment 10 stocks and 2 bench slots were
+    // filled, stranding whatever crypto budget was left — managers finished
+    // with as little as $150k of $200k spent and no way to use the rest.
+    summary.cryptoRemaining <= 0
   );
 }
 
@@ -431,6 +436,21 @@ export function getTurn(
     };
   }
 
+  // Stock slots are full but the crypto pool still has money in it. That debt
+  // has to be settled before bench picks, otherwise the draft used to run
+  // straight past it into rounds 14–15 and finish with the balance stranded.
+  if (summary.cryptoRemaining > 0) {
+    return {
+      type: "crypto",
+      round,
+      label: `Round ${round} — crypto pick ($${formatCompact(summary.cryptoRemaining)} left to spend)`,
+      canPickStock: false,
+      canPickCrypto: true,
+      stockBudget: 0,
+      cryptoRemaining: summary.cryptoRemaining,
+    };
+  }
+
   if (summary.benchPicks < BENCH_ROUNDS) {
     const benchRound = Math.max(round, BENCH_START_ROUND);
     return {
@@ -477,9 +497,14 @@ export function getNextRoundAfterPick(
   }
 
   if (pickType === "crypto") {
-    if (summary.cryptoRemaining > 0) {
-      return round;
-    }
+    // A crypto buy consumes a round exactly like a stock buy. Returning the
+    // same round when budget was left over meant the next pick was stamped
+    // with a round number already in use, so a roster could hold two "round
+    // 10" picks and the round counter drifted behind the pick count — which
+    // in turn stranded later crypto buys outside the open phase, where
+    // getOpenPhaseCryptoPicks ignores them and pushback never fires.
+    // Spending the pool early is rewarded with pushback skips, not by
+    // replaying a round.
     if (!isOpenPhaseComplete(picks, rules)) {
       if (round < OPEN_ROUNDS) {
         return round + 1;

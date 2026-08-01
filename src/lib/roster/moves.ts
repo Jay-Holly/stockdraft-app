@@ -268,7 +268,12 @@ export async function applyIrSwap(
     return { error: `${bench.symbol} is not eligible ($5+ required).` };
   }
 
-  const transferBudget = starter.shares * starterQuote.price;
+  // A slot vacated by a move to IR has no shares but still holds the injured
+  // stock's value, so fall back to the capital it is carrying.
+  const transferBudget =
+    starter.shares > 0
+      ? starter.shares * starterQuote.price
+      : starter.budget_spent;
   const promotedShares = computeSharesFromBudget(
     transferBudget,
     benchQuote.price
@@ -612,6 +617,11 @@ export async function applyWaiverClaim(
     if (droppedQuote.price > 0) {
       transferBudget = targetPick.shares * droppedQuote.price;
     }
+  } else if (targetPick.budget_spent > 0) {
+    // An __OPEN__ slot vacated by a move to IR holds the injured stock's value
+    // until something fills it (see applyMoveToIr). Zero shares, but real
+    // capital — the claim inherits it, same as replacing a live holding.
+    transferBudget = targetPick.budget_spent;
   }
   const inheritedShares =
     transferBudget > 0 ? computeSharesFromBudget(transferBudget, quote.price) : 0;

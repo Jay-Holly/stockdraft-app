@@ -312,3 +312,102 @@ export async function isStockIrEligibleForLeague(
     options
   );
 }
+
+/**
+ * Injured symbols for a whole roster in one shot.
+ *
+ * isStockIrEligibleForLeague costs ~4 queries per symbol. Scoring calls this
+ * for every starter of every manager, and a 32-team league finalizing a week
+ * would fan that out to well over a thousand sequential round trips — the
+ * exact shape that timed out the matchups page. This resolves any number of
+ * symbols in three queries and does the rest in memory.
+ *
+ * Returns the subset of `symbols` whose mapped real player is injured in
+ * `leagueWeekNumber`. Returns empty for any league without a pick injury map
+ * (including multi-asset leagues, where IR is a free stash and no injury
+ * source exists).
+ */
+export async function loadInjuredSymbolsForLeague(
+  supabase: SupabaseClient,
+  leagueId: string,
+  league: {
+    sports_league_id: string | null;
+    sports_standings_season?: number | null;
+  },
+  symbols: string[],
+  leagueWeekNumber: number,
+  options?: { seasonAnchorDate?: string | null }
+): Promise<Set<string>> {
+  const injured = new Set<string>();
+  if (symbols.length === 0) return injured;
+
+  const sport = sportsLeagueIdToSimSport(league.sports_league_id);
+  if (!sport) return injured;
+
+  const season = defaultSimSeason(league.sports_standings_season);
+  const wanted = new Set(symbols.map((s) => s.toUpperCase()));
+
+  // 1. this league's symbol -> injury rank / week offset mapping
+  const { data: mapRows, error: mapError } = await supabase
+    .from("sim_league_pick_injury_map")
+    .select("symbol, injury_rank, week_offset")
+    .eq("league_id", leagueId);
+
+  if (mapError || !mapRows?.length) return injured;
+
+  const relevant = mapRows.filter((row) =>
+    wanted.has(String(row.symbol).toUpperCase())
+  );
+  if (relevant.length === 0) return injured;
+
+  // 2. editorial rank -> player_id, restricted to this sport/season
+  const ranks = [...new Set(relevant.map((row) => row.injury_rank))];
+  const { data: rankRows, error: rankError } = await supabase
+    .from("sim_player_rankings")
+    .select("player_id, rank, sim_players!inner(sport, season)")
+    .eq("tier", "editorial")
+    .in("rank", ranks)
+    .eq("sim_players.sport", sport)
+    .eq("sim_players.season", season);
+
+  if (rankError || !rankRows?.length) return injured;
+
+  const playerByRank = new Map<number, string>(
+    rankRows.map((row) => [Number(row.rank), String(row.player_id)])
+  );
+
+  // 3. every injury for those players
+  const playerIds = [...new Set([...playerByRank.values()])];
+  const { data: injuryRows, error: injuryError } = await supabase
+    .from("sim_player_injuries")
+    .select("player_id, start_week, end_week, start_date, end_date")
+    .in("player_id", playerIds);
+
+  if (injuryError || !injuryRows?.length) return injured;
+
+  const injuriesByPlayer = new Map<string, InjuryRow[]>();
+  for (const row of injuryRows) {
+    const key = String(row.player_id);
+    if (!injuriesByPlayer.has(key)) injuriesByPlayer.set(key, []);
+    injuriesByPlayer.get(key)!.push(row as InjuryRow);
+  }
+
+  const context = resolveSimEligibilityContext(
+    sport,
+    season,
+    leagueWeekNumber,
+    options?.seasonAnchorDate
+  );
+
+  for (const row of relevant) {
+    const playerId = playerByRank.get(Number(row.injury_rank));
+    if (!playerId) continue;
+
+    const spans = (injuriesByPlayer.get(playerId) ?? []).some((injury) =>
+      injurySpansWeekWithOffset(injury, context, Number(row.week_offset ?? 0))
+    );
+    if (spans) injured.add(String(row.symbol).toUpperCase());
+  }
+
+  return injured;
+}

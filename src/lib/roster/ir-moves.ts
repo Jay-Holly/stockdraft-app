@@ -183,11 +183,16 @@ export async function applyMoveToIr(
   const transferBudget = starter.shares * quote.price;
   const starterPickType = starter.pick_type;
 
+  // A stock leaving the active lineup leaves its value behind for whatever
+  // replaces it — identical to demoting a starter to the bench
+  // (applyStarterBenchSwap). The active slot holds the capital until the
+  // manager promotes a bench stock or claims a free agent into it; the stock
+  // itself parks on IR with no value, exactly like a demoted starter.
   const clearStarter = await patchDraftPick(supabase, userId, starter.id, {
     symbol: IR_OPEN_SYMBOL,
     pick_type: starterPickType,
-    budget_spent: 0,
-    effective_value: 0,
+    budget_spent: transferBudget,
+    effective_value: transferBudget,
     price_at_pick: 0,
     shares: 0,
   });
@@ -196,13 +201,15 @@ export async function applyMoveToIr(
   const fillIr = await patchDraftPick(supabase, userId, irSlot.id, {
     symbol: starter.symbol,
     pick_type: "ir",
-    budget_spent: transferBudget,
-    effective_value: transferBudget,
+    budget_spent: 0,
+    effective_value: 0,
     price_at_pick: quote.price,
-    shares: starter.shares,
+    shares: 0,
   });
   if (fillIr.error) return fillIr;
 
+  // The vacated slot keeps the week's baseline so the replacement's gain is
+  // measured from the value the injured stock left, not from zero.
   await applyIrMoveWeekBaselines(
     supabase,
     league.id,
@@ -302,9 +309,19 @@ export async function applyReturnFromIr(
   }
 
   const quote = await getSymbolQuote(irPick.symbol);
+  // Same rule in reverse: the slot owns the capital, players rotate through
+  // it. A stock coming off IR inherits whatever the active slot is carrying —
+  // including any gain the replacement earned while it sat out. Older IR rows
+  // written before this rule still hold their own value, so fall back to it.
   const transferBudget =
-    irPick.shares > 0 ? irPick.shares * quote.price : irPick.budget_spent;
+    openStarter.budget_spent > 0
+      ? openStarter.budget_spent
+      : irPick.shares > 0
+        ? irPick.shares * quote.price
+        : irPick.budget_spent;
   const returnPickType = openStarter.pick_type;
+  const returnedShares =
+    quote.price > 0 ? transferBudget / quote.price : irPick.shares;
 
   const fillStarter = await patchDraftPick(supabase, userId, openStarter.id, {
     symbol: irPick.symbol,
@@ -312,7 +329,7 @@ export async function applyReturnFromIr(
     budget_spent: transferBudget,
     effective_value: transferBudget,
     price_at_pick: quote.price,
-    shares: irPick.shares,
+    shares: returnedShares,
   });
   if (fillStarter.error) return fillStarter;
 
@@ -347,7 +364,7 @@ export async function applyReturnFromIr(
     budget_before: irPick.budget_spent,
     budget_after: transferBudget,
     price_at_move: quote.price,
-    shares_after: irPick.shares,
+    shares_after: returnedShares,
     notes: `Returned ${irPick.symbol} from IR to active roster`,
   });
 

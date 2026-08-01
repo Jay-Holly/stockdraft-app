@@ -21,12 +21,14 @@ import {
 import { fetchFinnhubQuote } from "@/lib/market/refresh-stock-prices";
 import { isPastFinalizeAt } from "@/lib/season/finalize-times";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import { loadInjuredSymbolsForLeague } from "@/lib/sim/injury-status";
+import { isMultiAssetSimLeague } from "@/lib/season/sdpl-league";
 import type { SeasonSettings } from "@/lib/season/types";
 import {
   computePickMarketValue,
   isTrustworthyValue,
-  captureOpeningValueForPick,
-  captureClosingValueForPick,
+  captureOpeningValues,
+  captureClosingValues,
 } from "@/lib/scoring/canonical";
 
 export {
@@ -107,6 +109,28 @@ export async function getCurrentWeek(
     .maybeSingle();
 
   return data?.current_week ?? 1;
+}
+
+/**
+ * True when `weekNumber` has actually begun for this league, i.e. it is at or
+ * behind the league's current week. Baselines for a future week are a
+ * look-ahead artifact, not data — see captureWeekBaselinesForUser.
+ */
+export async function isWeekOpenForBaselines(
+  supabase: SupabaseClient,
+  leagueId: string,
+  weekNumber: number
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("leagues")
+    .select("current_week")
+    .eq("id", leagueId)
+    .maybeSingle();
+
+  // No league row means no authority to judge; leave existing behaviour alone
+  // rather than silently dropping a legitimate capture.
+  if (!data) return true;
+  return weekNumber <= (data.current_week ?? 1);
 }
 
 export async function loadWeekBaselineMap(
@@ -275,12 +299,26 @@ async function computeScoringWeekInputs(
   );
 
   const livePrices = await fetchLivePricesForPicks(scoringPicks);
+  const injuredSymbols = await loadInjuredScoringSymbols(
+    supabase,
+    leagueId,
+    scoringPicks,
+    weekNumber
+  );
 
   return scoringPicks.map((pick) => {
       const baseline = refreshedBaselines.get(pick.id);
       const weekOpenValue =
         baseline?.valueAtOpen ??
         pickMarketValue(pick, livePrices.get(pick.symbol.toUpperCase()) ?? 0);
+
+      // An injured starter left in the lineup scores a zero — bench it or eat
+      // it, same as fantasy football. Flat means it still occupies its share
+      // of the roster (it stays in the denominator) but contributes no move.
+      if (injuredSymbols.has(pick.symbol.toUpperCase())) {
+        return { pickId: pick.id, currentValue: weekOpenValue, weekOpenValue };
+      }
+
       const currentValue =
         !useHybrid &&
         baseline?.valueAtClose != null &&
@@ -296,6 +334,88 @@ async function computeScoringWeekInputs(
 
       return { pickId: pick.id, currentValue, weekOpenValue };
     });
+}
+
+/**
+ * Every injured symbol in a league for one week, resolved once and reused.
+ *
+ * Scoring runs per manager, so without this a 32-team week would repeat the
+ * same three injury queries 32 times. The underlying data is a finished real
+ * season keyed by league and week, so it cannot change under us and is safe
+ * to hold for the life of the process.
+ */
+const injuredSymbolCache = new Map<string, Promise<Set<string>>>();
+
+function loadLeagueInjuredSymbols(
+  supabase: SupabaseClient,
+  leagueId: string,
+  weekNumber: number
+): Promise<Set<string>> {
+  const key = `${leagueId}:${weekNumber}`;
+  const cached = injuredSymbolCache.get(key);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    const { data: league } = await supabase
+      .from("leagues")
+      .select("format_type, sports_league_id, sports_standings_season")
+      .eq("id", leagueId)
+      .maybeSingle();
+
+    if (!league || league.format_type !== "sports_league") return new Set<string>();
+    if (isMultiAssetSimLeague(league.sports_league_id)) return new Set<string>();
+
+    // Resolve the league's whole injury map for the week, not just this
+    // roster — every manager's lookup then answers from memory.
+    const { data: mapRows } = await supabase
+      .from("sim_league_pick_injury_map")
+      .select("symbol")
+      .eq("league_id", leagueId);
+
+    const allSymbols = [
+      ...new Set((mapRows ?? []).map((row) => String(row.symbol).toUpperCase())),
+    ];
+    if (allSymbols.length === 0) return new Set<string>();
+
+    return loadInjuredSymbolsForLeague(
+      supabase,
+      leagueId,
+      league,
+      allSymbols,
+      weekNumber
+    );
+  })();
+
+  injuredSymbolCache.set(key, pending);
+  return pending;
+}
+
+/**
+ * Symbols in this roster whose mapped real player is injured this week.
+ * Empty for anything that is not a sports-sim league with an injury map, so
+ * SDPL/SDAI and the free-stash multi-asset leagues are unaffected.
+ */
+async function loadInjuredScoringSymbols(
+  supabase: SupabaseClient,
+  leagueId: string,
+  scoringPicks: DraftPick[],
+  weekNumber: number
+): Promise<Set<string>> {
+  const symbols = scoringPicks
+    .filter((pick) => pick.pick_type === "stock")
+    .map((pick) => pick.symbol.toUpperCase())
+    .filter((symbol) => symbol !== "__OPEN__");
+
+  if (symbols.length === 0) return new Set();
+
+  const leagueInjured = await loadLeagueInjuredSymbols(
+    supabase,
+    leagueId,
+    weekNumber
+  );
+  if (leagueInjured.size === 0) return new Set();
+
+  return new Set(symbols.filter((symbol) => leagueInjured.has(symbol)));
 }
 
 export async function captureFridayStockCloseForUser(
@@ -388,6 +508,13 @@ export async function captureWeekBaselinesForUser(
   userId: string,
   weekNumber: number
 ): Promise<void> {
+  // A week that hasn't started has no opening line to record. The roster page
+  // lets a manager look ahead to any scheduled week, and that read used to
+  // fall through to here and persist an opening baseline priced at today —
+  // so simply viewing week 10 in week 1 froze week 10's open months early,
+  // and the "never overwrite an existing open" rule then made it permanent.
+  if (!(await isWeekOpenForBaselines(supabase, leagueId, weekNumber))) return;
+
   let picks = (await loadUserDraftPicks(supabase, userId, leagueId)).filter(
     (p) => p.pick_type !== "skip"
   );
@@ -436,20 +563,20 @@ export async function captureWeekBaselinesForUser(
       ? await fetchPricesForPicks(picksNeedingLivePrice)
       : new Map<string, number>();
 
-  // Capture opening value for each pick using canonical function.
-  // The function enforces: never clobber existing value, only write if trustworthy.
-  for (const pick of picks) {
-    const priorClose = priorCloseByPick.get(pick.id) ?? null;
-    const livePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
-    await captureOpeningValueForPick(
-      supabase,
-      "roster_week_baselines",
-      { league_id: leagueId, user_id: userId, week_number: weekNumber, pick_id: pick.id },
+  await captureOpeningValues(
+    supabase,
+    {
+      table: "roster_week_baselines",
+      leagueId,
+      userId,
+      weekNumber,
+    },
+    picks.map((pick) => ({
       pick,
-      priorClose,
-      livePrice
-    );
-  }
+      priorClose: priorCloseByPick.get(pick.id) ?? null,
+      livePrice: prices.get(pick.symbol.toUpperCase()) ?? null,
+    }))
+  );
 }
 
 export async function captureWeekBaselinesForLeague(
@@ -533,19 +660,20 @@ async function captureWeekBaselinesForUserCarryingForward(
       ? await fetchPricesForPicks(picksNeedingLivePrice)
       : new Map<string, number>();
 
-  // Capture opening value for each pick using canonical function
-  for (const pick of picks) {
-    const priorClose = priorCloseByPick.get(pick.id) ?? null;
-    const livePrice = livePrices.get(pick.symbol.toUpperCase()) ?? 0;
-    await captureOpeningValueForPick(
-      supabase,
-      "roster_week_baselines",
-      { league_id: leagueId, user_id: userId, week_number: weekNumber, pick_id: pick.id },
+  await captureOpeningValues(
+    supabase,
+    {
+      table: "roster_week_baselines",
+      leagueId,
+      userId,
+      weekNumber,
+    },
+    picks.map((pick) => ({
       pick,
-      priorClose,
-      livePrice
-    );
-  }
+      priorClose: priorCloseByPick.get(pick.id) ?? null,
+      livePrice: livePrices.get(pick.symbol.toUpperCase()) ?? null,
+    }))
+  );
 }
 
 /**
@@ -644,28 +772,21 @@ export async function captureWeekCloseSnapshots(
       }
     }
 
-    for (const pick of picks) {
-      const closePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
-
-      // Ensure opening exists (fills gap if missing) before capturing close
-      await captureOpeningValueForPick(
-        supabase,
-        "roster_week_baselines",
-        { league_id: leagueId, user_id: draft.user_id, week_number: weekNumber, pick_id: pick.id },
+    // captureClosingValues writes the open too when a pick has no row yet, so
+    // this is a single read and a single write for the whole roster.
+    await captureClosingValues(
+      supabase,
+      {
+        table: "roster_week_baselines",
+        leagueId,
+        userId: draft.user_id,
+        weekNumber,
+      },
+      picks.map((pick) => ({
         pick,
-        null, // no prior close context at this point
-        closePrice // use close price as fallback for opening if missing
-      );
-
-      // Now capture the close using canonical function
-      await captureClosingValueForPick(
-        supabase,
-        "roster_week_baselines",
-        { league_id: leagueId, user_id: draft.user_id, week_number: weekNumber, pick_id: pick.id },
-        pick,
-        closePrice
-      );
-    }
+        closePrice: prices.get(pick.symbol.toUpperCase()) ?? null,
+      }))
+    );
   }
 }
 

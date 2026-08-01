@@ -9,8 +9,8 @@ import {
 import { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
 import { filterScoringRosterPicks } from "@/lib/roster/crypto-picks";
 import {
-  captureOpeningValueForPick,
-  captureClosingValueForPick,
+  captureOpeningValues,
+  captureClosingValues,
 } from "@/lib/scoring/canonical";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -109,19 +109,15 @@ export async function ensureDayBaselinesForUser(
       ? await fetchPricesForPicks(picksNeedingLivePrice)
       : new Map<string, number>();
 
-  // Capture opening value for each pick using canonical function
-  for (const pick of missingPicks) {
-    const priorClose = priorCloseByPick.get(pick.id) ?? null;
-    const livePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
-    await captureOpeningValueForPick(
-      supabase,
-      "roster_day_baselines",
-      { league_id: leagueId, user_id: userId, game_date: gameDate, pick_id: pick.id },
+  await captureOpeningValues(
+    supabase,
+    { table: "roster_day_baselines", leagueId, userId, gameDate },
+    missingPicks.map((pick) => ({
       pick,
-      priorClose,
-      livePrice
-    );
-  }
+      priorClose: priorCloseByPick.get(pick.id) ?? null,
+      livePrice: prices.get(pick.symbol.toUpperCase()) ?? null,
+    }))
+  );
 }
 
 /** Snapshots today's live price as this game's close, for every league member — call at a game's finalize_at. */
@@ -146,28 +142,19 @@ export async function captureDayCloseForLeague(
 
     const prices = await fetchPricesForPicks(picks);
 
-    for (const pick of picks) {
-      const closePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
-
-      // Ensure opening exists (fills gap if missing) before capturing close
-      await captureOpeningValueForPick(
-        supabase,
-        "roster_day_baselines",
-        { league_id: leagueId, user_id: draft.user_id, game_date: gameDate, pick_id: pick.id },
+    await captureClosingValues(
+      supabase,
+      {
+        table: "roster_day_baselines",
+        leagueId,
+        userId: draft.user_id,
+        gameDate,
+      },
+      picks.map((pick) => ({
         pick,
-        null, // no prior close context at this point
-        closePrice // use close price as fallback for opening if missing
-      );
-
-      // Now capture the close using canonical function
-      await captureClosingValueForPick(
-        supabase,
-        "roster_day_baselines",
-        { league_id: leagueId, user_id: draft.user_id, game_date: gameDate, pick_id: pick.id },
-        pick,
-        closePrice
-      );
-    }
+        closePrice: prices.get(pick.symbol.toUpperCase()) ?? null,
+      }))
+    );
   }
 }
 

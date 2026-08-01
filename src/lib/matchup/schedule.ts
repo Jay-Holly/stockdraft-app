@@ -81,25 +81,48 @@ export function normalizePlayerCount(count: number | null | undefined): LeaguePl
 }
 
 /**
- * Round-robin with the first team fixed (commissioner / draft_slot 0).
- * Player-count agnostic for even n ≥ 2: n/2 matchups per week, (n−1) weeks.
- * 4 teams → Week 1: A-B, C-D · Week 2: A-C, B-D · Week 3: A-D, B-C
+ * Round-robin (circle method) with the first team fixed (commissioner /
+ * draft_slot 0) and every other team rotating around it.
+ * Player-count agnostic for n ≥ 2: ⌊n/2⌋ matchups per week, (n−1) weeks,
+ * and every pair of teams meets exactly once across those weeks.
+ * 4 teams → Week 1: A-B, C-D · Week 2: A-D, B-C · Week 3: A-C, D-B
  * 12 teams → 6 matchups/week × 11 weeks (66 unique pairings).
+ *
+ * Odd n gets a bye: one team sits out each week and (n−1) weeks still
+ * covers every pairing.
  */
 export function generateRoundRobinPairings(
   teamIds: string[]
 ): Array<Array<[string, string]>> {
-  const n = teamIds.length;
-  if (n < 2) return [];
+  if (teamIds.length < 2) return [];
+
+  // Odd counts need a placeholder so the circle has an even circumference;
+  // whoever draws it that week has the bye and simply isn't scheduled.
+  const BYE = "__bye__";
+  const teams = teamIds.length % 2 === 0 ? [...teamIds] : [...teamIds, BYE];
+
+  const fixed = teams[0];
+  const rotating = teams.slice(1);
+  const m = rotating.length;
 
   const schedule: Array<Array<[string, string]>> = [];
 
-  for (let round = 0; round < n - 1; round++) {
-    const pairs: Array<[string, string]> = [[teamIds[0], teamIds[round + 1]]];
-    const rest = teamIds.filter((_, index) => index !== 0 && index !== round + 1);
+  for (let round = 0; round < m; round++) {
+    // Rotate the ring one seat per round. Rotating (rather than dropping one
+    // team out of a static list) is what makes every pairing unique — the
+    // previous implementation re-paired the remaining teams from an unrotated
+    // list, so the same opponents were matched week after week.
+    const ring = rotating.map(
+      (_, index) => rotating[(index + round) % m]
+    );
 
-    for (let i = 0; i < rest.length / 2; i++) {
-      pairs.push([rest[i], rest[rest.length - 1 - i]]);
+    const pairs: Array<[string, string]> = [];
+    if (fixed !== BYE && ring[0] !== BYE) pairs.push([fixed, ring[0]]);
+
+    for (let i = 1; i <= (m - 1) / 2; i++) {
+      const home = ring[i];
+      const away = ring[m - i];
+      if (home !== BYE && away !== BYE) pairs.push([home, away]);
     }
 
     schedule.push(pairs);
