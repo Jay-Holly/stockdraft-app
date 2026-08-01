@@ -28,32 +28,18 @@ export async function fetchLivePricesForPicks(
       : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
-  const draftPriceBySymbol = new Map<string, number>();
-  for (const pick of picks) {
-    const symbol = pick.symbol.toUpperCase();
-    if (pick.price_at_pick > 0 && !draftPriceBySymbol.has(symbol)) {
-      draftPriceBySymbol.set(symbol, pick.price_at_pick);
-    }
-  }
-
+  // A failed quote leaves the symbol absent rather than substituting the
+  // draft-day price — see fetchPricesForPicks in lib/roster/weekly.ts.
   const prices = new Map<string, number>();
   for (const pick of picks) {
     const symbol = pick.symbol.toUpperCase();
     if (prices.has(symbol)) continue;
 
-    if (isCryptoSymbol(symbol)) {
-      const livePrice = cryptoQuotes[symbol]?.price ?? 0;
-      prices.set(
-        symbol,
-        livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
-      );
-    } else {
-      const livePrice = stockQuotes.get(symbol)?.price ?? 0;
-      prices.set(
-        symbol,
-        livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
-      );
-    }
+    const livePrice = isCryptoSymbol(symbol)
+      ? (cryptoQuotes[symbol]?.price ?? 0)
+      : (stockQuotes.get(symbol)?.price ?? 0);
+
+    if (livePrice > 0) prices.set(symbol, livePrice);
   }
 
   return prices;
@@ -77,7 +63,13 @@ export function resolveHybridScoringValue(
     return baseline.stockValueAtFridayClose;
   }
 
-  const price = livePrices.get(symbol) ?? pick.price_at_pick;
+  const price = livePrices.get(symbol);
+  if (price == null) {
+    // Quote unavailable: score the pick flat against its own open rather than
+    // against the draft-day price, which would report a months-old move as
+    // this week's. Neutral is the honest answer until a quote comes back.
+    return baseline?.valueAtOpen ?? 0;
+  }
   return pickMarketValue(pick, price);
 }
 

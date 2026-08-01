@@ -3,6 +3,7 @@ import "server-only";
 import { fetchLiveSddfsQuotes } from "@/lib/sddfs/live-quotes";
 import { computeSddfsPayouts } from "@/lib/sddfs/scoring";
 import { createClient } from "@/lib/supabase/server";
+import { safePctChange } from "@/lib/market/quote-guards";
 
 export type SddfsLeaderboardPick = {
   sector: string;
@@ -144,12 +145,8 @@ export async function getSddfsContestLeaderboard(
     const livePicks: SddfsLeaderboardPick[] = [];
 
     for (const pick of entryPicks) {
-      const openPrice = Number(pick.open_price ?? 0);
-      const livePrice = liveQuotes[pick.symbol.toUpperCase()] ?? 0;
-      const pctChange =
-        openPrice > 0 && livePrice > 0
-          ? ((livePrice - openPrice) / openPrice) * 100
-          : null;
+      const livePrice = liveQuotes[pick.symbol.toUpperCase()];
+      const pctChange = safePctChange(pick.open_price, livePrice);
       total += pctChange ?? 0;
       livePicks.push({ sector: pick.sector, symbol: pick.symbol, pctChange });
     }

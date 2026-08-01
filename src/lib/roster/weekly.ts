@@ -22,6 +22,12 @@ import { fetchFinnhubQuote } from "@/lib/market/refresh-stock-prices";
 import { isPastFinalizeAt } from "@/lib/season/finalize-times";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
 import type { SeasonSettings } from "@/lib/season/types";
+import {
+  computePickMarketValue,
+  isTrustworthyValue,
+  captureOpeningValueForPick,
+  captureClosingValueForPick,
+} from "@/lib/scoring/canonical";
 
 export {
   computeScoringWeekGainPercent,
@@ -44,19 +50,13 @@ import {
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
+// Delegated to canonical module — imported as computePickMarketValue, isTrustworthyValue
 export function pickMarketValue(pick: DraftPick, price: number): number {
-  if (price <= 0) return 0;
-  return pick.shares * price;
+  return computePickMarketValue(pick, price);
 }
 
-/**
- * A $0 market value for a pick that actually holds shares means the quote
- * fetch failed — persisting it as a baseline poisons weekly/season math with
- * fake -100% weeks. Empty slots (__OPEN__, 0-share bench) genuinely are $0.
- */
 export function isTrustworthyBaselineValue(pick: DraftPick, value: number): boolean {
-  if (value > 0) return true;
-  return pick.shares <= 0 || pick.symbol.toUpperCase() === "__OPEN__";
+  return isTrustworthyValue(pick, value);
 }
 
 export async function fetchPricesForPicks(
@@ -74,32 +74,21 @@ export async function fetchPricesForPicks(
       : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
-  const draftPriceBySymbol = new Map<string, number>();
-  for (const pick of picks) {
-    const symbol = pick.symbol.toUpperCase();
-    if (pick.price_at_pick > 0 && !draftPriceBySymbol.has(symbol)) {
-      draftPriceBySymbol.set(symbol, pick.price_at_pick);
-    }
-  }
-
+  // A failed quote must leave the symbol absent, never substitute the
+  // draft-day price. Substituting produces a real-looking number that passes
+  // every downstream guard and then gets persisted as a baseline, silently
+  // scoring the week against a months-old price. Callers that persist must
+  // skip a missing symbol; callers that only display may fall back themselves.
   const prices = new Map<string, number>();
   for (const pick of picks) {
     const symbol = pick.symbol.toUpperCase();
     if (prices.has(symbol)) continue;
 
-    if (isCryptoSymbol(symbol)) {
-      const livePrice = cryptoQuotes[symbol]?.price ?? 0;
-      prices.set(
-        symbol,
-        livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
-      );
-    } else {
-      const livePrice = stockQuotes.get(symbol)?.price ?? 0;
-      prices.set(
-        symbol,
-        livePrice > 0 ? livePrice : (draftPriceBySymbol.get(symbol) ?? 0)
-      );
-    }
+    const livePrice = isCryptoSymbol(symbol)
+      ? (cryptoQuotes[symbol]?.price ?? 0)
+      : (stockQuotes.get(symbol)?.price ?? 0);
+
+    if (livePrice > 0) prices.set(symbol, livePrice);
   }
 
   return prices;
@@ -291,10 +280,7 @@ async function computeScoringWeekInputs(
       const baseline = refreshedBaselines.get(pick.id);
       const weekOpenValue =
         baseline?.valueAtOpen ??
-        pickMarketValue(
-          pick,
-          livePrices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
-        );
+        pickMarketValue(pick, livePrices.get(pick.symbol.toUpperCase()) ?? 0);
       const currentValue =
         !useHybrid &&
         baseline?.valueAtClose != null &&
@@ -338,7 +324,7 @@ export async function captureFridayStockCloseForUser(
 
     const closeValue = pickMarketValue(
       pick,
-      livePrices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
+      livePrices.get(pick.symbol.toUpperCase()) ?? 0
     );
 
     if (!isTrustworthyBaselineValue(pick, closeValue)) continue;
@@ -450,39 +436,20 @@ export async function captureWeekBaselinesForUser(
       ? await fetchPricesForPicks(picksNeedingLivePrice)
       : new Map<string, number>();
 
-  const rows = picks.flatMap((pick) => {
-    const carried = priorCloseByPick.get(pick.id);
-    const value =
-      carried != null
-        ? carried
-        : pickMarketValue(
-            pick,
-            prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
-          );
-    if (!isTrustworthyBaselineValue(pick, value)) return [];
-    return [
-      {
-        league_id: leagueId,
-        user_id: userId,
-        week_number: weekNumber,
-        pick_id: pick.id,
-        value_at_open: value,
-      },
-    ];
-  });
-
-  if (rows.length === 0) return;
-
-  // Never clobber an existing row's value_at_open — a pick may already have
-  // a true acquisition-time baseline written by applyIrSwapWeekBaselines /
-  // applyIrMoveWeekBaselines. Re-running this opportunistically (triggered by
-  // a sibling pick's missing baseline) must only fill in what's missing, or
-  // it silently overwrites the real open value with whatever price is live
-  // at the moment it happens to re-run.
-  await supabase.from("roster_week_baselines").upsert(rows, {
-    onConflict: "league_id,user_id,week_number,pick_id",
-    ignoreDuplicates: true,
-  });
+  // Capture opening value for each pick using canonical function.
+  // The function enforces: never clobber existing value, only write if trustworthy.
+  for (const pick of picks) {
+    const priorClose = priorCloseByPick.get(pick.id) ?? null;
+    const livePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
+    await captureOpeningValueForPick(
+      supabase,
+      "roster_week_baselines",
+      { league_id: leagueId, user_id: userId, week_number: weekNumber, pick_id: pick.id },
+      pick,
+      priorClose,
+      livePrice
+    );
+  }
 }
 
 export async function captureWeekBaselinesForLeague(
@@ -566,33 +533,19 @@ async function captureWeekBaselinesForUserCarryingForward(
       ? await fetchPricesForPicks(picksNeedingLivePrice)
       : new Map<string, number>();
 
-  const rows = picks.flatMap((pick) => {
-    const carried = priorCloseByPick.get(pick.id);
-    const value =
-      carried != null
-        ? carried
-        : pickMarketValue(
-            pick,
-            livePrices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
-          );
-    if (!isTrustworthyBaselineValue(pick, value)) return [];
-    return [
-      {
-        league_id: leagueId,
-        user_id: userId,
-        week_number: weekNumber,
-        pick_id: pick.id,
-        value_at_open: value,
-      },
-    ];
-  });
-
-  if (rows.length === 0) return;
-
-  await supabase.from("roster_week_baselines").upsert(rows, {
-    onConflict: "league_id,user_id,week_number,pick_id",
-    ignoreDuplicates: true,
-  });
+  // Capture opening value for each pick using canonical function
+  for (const pick of picks) {
+    const priorClose = priorCloseByPick.get(pick.id) ?? null;
+    const livePrice = livePrices.get(pick.symbol.toUpperCase()) ?? 0;
+    await captureOpeningValueForPick(
+      supabase,
+      "roster_week_baselines",
+      { league_id: leagueId, user_id: userId, week_number: weekNumber, pick_id: pick.id },
+      pick,
+      priorClose,
+      livePrice
+    );
+  }
 }
 
 /**
@@ -692,47 +645,25 @@ export async function captureWeekCloseSnapshots(
     }
 
     for (const pick of picks) {
-      const closeValue = pickMarketValue(
+      const closePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
+
+      // Ensure opening exists (fills gap if missing) before capturing close
+      await captureOpeningValueForPick(
+        supabase,
+        "roster_week_baselines",
+        { league_id: leagueId, user_id: draft.user_id, week_number: weekNumber, pick_id: pick.id },
         pick,
-        prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
+        null, // no prior close context at this point
+        closePrice // use close price as fallback for opening if missing
       );
 
-      if (!isTrustworthyBaselineValue(pick, closeValue)) continue;
-
-      const { data: existing } = await supabase
-        .from("roster_week_baselines")
-        .select("value_at_open, value_at_close")
-        .eq("league_id", leagueId)
-        .eq("user_id", draft.user_id)
-        .eq("week_number", weekNumber)
-        .eq("pick_id", pick.id)
-        .maybeSingle();
-
-      const openValue = existing?.value_at_open ?? closeValue;
-      const existingClose =
-        existing?.value_at_close != null
-          ? Number(existing.value_at_close)
-          : null;
-
-      // Never replace a real close with a flattened fallback (open == close).
-      if (
-        existingClose != null &&
-        existingClose !== Number(openValue) &&
-        closeValue === Number(openValue)
-      ) {
-        continue;
-      }
-
-      await supabase.from("roster_week_baselines").upsert(
-        {
-          league_id: leagueId,
-          user_id: draft.user_id,
-          week_number: weekNumber,
-          pick_id: pick.id,
-          value_at_open: openValue,
-          value_at_close: closeValue,
-        },
-        { onConflict: "league_id,user_id,week_number,pick_id" }
+      // Now capture the close using canonical function
+      await captureClosingValueForPick(
+        supabase,
+        "roster_week_baselines",
+        { league_id: leagueId, user_id: draft.user_id, week_number: weekNumber, pick_id: pick.id },
+        pick,
+        closePrice
       );
     }
   }

@@ -602,20 +602,47 @@ export async function applyWaiverClaim(
 
   const supabase = await createClient();
 
+  // The claim inherits the dropped holding's current value — the manager is
+  // swapping what a slot holds, not liquidating it. An genuinely empty slot
+  // (__OPEN__) has nothing to inherit and stays at zero until IR promotes
+  // value into it.
+  let transferBudget = 0;
+  if (!isOpenSlot && targetPick.shares > 0) {
+    const droppedQuote = await getStockQuote(droppedSymbol);
+    if (droppedQuote.price > 0) {
+      transferBudget = targetPick.shares * droppedQuote.price;
+    }
+  }
+  const inheritedShares =
+    transferBudget > 0 ? computeSharesFromBudget(transferBudget, quote.price) : 0;
+
   const patchResult = await patchDraftPick(supabase, userId, targetPick.id, {
     symbol: upper,
     pick_type: isOpenStockClaim ? "stock" : "bench",
-    budget_spent: 0,
-    effective_value: 0,
-    shares: 0,
+    budget_spent: transferBudget,
+    effective_value: transferBudget,
+    shares: inheritedShares,
     price_at_pick: quote.price,
     acquired_via: "waiver",
   });
   if (patchResult.error) return patchResult;
 
-  // Fresh slate: the slot now holds a different symbol at $0 — the old
-  // symbol's baselines would otherwise show phantom losses/gains.
-  await clearPickWeekBaselines(supabase, league.id, userId, targetPick.id);
+  // Dollars transfer 1:1, so the slot's baseline history stays continuous
+  // across the symbol change — the week reads as the dropped stock's move up
+  // to the claim plus the claimed stock's move after it. Only a slot that
+  // inherited nothing starts fresh.
+  if (transferBudget > 0) {
+    await setPickWeekBaseline(
+      supabase,
+      league.id,
+      userId,
+      await getCurrentWeek(supabase, league.id, userId),
+      targetPick.id,
+      transferBudget
+    );
+  } else {
+    await clearPickWeekBaselines(supabase, league.id, userId, targetPick.id);
+  }
 
   const addedCount = await countLeagueRosteredSymbol(league.id, upper);
   if (addedCount < 1) {

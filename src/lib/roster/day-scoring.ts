@@ -4,11 +4,14 @@ import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   fetchPricesForPicks,
-  isTrustworthyBaselineValue,
   pickMarketValue,
 } from "@/lib/roster/weekly";
 import { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
 import { filterScoringRosterPicks } from "@/lib/roster/crypto-picks";
+import {
+  captureOpeningValueForPick,
+  captureClosingValueForPick,
+} from "@/lib/scoring/canonical";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -106,33 +109,19 @@ export async function ensureDayBaselinesForUser(
       ? await fetchPricesForPicks(picksNeedingLivePrice)
       : new Map<string, number>();
 
-  const rows = missingPicks.flatMap((pick) => {
-    const carried = priorCloseByPick.get(pick.id);
-    const value =
-      carried != null
-        ? carried
-        : pickMarketValue(
-            pick,
-            prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
-          );
-    if (!isTrustworthyBaselineValue(pick, value)) return [];
-    return [
-      {
-        league_id: leagueId,
-        user_id: userId,
-        game_date: gameDate,
-        pick_id: pick.id,
-        value_at_open: value,
-      },
-    ];
-  });
-
-  if (rows.length === 0) return;
-
-  await supabase.from("roster_day_baselines").upsert(rows, {
-    onConflict: "league_id,user_id,game_date,pick_id",
-    ignoreDuplicates: true,
-  });
+  // Capture opening value for each pick using canonical function
+  for (const pick of missingPicks) {
+    const priorClose = priorCloseByPick.get(pick.id) ?? null;
+    const livePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
+    await captureOpeningValueForPick(
+      supabase,
+      "roster_day_baselines",
+      { league_id: leagueId, user_id: userId, game_date: gameDate, pick_id: pick.id },
+      pick,
+      priorClose,
+      livePrice
+    );
+  }
 }
 
 /** Snapshots today's live price as this game's close, for every league member — call at a game's finalize_at. */
@@ -158,33 +147,25 @@ export async function captureDayCloseForLeague(
     const prices = await fetchPricesForPicks(picks);
 
     for (const pick of picks) {
-      const closeValue = pickMarketValue(
+      const closePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
+
+      // Ensure opening exists (fills gap if missing) before capturing close
+      await captureOpeningValueForPick(
+        supabase,
+        "roster_day_baselines",
+        { league_id: leagueId, user_id: draft.user_id, game_date: gameDate, pick_id: pick.id },
         pick,
-        prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
+        null, // no prior close context at this point
+        closePrice // use close price as fallback for opening if missing
       );
-      if (!isTrustworthyBaselineValue(pick, closeValue)) continue;
 
-      const { data: existing } = await supabase
-        .from("roster_day_baselines")
-        .select("value_at_open")
-        .eq("league_id", leagueId)
-        .eq("user_id", draft.user_id)
-        .eq("game_date", gameDate)
-        .eq("pick_id", pick.id)
-        .maybeSingle();
-
-      const openValue = existing?.value_at_open ?? closeValue;
-
-      await supabase.from("roster_day_baselines").upsert(
-        {
-          league_id: leagueId,
-          user_id: draft.user_id,
-          game_date: gameDate,
-          pick_id: pick.id,
-          value_at_open: openValue,
-          value_at_close: closeValue,
-        },
-        { onConflict: "league_id,user_id,game_date,pick_id" }
+      // Now capture the close using canonical function
+      await captureClosingValueForPick(
+        supabase,
+        "roster_day_baselines",
+        { league_id: leagueId, user_id: draft.user_id, game_date: gameDate, pick_id: pick.id },
+        pick,
+        closePrice
       );
     }
   }
@@ -218,20 +199,19 @@ export async function computeGameScorePercentForUser(
 
   const scoringInputs = picks.map((pick) => {
     const baseline = baselineByPick.get(pick.id);
+    // A missing quote scores the pick flat rather than against its draft-day
+    // price, which would report a months-old move as today's game.
+    const livePrice = prices.get(pick.symbol.toUpperCase()) ?? 0;
     const weekOpenValue =
       baseline?.value_at_open != null
         ? Number(baseline.value_at_open)
-        : pickMarketValue(
-            pick,
-            prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
-          );
+        : pickMarketValue(pick, livePrice);
     const currentValue =
       baseline?.value_at_close != null
         ? Number(baseline.value_at_close)
-        : pickMarketValue(
-            pick,
-            prices.get(pick.symbol.toUpperCase()) ?? pick.price_at_pick
-          );
+        : livePrice > 0
+          ? pickMarketValue(pick, livePrice)
+          : weekOpenValue;
     return { pickId: pick.id, currentValue, weekOpenValue };
   });
 

@@ -1,3 +1,5 @@
+import { computeScorePercent } from "@/lib/scoring/math";
+
 export function computeWeekDollarGain(
   currentValue: number,
   valueAtOpen: number
@@ -9,8 +11,7 @@ export function computeWeekGainPercent(
   currentValue: number,
   valueAtOpen: number
 ): number {
-  if (valueAtOpen <= 0) return 0;
-  return ((currentValue - valueAtOpen) / valueAtOpen) * 100;
+  return computeScorePercent(currentValue, valueAtOpen);
 }
 
 export function computeScoringWeekGainPercent(
@@ -24,6 +25,5 @@ export function computeScoringWeekGainPercent(
     currentTotal += pick.currentValue;
   }
 
-  if (openTotal <= 0) return 0;
-  return ((currentTotal - openTotal) / openTotal) * 100;
+  return computeScorePercent(currentTotal, openTotal);
 }

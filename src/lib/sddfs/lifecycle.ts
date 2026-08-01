@@ -8,6 +8,7 @@ import {
 import { fetchLiveSddfsQuotes } from "@/lib/sddfs/live-quotes";
 import { createServiceClient } from "@/lib/supabase/service";
 import { finalizeSddfsContest } from "@/lib/sddfs/scoring";
+import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -57,7 +58,17 @@ async function lockDueContests(
     const prices = await fetchLiveSddfsQuotes(symbols);
 
     for (const pick of picks ?? []) {
-      const openPrice = prices[pick.symbol.toUpperCase()] ?? 0;
+      const openPrice = prices[pick.symbol.toUpperCase()];
+
+      // Never persist a baseline we don't trust — every later score is
+      // measured against it. Leaving it null scores the pick neutral.
+      if (!isUsableQuote(openPrice)) {
+        console.error(
+          `[sddfs] no usable open quote for ${pick.symbol} (pick ${pick.id}); leaving baseline unset`
+        );
+        continue;
+      }
+
       await supabase
         .from("sddfs_entry_picks")
         .update({ open_price: openPrice })
@@ -118,14 +129,21 @@ async function scoreClosedContests(
       const prices = await fetchLiveSddfsQuotes(symbols);
 
       for (const pick of picks ?? []) {
-        const closePrice = prices[pick.symbol.toUpperCase()] ?? 0;
-        const openPrice = pick.open_price ?? 0;
-        const pctChange =
-          openPrice > 0 ? ((closePrice - openPrice) / openPrice) * 100 : 0;
+        const closePrice = prices[pick.symbol.toUpperCase()];
+        const pctChange = safePctChange(pick.open_price, closePrice);
+
+        if (pctChange === null) {
+          console.error(
+            `[sddfs] unscoreable pick ${pick.id} (${pick.symbol}): open=${pick.open_price} close=${closePrice}; scoring neutral`
+          );
+        }
 
         await supabase
           .from("sddfs_entry_picks")
-          .update({ close_price: closePrice, pct_change: pctChange })
+          .update({
+            close_price: isUsableQuote(closePrice) ? closePrice : null,
+            pct_change: pctChange,
+          })
           .eq("id", pick.id);
       }
     }
