@@ -817,7 +817,10 @@ function RosterBlock({
           <p className="text-sm text-muted p-4">No picks in this slot.</p>
         ) : (
           picks.map((pick) => (
-            <div key={pick.id} className="season-roster-row">
+            <div
+              key={pick.id}
+              className={`season-roster-row${pick.irEligible ? " season-roster-row--injured" : ""}`}
+            >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-semibold">
@@ -825,12 +828,19 @@ function RosterBlock({
                       ? "Empty slot"
                       : pick.symbol}
                   </p>
+                  {pick.irEligible && (
+                    <span className="season-injury-badge">INJURED</span>
+                  )}
                   {pick.symbol.toUpperCase() !== "__OPEN__" && (
                     <StockDetailChartButton symbol={pick.symbol} />
                   )}
                 </div>
-                <p className="text-xs text-muted">
-                  {pick.symbol.toUpperCase() === "__OPEN__"
+                <p
+                  className={`text-xs ${pick.irEligible ? "season-injury-note" : "text-muted"}`}
+                >
+                  {pick.irEligible
+                    ? "Player on IR · bench it or score a zero"
+                    : pick.symbol.toUpperCase() === "__OPEN__"
                     ? "Released to free agency"
                     : pick.pick_type === "bench" && pick.budget_spent === 0
                     ? pick.acquired_via === "waiver"
