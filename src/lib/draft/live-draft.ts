@@ -166,6 +166,44 @@ async function isLeagueBotUser(
   return Boolean(data?.bot_personality);
 }
 
+async function loadLeagueBotUsers(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leagueId: string,
+  userIds: string[]
+): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+
+  const knownBots = new Set<string>();
+  for (const userId of userIds) {
+    if (BOT_BY_ID.has(userId)) {
+      result.set(userId, true);
+      knownBots.add(userId);
+    }
+  }
+
+  const remaining = userIds.filter((id) => !knownBots.has(id));
+  if (remaining.length > 0) {
+    const { data: members } = await supabase
+      .from("league_members")
+      .select("user_id, bot_personality")
+      .eq("league_id", leagueId)
+      .in("user_id", remaining);
+
+    (members ?? []).forEach((m) => {
+      result.set(m.user_id, Boolean(m.bot_personality));
+    });
+
+    // Set defaults for users not in league_members
+    for (const userId of remaining) {
+      if (!result.has(userId)) {
+        result.set(userId, false);
+      }
+    }
+  }
+
+  return result;
+}
+
 export function formatDraftEventMessage(
   teamName: string,
   roundNumber: number,
@@ -219,6 +257,59 @@ async function getTeamName(
     .maybeSingle();
 
   return profile?.team_name ?? "Unknown Team";
+}
+
+async function loadDraftOrderTeamData(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leagueId: string,
+  userIds: string[]
+): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+
+  const { data: members } = await supabase
+    .from("league_members")
+    .select("user_id, display_name")
+    .eq("league_id", leagueId)
+    .in("user_id", userIds);
+
+  const names = new Map<string, string>();
+  const missingIds = new Set(userIds);
+
+  (members ?? []).forEach((m) => {
+    if (m.display_name) {
+      names.set(m.user_id, m.display_name);
+      missingIds.delete(m.user_id);
+    }
+  });
+
+  // Fill known bots
+  for (const userId of Array.from(missingIds)) {
+    const bot = BOT_BY_ID.get(userId);
+    if (bot) {
+      names.set(userId, bot.displayName);
+      missingIds.delete(userId);
+    }
+  }
+
+  // For remaining users, fetch profiles
+  if (missingIds.size > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, team_name")
+      .in("id", Array.from(missingIds));
+
+    (profiles ?? []).forEach((p) => {
+      names.set(p.id, p.team_name ?? "Unknown Team");
+      missingIds.delete(p.id);
+    });
+  }
+
+  // Set defaults for any remaining users
+  for (const userId of Array.from(missingIds)) {
+    names.set(userId, "Unknown Team");
+  }
+
+  return names;
 }
 
 export async function getLeagueDraftStateRow(
@@ -298,19 +389,21 @@ export async function buildLiveDraftView(
       opponentType: leagueMeta.opponent_type as "all_ai" | "all_human" | "mixed",
     });
 
-  const draftOrder = await Promise.all(
-    draftOrderIds.map(async (userId) => ({
-      userId,
-      teamName: await getTeamName(supabase, leagueId, userId),
-      isBot: stealthBots
-        ? false
-        : await isLeagueBotUser(supabase, leagueId, userId),
-    }))
-  );
+  const teamNamesMap = await loadDraftOrderTeamData(supabase, leagueId, draftOrderIds);
+
+  const userIdsToCheck = stealthBots ? [] : draftOrderIds;
+  const isBotMap = await (userIdsToCheck.length > 0
+    ? loadLeagueBotUsers(supabase, leagueId, userIdsToCheck)
+    : Promise.resolve(new Map<string, boolean>()));
+
+  const draftOrder = draftOrderIds.map((userId) => ({
+    userId,
+    teamName: teamNamesMap.get(userId) ?? "Unknown Team",
+    isBot: isBotMap.get(userId) ?? false,
+  }));
 
   const onClockTeamName = state.on_clock_user_id
-    ? draftOrder.find((t) => t.userId === state.on_clock_user_id)?.teamName ??
-      (await getTeamName(supabase, leagueId, state.on_clock_user_id))
+    ? draftOrder.find((t) => t.userId === state.on_clock_user_id)?.teamName ?? null
     : null;
 
   return {
