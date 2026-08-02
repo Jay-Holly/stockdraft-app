@@ -36,7 +36,7 @@ export function tierNameForBuyIn(buyIn: number): string {
 }
 
 const WFS_LOCK_HOUR_ET = 9;
-const WFS_LOCK_MINUTE_ET = 0;
+const WFS_LOCK_MINUTE_ET = 30;
 const WFS_SCORE_HOUR_ET = 16;
 const WFS_SCORE_MINUTE_ET = 0;
 

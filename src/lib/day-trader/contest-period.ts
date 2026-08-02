@@ -90,15 +90,10 @@ export function getDayTraderUpcomingWeekBounds(now: Date = new Date()): {
   return { weekStart: nextWeekStart, weekEnd: nextWeekEnd };
 }
 
-/** Previous Friday 4:00 PM ET — entry opens for the contest week starting that Monday. */
+/** Previous Monday 10:00 AM ET — entry opens for the contest week starting that Monday. */
 export function getDayTraderEntryWindowStart(weekStart: Date): Date {
   const parts = getEasternParts(weekStart);
-  return addEasternDays(
-    parts,
-    -3,
-    Math.floor(LINEUP_LOCK_END_MINUTES / 60),
-    LINEUP_LOCK_END_MINUTES % 60
-  );
+  return addEasternDays(parts, -7, 10, 0);
 }
 
 type ContestWindowBounds = {
@@ -148,7 +143,7 @@ export function getDayTraderEntryBlockedMessage(
     return DAY_TRADER_ENTRY_MIDWEEK_CLOSED_MESSAGE;
   }
 
-  return "Entry opens Friday 4:00 PM ET for the upcoming week and closes Monday 9:30 AM ET.";
+  return "Entry opens Monday 10:00 AM ET for the upcoming week and closes Monday 9:30 AM ET.";
 }
 
 /** True during Mon 9:30 AM ET – Fri 4:00 PM ET (active trading hours). */
