@@ -220,8 +220,9 @@ export default function GameRulesPage() {
           pulling your guy because the game is out of hand.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Final scores lock Monday 6:00 AM ET. That&apos;s when the week
+          Final scores lock Friday 4:00 PM ET. That&apos;s when the week
           officially ends, winners are determined, and the next week begins.
+          <em className="text-xs text-white/70"> (For sports sim leagues SDBA/SDHL/SDLB, scores lock Sunday 4:00 PM ET to capture weekend crypto scoring.)</em>
         </p>
 
         <SectionDivider />
@@ -268,6 +269,22 @@ export default function GameRulesPage() {
           Plan your roster before Monday morning. Once the market opens,
           you&apos;re committed.
         </p>
+
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Full SDFL/SDPL Schedule:
+        </p>
+        <RulesTable
+          headers={["What", "When"]}
+          rows={[
+            ["Scoring week", "Monday 9:30 AM → Friday 4:00 PM"],
+            ["Weekend", "Prices frozen — nothing scores Sat/Sun"],
+            ["Final scores lock", "Friday 4:00 PM ET"],
+            ["Lineups locked", "Every weekday 9:30 AM – 4:00 PM"],
+            ["Lineups editable", "Weekdays after 4:00 PM + all weekend"],
+            ["Free agency open", "Saturday 9:30 AM → Monday 9:30 AM"],
+            ["Free agency closed", "Monday 9:30 AM → Saturday 9:30 AM (no adds/drops all week)"],
+          ]}
+        />
 
         <SectionDivider />
 
@@ -390,7 +407,7 @@ export default function GameRulesPage() {
             "Your 10 starting stocks are copied and reset to a flat $50,000 each ($500,000 total) — leveling the playing field for everyone",
             "Trade freely during market hours (Monday 9:30 AM – Friday 4:00 PM ET)",
             "The week resets every Monday — enter a different team if you want",
-            "Entry window: Opens Friday 4:00 PM ET (as soon as the previous week ends). Lock in your team anytime over the weekend before trading begins Monday 9:30 AM ET.",
+            "Entry window: Opens Monday 10:00 AM ET. Lock in your team anytime until Monday 9:30 AM ET the following week, then trading begins.",
           ]}
         />
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
@@ -447,11 +464,22 @@ export default function GameRulesPage() {
           ]}
         />
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Lock, scoring, and payouts:
+          Schedule:
+        </p>
+        <RulesTable
+          headers={["What", "When"]}
+          rows={[
+            ["Entry opens", "10:00 AM ET (1 hour after prior day's 9:00 AM lock)"],
+            ["Entry closes / Lineups lock", "9:00 AM ET on contest day"],
+            ["Contest runs", "9:30 AM – 4:00 PM ET, same day"],
+            ["Scored", "After 4:00 PM ET close, same day"],
+          ]}
+        />
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Scoring and payouts:
         </p>
         <BulletList
           items={[
-            "Lineups lock at 9:00 AM ET (market open) — make any last-minute swaps before then in the Free Agents panel on your entry's page",
             "Scored at 4:00 PM ET (market close) on each pick's open-to-close % change, summed across all 12 picks — highest total score wins",
             "Top 3 finishers split 50% / 30% / 20% of a prize pool equal to 92% of all buy-ins collected",
             "Ties split the pooled share evenly across every tied entry, even when a tie straddles the paid places (e.g. a 3-way tie for 2nd splits the 2nd + 3rd shares evenly across all three)",
@@ -480,7 +508,7 @@ export default function GameRulesPage() {
             "12 picks total — one stock or crypto from each of the 11 GICS sectors (Technology, Financials, Healthcare, Consumer Discretionary, Consumer Staples, Energy, Industrials, Materials, Real Estate, Utilities, Communication Services) plus one Crypto pick",
             "Picks are not exclusive — any number of players can roster the same stock or coin. It's not first-come-first-served, so draft the pick you think will actually move.",
             "One entry per contest, one contest per buy-in tier per week",
-            "Entry opens once the prior week's contest is scored (or Monday morning if there's no prior contest)",
+            "Entry opens Monday 10:00 AM for next week's contest — open for 7 days until the following Monday 9:30 AM",
           ]}
         />
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
@@ -498,11 +526,25 @@ export default function GameRulesPage() {
           ]}
         />
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Lock, scoring, and payouts:
+          Schedule:
+        </p>
+        <RulesTable
+          headers={["What", "When"]}
+          rows={[
+            ["Next week's entry opens", "Monday 10:00 AM ET"],
+            ["This week's entry closes / Lineups lock", "Monday 9:30 AM ET"],
+            ["Contest runs", "Monday 9:30 AM – Friday 4:00 PM ET"],
+            ["Scored", "Friday 4:00 PM ET"],
+          ]}
+        />
+        <p className="text-sm text-white/90 leading-relaxed mt-3 text-xs text-white/70">
+          Entry window: ~7 days (Monday 10:00 AM through following Monday 9:30 AM)
+        </p>
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Scoring and payouts:
         </p>
         <BulletList
           items={[
-            "Lineups lock at 9:00 AM ET Monday (market open) — make any last-minute swaps before then in the Free Agents panel on your entry's page",
             "Scored at 4:00 PM ET Friday (market close) on each pick's cumulative Monday-open-to-Friday-close % change, summed across all 12 picks — highest total score wins",
             "Top 3 finishers split 50% / 30% / 20% of a prize pool equal to 92% of all buy-ins collected",
             "Ties split the pooled share evenly across every tied entry, even when a tie straddles the paid places (e.g. a 3-way tie for 2nd splits the 2nd + 3rd shares evenly across all three)",
@@ -516,22 +558,28 @@ export default function GameRulesPage() {
 
         <SectionDivider />
 
-        <SectionTitle>COMING SOON — SPORTS SIM LEAGUES</SectionTitle>
+        <SectionTitle>SPORTS SIM LEAGUES — SDBA, SDHL, SDLB</SectionTitle>
         <BodyText>
-          StockDraft is expanding into sport-specific leagues that mirror real
-          professional seasons. Same game, same rules — but now add everything
-          fantasy sports is famous for. The good stuff. The infuriating stuff.
-          All of it.
+          StockDraft Sport Sim leagues mirror real professional seasons. Same game, same rules — but now add everything fantasy sports is famous for: injuries, IR slots, bye weeks, weather, bad coaching decisions. The whole nightmare. Welcome back.
         </BodyText>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Remember everything we told you StockDraft Player Leagues don&apos;t
-          have? Sports Sim leagues have all of it. On purpose. Because some of
-          you sick bastards miss the chaos.
+          The critical difference: crypto scores all weekend to account for games played Sat/Sun. Stocks freeze at Friday 4:00 PM, but crypto keeps moving through Sunday to capture the full week.
         </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Injuries. IR slots. Bye weeks. Weather. Bad coaching decisions. The
-          whole nightmare. Welcome back.
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Schedule (same for SDBA, SDHL, SDLB):
         </p>
+        <RulesTable
+          headers={["What", "When"]}
+          rows={[
+            ["Scoring week (stocks)", "Monday 9:30 AM → Friday 4:00 PM"],
+            ["Weekend", "Stocks frozen — crypto scores Sat/Sun"],
+            ["Final scores lock", "Sunday 4:00 PM ET"],
+            ["Lineups locked", "Every weekday 9:30 AM – 4:00 PM"],
+            ["Lineups editable", "Weekdays after 4:00 PM + all weekend"],
+            ["Free agency open", "Saturday 9:30 AM → Monday 9:30 AM"],
+            ["Free agency closed", "Daily 9:30 AM – 4:00 PM (trading hours only)"],
+          ]}
+        />
 
         <SectionDivider />
 
