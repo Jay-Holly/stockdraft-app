@@ -950,11 +950,15 @@ export async function scoreMatchupForLeague(
   // got captured unless that manager personally logged in, leaving their live
   // matchup scores stuck at 0.00%. Runs before the finalize gate so it
   // applies during the live week too. Idempotent (ignoreDuplicates).
-  await captureWeekBaselinesForLeague(
-    leagueId,
-    currentWeek,
-    createServiceClient()
-  );
+  let serviceClient;
+  try {
+    serviceClient = createServiceClient();
+  } catch {
+    serviceClient = null;
+  }
+  if (serviceClient) {
+    await captureWeekBaselinesForLeague(leagueId, currentWeek, serviceClient);
+  }
 
   const canFinalize = await canFinalizeLeagueWeek(leagueId, currentWeek);
   const { settings } = await loadSeasonCalendarForLeague(leagueId);
