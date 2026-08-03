@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getFinnhubService } from "@/lib/finnhub/service";
 import { getMarketSession } from "@/lib/market/hours";
 import type { MarketQuote, MarketSession } from "@/lib/market/types";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 type RosteredResponse = {
   symbols: string[];
@@ -107,15 +108,13 @@ export function useRosterLivePrices() {
     }
 
     void init();
-    const interval = window.setInterval(() => {
-      void loadRostered();
-    }, 60_000);
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
     };
   }, [loadRostered]);
+
+  useVisibilityAwareInterval(() => void loadRostered(), 60_000);
 
   useEffect(() => {
     const updateSession = () => setSession(getMarketSession());
@@ -151,15 +150,10 @@ export function useRosterLivePrices() {
     };
   }, [session, rosteredSymbols]);
 
-  useEffect(() => {
-    if (session === "live") return;
-
-    const interval = window.setInterval(() => {
-      void refreshQuotes(rosteredSymbols);
-    }, 5 * 60_000);
-
-    return () => window.clearInterval(interval);
-  }, [refreshQuotes, rosteredSymbols, session]);
+  useVisibilityAwareInterval(
+    () => void refreshQuotes(rosteredSymbols),
+    session === "live" ? null : 5 * 60_000
+  );
 
   const orderedQuotes = useMemo(
     () =>

@@ -18,6 +18,7 @@ import {
   formatFetchError,
 } from "@/lib/fetch-client";
 import { SeasonWeekNavigator } from "@/components/season/SeasonWeekNavigator";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 function formatGainStat(stat: OrderedGainStat): string {
   return stat.format === "money"
@@ -515,14 +516,12 @@ export function MatchupsPageContent({
     void load(selectedWeek ?? undefined);
   }, [load, selectedWeek]);
 
-  useEffect(() => {
-    if (!data || data.isHistorical) return;
-    const id = window.setInterval(
-      () => void load(data.viewWeek),
-      30_000
-    );
-    return () => window.clearInterval(id);
-  }, [load, data?.isHistorical, data?.viewWeek]);
+  const isLiveMatchups = Boolean(data && !data.isHistorical);
+
+  useVisibilityAwareInterval(
+    () => void load(data?.viewWeek),
+    isLiveMatchups ? 30_000 : null
+  );
 
   const focusedMatchup = useMemo(
     () => data?.matchups.find((matchup) => matchup.id === focusedMatchupId) ?? null,

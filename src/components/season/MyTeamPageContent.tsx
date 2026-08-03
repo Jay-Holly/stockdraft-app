@@ -20,6 +20,7 @@ import { SeasonWeekNavigator } from "@/components/season/SeasonWeekNavigator";
 import { SeasonCalendarBanner } from "@/components/season/SeasonCalendarBanner";
 import { RosterIrBanner } from "@/components/season/RosterIrBanner";
 import { TeamLogoBox } from "@/components/season/TeamLogoBox";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 export function MyTeamPageContent({
   initialRoster = null,
@@ -158,11 +159,12 @@ export function MyTeamPageContent({
     void load(selectedWeek ?? undefined);
   }, [load, selectedWeek]);
 
-  useEffect(() => {
-    if (!roster || roster.isHistorical) return;
-    const id = window.setInterval(() => void load(roster.viewWeek), 15_000);
-    return () => window.clearInterval(id);
-  }, [load, roster?.isHistorical, roster?.viewWeek]);
+  const isLiveRoster = Boolean(roster && !roster.isHistorical);
+
+  useVisibilityAwareInterval(
+    () => void load(roster?.viewWeek),
+    isLiveRoster ? 30_000 : null
+  );
 
   async function handleMoveToIr() {
     if (!irMoveStarterId || !irMoveSlotId) return;

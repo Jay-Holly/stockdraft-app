@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CRYPTO_LIVE_CACHE_TTL_MS } from "@/lib/coingecko/constants";
 import type { MarketQuote } from "@/lib/market/types";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 /** Match server-side CoinGecko throttle — avoid redundant /api/market/crypto polls. */
 const CLIENT_REFRESH_MS = CRYPTO_LIVE_CACHE_TTL_MS;
@@ -57,9 +58,9 @@ export function useCryptoQuotes(symbols: string[]) {
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), CLIENT_REFRESH_MS);
-    return () => window.clearInterval(interval);
   }, [refresh]);
+
+  useVisibilityAwareInterval(() => void refresh(), CLIENT_REFRESH_MS);
 
   const orderedQuotes = useMemo(
     () =>

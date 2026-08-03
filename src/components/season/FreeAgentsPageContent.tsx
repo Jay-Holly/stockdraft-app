@@ -11,6 +11,7 @@ import { DRAFT_POOL_SECTORS } from "@/lib/market/draft-pool";
 import { Button } from "@/components/Button";
 import { SeasonCalendarBanner } from "@/components/season/SeasonCalendarBanner";
 import { StockDetailChartButton } from "@/components/market/StockDetailChartButton";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 const CRYPTO_ALLOCATION_PRESETS = [10_000, 25_000, 50_000, 100_000];
 
@@ -99,9 +100,9 @@ export function FreeAgentsPageContent({
 
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => void load(), 60_000);
-    return () => window.clearInterval(id);
   }, [load]);
+
+  useVisibilityAwareInterval(() => void load(), 60_000);
 
   const claimSlots = useMemo(() => {
     if (!data) return [];

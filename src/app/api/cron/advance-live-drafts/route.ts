@@ -13,10 +13,17 @@ import { ensureLiveDraftProgress } from "@/lib/draft/live-draft";
  * deadline until someone happened to reload the page. This cron drives every
  * in-progress live draft forward on its own regardless of who's watching.
  */
-export const maxDuration = 120;
+/**
+ * Vercel fires this every minute. maxDuration must stay under that interval or
+ * a slow run is still going when the next one starts, and the overlapping runs
+ * stack up and exhaust the database's connections. Budget the work below the
+ * ceiling so a run always finishes before its successor begins.
+ */
+export const maxDuration = 50;
 export const dynamic = "force-dynamic";
 
 const MAX_LEAGUES_PER_RUN = 25;
+const RUN_BUDGET_MS = 40_000;
 
 export async function GET(request: NextRequest) {
   if (!verifyCronAuth(request)) {
@@ -26,10 +33,18 @@ export async function GET(request: NextRequest) {
   const supabase = createServiceClient();
 
   try {
+    // Only drafts whose clock has actually run out need advancing. Without this
+    // the cron re-processed every in-progress draft once a minute forever,
+    // including ones sitting on a live deadline and abandoned test leagues.
+    // A future pick_deadline_at also means another run holds the lease, so
+    // skipping those keeps concurrent runs off each other's leagues.
+    const nowIso = new Date().toISOString();
     const { data: dueStates, error } = await supabase
       .from("league_draft_state")
       .select("league_id")
       .eq("status", "in_progress")
+      .or(`pick_deadline_at.is.null,pick_deadline_at.lte.${nowIso}`)
+      .order("pick_deadline_at", { ascending: true, nullsFirst: true })
       .limit(MAX_LEAGUES_PER_RUN);
 
     if (error) {
@@ -40,8 +55,21 @@ export async function GET(request: NextRequest) {
     const leagueIds = (dueStates ?? []).map((row) => row.league_id as string);
     const errors: string[] = [];
     let advanced = 0;
+    let skipped = 0;
+
+    const startedAt = Date.now();
 
     for (const leagueId of leagueIds) {
+      // Stop before Vercel's ceiling so the run exits cleanly rather than being
+      // killed mid-league. Anything left over is still due on the next minute.
+      if (Date.now() - startedAt > RUN_BUDGET_MS) {
+        skipped = leagueIds.length - (advanced + errors.length);
+        console.warn(
+          `[advance-live-drafts] run budget reached; deferring ${skipped} league(s) to the next run.`
+        );
+        break;
+      }
+
       try {
         const result = await runWithSupabaseClient(supabase, () =>
           ensureLiveDraftProgress(leagueId, { interactive: false })
@@ -72,6 +100,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       attempted: leagueIds.length,
       advanced,
+      skipped,
       errors,
     });
   } catch (error) {

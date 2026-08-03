@@ -13,6 +13,7 @@ import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import { Button } from "@/components/Button";
 import { SPORTS_LEAGUE_FORMATS } from "@/lib/league/league-config";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 export function LeaguePageContent({
   initialData = null,
@@ -76,9 +77,9 @@ export function LeaguePageContent({
 
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => void load(), 30_000);
-    return () => window.clearInterval(id);
   }, [load]);
+
+  useVisibilityAwareInterval(() => void load(), 30_000);
 
   if (loading) {
     return <p className="text-muted text-sm py-12 text-center">Loading league…</p>;

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { PlayerDetailsModal } from "./PlayerDetailsModal";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 interface Pick {
   symbol: string;
@@ -50,10 +51,8 @@ export function ContestBigBoard({
     null
   );
 
-  useEffect(() => {
-    if (data.isFinal) return;
-
-    const interval = setInterval(async () => {
+  useVisibilityAwareInterval(() => {
+    void (async () => {
       setLoading(true);
       try {
         const resp = await fetch(`${apiBase}/contest/${contestId}/leaderboard`);
@@ -67,10 +66,8 @@ export function ContestBigBoard({
       } finally {
         setLoading(false);
       }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [contestId, data.isFinal, apiBase]);
+    })();
+  }, data.isFinal ? null : 30_000);
 
 
   const formatPct = (pct: number | null) => {

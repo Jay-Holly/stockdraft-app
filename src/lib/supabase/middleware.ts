@@ -6,6 +6,34 @@ import {
   activeLeagueCookieOptions,
 } from "@/lib/league/active-league-cookie";
 
+/**
+ * auth.getUser() is a network call on every request. When Supabase is
+ * saturated it can hang until Vercel kills the whole invocation
+ * (MIDDLEWARE_INVOCATION_TIMEOUT), which 504s every page — including public
+ * ones that never needed a user. Cap the wait instead: if auth does not answer
+ * in time we treat the visitor as signed out, so protected pages fall back to
+ * the login screen and public pages keep rendering.
+ */
+const AUTH_TIMEOUT_MS = 3000;
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  fallback: T
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -30,9 +58,17 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // .catch() sits on the inner promise so a rejection after the timeout has
+  // already resolved never surfaces as an unhandled rejection.
+  const userPromise = supabase.auth
+    .getUser()
+    .then(({ data }) => data.user ?? null)
+    .catch((error) => {
+      console.error("[middleware] auth.getUser failed:", error);
+      return null;
+    });
+
+  const user = await withTimeout(userPromise, AUTH_TIMEOUT_MS, null);
 
   const pathname = request.nextUrl.pathname;
 
