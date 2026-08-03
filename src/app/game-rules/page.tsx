@@ -278,7 +278,7 @@ export default function GameRulesPage() {
           rows={[
             ["Starters", "10 stocks", "7 stocks + 3 crypto"],
             ["Bench", "2 stocks", "3 stocks"],
-            ["Crypto Flex", "Unlimited picks", "—"],
+            ["Crypto Flex", "Up to 3 picks from $200K pool", "—"],
             ["IR Slots", "—", "3"],
             ["Total Cap", "$1,000,000", "$1,000,000"],
           ]}
