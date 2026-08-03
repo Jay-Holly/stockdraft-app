@@ -271,7 +271,24 @@ export default function GameRulesPage() {
         </p>
 
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Full SDFL/SDPL Schedule:
+          Roster Composition:
+        </p>
+        <RulesTable
+          headers={["Component", "SDPL", "SDFL (Sports Sim)"]}
+          rows={[
+            ["Starters", "10 stocks", "10 stocks"],
+            ["Bench", "2 stocks", "3 stocks"],
+            ["Crypto Flex", "Unlimited picks", "—"],
+            ["IR Slots", "—", "3"],
+            ["Total Cap", "$1,000,000", "$1,000,000"],
+          ]}
+        />
+        <p className="text-sm text-white/90 leading-relaxed mt-3">
+          <strong>Scoring:</strong> Your 10 starters + crypto flex pool score matchups. Bench spots are depth only. Crypto is always tradeable, even during market hours.
+        </p>
+
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Full Schedule:
         </p>
         <RulesTable
           headers={["What", "When"]}
@@ -464,6 +481,19 @@ export default function GameRulesPage() {
           ]}
         />
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Lineup Composition:
+        </p>
+        <RulesTable
+          headers={["Component", "Details"]}
+          rows={[
+            ["Total Picks", "12"],
+            ["Sector Picks", "One from each of 11 GICS sectors"],
+            ["Crypto Pick", "1 crypto (any coin from eligible pool)"],
+            ["Starters/Bench", "No distinction — all 12 count equally"],
+            ["Scoring", "Open-to-close % change, summed across all 12"],
+          ]}
+        />
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
           Schedule:
         </p>
         <RulesTable
@@ -476,7 +506,7 @@ export default function GameRulesPage() {
           ]}
         />
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Scoring and payouts:
+          Payouts:
         </p>
         <BulletList
           items={[
@@ -509,6 +539,19 @@ export default function GameRulesPage() {
             "Picks are not exclusive — any number of players can roster the same stock or coin. It's not first-come-first-served, so draft the pick you think will actually move.",
             "One entry per contest, one contest per buy-in tier per week",
             "Entry opens Monday 10:00 AM for next week's contest — open for 7 days until the following Monday 9:30 AM",
+          ]}
+        />
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Lineup Composition:
+        </p>
+        <RulesTable
+          headers={["Component", "Details"]}
+          rows={[
+            ["Total Picks", "12"],
+            ["Sector Picks", "One from each of 11 GICS sectors"],
+            ["Crypto Pick", "1 crypto (any coin from eligible pool)"],
+            ["Starters/Bench", "No distinction — all 12 count equally"],
+            ["Scoring", "Cumulative Monday-open to Friday-close % change, summed"],
           ]}
         />
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
@@ -565,6 +608,19 @@ export default function GameRulesPage() {
         <p className="text-sm text-white/90 leading-relaxed mt-3">
           The critical difference: crypto scores all weekend to account for games played Sat/Sun. Stocks freeze at Friday 4:00 PM, but crypto keeps moving through Sunday to capture the full week.
         </p>
+        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
+          Roster Composition (SDBA, SDHL, SDLB):
+        </p>
+        <RulesTable
+          headers={["Component", "Count", "Details"]}
+          rows={[
+            ["Starters", "10", "5 stocks + 5 crypto (fixed split)"],
+            ["Bench", "3", "Stocks or crypto — depth, don't score"],
+            ["IR Slots", "3", "Separate from roster — injured players"],
+            ["Total Picks", "13", "Rounds 1–10: starters, 11–13: bench"],
+            ["Total Cap", "$1,000,000", "$100,000 budget, $1M individual cap"],
+          ]}
+        />
         <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
           Schedule (same for SDBA, SDHL, SDLB):
         </p>
