@@ -276,7 +276,7 @@ export default function GameRulesPage() {
         <RulesTable
           headers={["Component", "SDPL", "SDFL (Sports Sim)"]}
           rows={[
-            ["Starters", "10 stocks", "10 stocks"],
+            ["Starters", "10 stocks", "7 stocks + 3 crypto"],
             ["Bench", "2 stocks", "3 stocks"],
             ["Crypto Flex", "Unlimited picks", "—"],
             ["IR Slots", "—", "3"],
