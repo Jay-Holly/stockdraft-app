@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { DfsShell } from "@/components/dfs/DfsShell";
 import { ContestBigBoard } from "@/components/dfs/ContestBigBoard";
 import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
+import { DeleteSddfsEntryButton } from "@/components/dfs/DeleteSddfsEntryButton";
 import { getDfsContestById, tierNameForBuyIn } from "@/lib/dfs/contests";
 import { getSddfsContestLeaderboard } from "@/lib/sddfs/leaderboard";
 import { createClient } from "@/lib/supabase/server";
@@ -31,6 +32,18 @@ export default async function DfsContestBoardPage({
     contestId,
     user?.id ?? null
   );
+
+  // Check if user has an entry in this contest
+  let userEntry = null;
+  if (user) {
+    const { data } = await supabase
+      .from("sddfs_entries")
+      .select("id")
+      .eq("contest_id", contestId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    userEntry = data;
+  }
 
   const contestName = tierNameForBuyIn(contest.buyIn);
 
@@ -63,15 +76,19 @@ export default async function DfsContestBoardPage({
 
         {!isFinal && (
           <div className="bg-gold/10 border border-gold/20 rounded-xl p-4">
-            <p className="text-sm text-gold">
-              Want to enter an upcoming contest?{" "}
-              <Link
-                href="/stockdraft-dfs"
-                className="font-semibold hover:underline"
-              >
-                Go to the lobby →
-              </Link>
-            </p>
+            {userEntry ? (
+              <DeleteSddfsEntryButton entryId={userEntry.id} />
+            ) : (
+              <p className="text-sm text-gold">
+                Want to enter an upcoming contest?{" "}
+                <Link
+                  href="/stockdraft-dfs"
+                  className="font-semibold hover:underline"
+                >
+                  Go to the lobby →
+                </Link>
+              </p>
+            )}
           </div>
         )}
 

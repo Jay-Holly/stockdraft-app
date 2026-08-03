@@ -18,6 +18,8 @@ export type RosterPickView = DraftPick & {
   scores: boolean;
   /** Sports-sim starters only: whether this pick is IR-eligible this week. */
   irEligible?: boolean;
+  /** Company name from Finnhub. */
+  companyName?: string;
 };
 
 export type RosterView = {

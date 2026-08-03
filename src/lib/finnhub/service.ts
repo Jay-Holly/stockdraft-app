@@ -25,6 +25,12 @@ export type FinnhubSearchResult = {
   mic?: string;
 };
 
+export type FinnhubCompanyProfile = {
+  name?: string;
+  symbol?: string;
+  [key: string]: unknown;
+};
+
 const US_MICS = new Set(["XNYS", "XNAS", "ARCX", "BATS", "XASE"]);
 
 function getFinnhubKey(): string | undefined {
@@ -327,4 +333,60 @@ export async function searchFinnhubSymbols(
           : "Finnhub search failed — try again.",
     };
   }
+}
+
+export async function fetchFinnhubCompanyProfiles(
+  symbols: readonly string[]
+): Promise<Record<string, string>> {
+  const token = getFinnhubKey();
+  if (!token || symbols.length === 0) return {};
+
+  const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
+  const names: Record<string, string> = {};
+
+  const batchSize = 8;
+
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const batch = unique.slice(i, i + batchSize);
+
+    for (const symbol of batch) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const response = await fetchWithTimeout(
+            `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${token}`,
+            { cache: "default", timeoutMs: 5000 }
+          );
+
+          if (response.status === 429) {
+            console.error(`Finnhub profile rate limited for ${symbol}`);
+            await sleep(500);
+            continue;
+          }
+
+          if (!response.ok) {
+            console.error(
+              `Finnhub profile failed for ${symbol}: HTTP ${response.status}`
+            );
+            await sleep(200);
+            continue;
+          }
+
+          const data = (await response.json()) as FinnhubCompanyProfile;
+          if (data.name) {
+            names[symbol] = data.name;
+          }
+          break;
+        } catch (err) {
+          console.error(`Finnhub profile error for ${symbol}:`, err);
+          await sleep(200);
+        }
+      }
+    }
+
+    if (i + batchSize < unique.length) {
+      await sleep(150);
+    }
+  }
+
+  return names;
 }

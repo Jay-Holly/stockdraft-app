@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { WfsShell } from "@/components/dfs/WfsShell";
 import { ContestBigBoard } from "@/components/dfs/ContestBigBoard";
 import { SdwfsRulesButton } from "@/components/wfs/SdwfsRulesButton";
+import { DeleteSdwfsEntryButton } from "@/components/wfs/DeleteSdwfsEntryButton";
 import {
   formatWfsContestWeekLabel,
   getWfsContestById,
@@ -35,6 +36,18 @@ export default async function WfsContestBoardPage({
     contestId,
     user?.id ?? null
   );
+
+  // Check if user has an entry in this contest
+  let userEntry = null;
+  if (user) {
+    const { data } = await supabase
+      .from("sdwfs_entries")
+      .select("id")
+      .eq("contest_id", contestId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    userEntry = data;
+  }
 
   const contestName = tierNameForBuyIn(contest.buyIn);
 
@@ -68,15 +81,19 @@ export default async function WfsContestBoardPage({
 
         {!isFinal && (
           <div className="bg-gold/10 border border-gold/20 rounded-xl p-4">
-            <p className="text-sm text-gold">
-              Want to enter next week&apos;s contests?{" "}
-              <Link
-                href="/stockdraft-wfs"
-                className="font-semibold hover:underline"
-              >
-                Go to the lobby →
-              </Link>
-            </p>
+            {userEntry ? (
+              <DeleteSdwfsEntryButton entryId={userEntry.id} />
+            ) : (
+              <p className="text-sm text-gold">
+                Want to enter next week&apos;s contests?{" "}
+                <Link
+                  href="/stockdraft-wfs"
+                  className="font-semibold hover:underline"
+                >
+                  Go to the lobby →
+                </Link>
+              </p>
+            )}
           </div>
         )}
 

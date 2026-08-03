@@ -823,11 +823,16 @@ function RosterBlock({
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold">
-                    {pick.symbol.toUpperCase() === "__OPEN__"
-                      ? "Empty slot"
-                      : pick.symbol}
-                  </p>
+                  <div>
+                    <p className="font-semibold">
+                      {pick.symbol.toUpperCase() === "__OPEN__"
+                        ? "Empty slot"
+                        : pick.symbol}
+                    </p>
+                    {pick.companyName && pick.symbol.toUpperCase() !== "__OPEN__" && (
+                      <p className="text-xs text-muted">{pick.companyName}</p>
+                    )}
+                  </div>
                   {pick.irEligible && (
                     <span className="season-injury-badge">INJURED</span>
                   )}

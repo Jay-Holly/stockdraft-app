@@ -7,6 +7,7 @@ import { PageWatermark } from "@/components/PageWatermark";
 import { DayTraderEnterForm } from "@/components/day-trader/DayTraderEnterForm";
 import { DayTraderLeaderboardLinks } from "@/components/day-trader/DayTraderLeaderboardLinks";
 import { DayTraderRulesButton } from "@/components/day-trader/DayTraderRulesButton";
+import { DeleteDayTraderEntryButton } from "@/components/day-trader/DeleteDayTraderEntryButton";
 import { DayTraderTradingPanel } from "@/components/day-trader/DayTraderTradingPanel";
 import {
   DAY_TRADER_STARTING_VALUE,
@@ -234,11 +235,14 @@ export default async function DayTraderPage() {
 
         {context.entry && portfolio ? (
           <div className="space-y-3">
-            <p className="text-xs text-muted text-center">
-              Starters from {context.entry.source_league_name ?? "your league"} ·
-              ${DAY_TRADER_STARTING_VALUE.toLocaleString()} starting value
-              {!context.tradingOpen ? " · portfolio locked until trading opens" : ""}
-            </p>
+            <div className="flex items-center justify-between text-xs text-muted">
+              <span>
+                Starters from {context.entry.source_league_name ?? "your league"} ·
+                ${DAY_TRADER_STARTING_VALUE.toLocaleString()} starting value
+                {!context.tradingOpen ? " · portfolio locked until trading opens" : ""}
+              </span>
+              <DeleteDayTraderEntryButton entryId={context.entry.id} />
+            </div>
             <DayTraderTradingPanel
               initialPortfolio={portfolio}
               canTrade={context.canTrade}

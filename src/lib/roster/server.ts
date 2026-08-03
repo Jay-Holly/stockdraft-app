@@ -67,6 +67,7 @@ import {
   getCryptoQuotesMap,
   getStockQuote,
 } from "@/lib/roster/quotes";
+import { fetchFinnhubCompanyProfiles } from "@/lib/finnhub/service";
 import {
   computePickSeasonMetrics,
   computeTeamSeasonMetrics,
@@ -173,11 +174,12 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
     .map((p) => p.symbol);
   const needsCrypto = picks.some((p) => isCryptoSymbol(p.symbol));
 
-  const [stockQuotes, cryptoQuotes] = await Promise.all([
+  const [stockQuotes, cryptoQuotes, companyNames] = await Promise.all([
     fetchStockQuotes(stockSymbols),
     needsCrypto
       ? getCryptoQuotesMap()
       : Promise.resolve({} as Record<string, CryptoQuote>),
+    fetchFinnhubCompanyProfiles(stockSymbols),
   ]);
 
   return picks.map((pick) => {
@@ -196,6 +198,7 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
         seasonDollarGain: 0,
         seasonOpenValue: 0,
         scores: false,
+        companyName: undefined,
       };
     }
 
@@ -239,6 +242,7 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
       seasonDollarGain: 0,
       seasonOpenValue: 0,
       scores,
+      companyName: companyNames[symbol],
     };
   });
 }

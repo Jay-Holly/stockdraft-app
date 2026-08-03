@@ -3,6 +3,7 @@ import "server-only";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import type { DraftPick } from "@/lib/draft/types";
 import { getSeasonWeekContext } from "@/lib/league/season-weeks";
+import { isUsMarketOpen } from "@/lib/market/hours";
 import {
   computeWeekDollarGain,
   computeWeekGainPercent,
@@ -102,6 +103,7 @@ export async function buildDayTraderPositionGainMetrics(
     sourceLeagueId
   );
   const metrics: Record<string, DayTraderPositionGainMetrics> = {};
+  const marketOpen = isUsMarketOpen();
 
   for (const position of positions) {
     const symbol = position.symbol.toUpperCase();
@@ -114,12 +116,10 @@ export async function buildDayTraderPositionGainMetrics(
     const weekOpenValue = weekOpenPrice > 0 ? position.shares * weekOpenPrice : 0;
 
     metrics[symbol] = {
-      dailyGainPercent: changePercent,
-      dailyDollarGain: computeDailyDollarGain(
-        position.shares,
-        price,
-        prevClose
-      ),
+      dailyGainPercent: marketOpen ? changePercent : 0,
+      dailyDollarGain: marketOpen
+        ? computeDailyDollarGain(position.shares, price, prevClose)
+        : 0,
       weekDollarGain: computeWeekDollarGain(currentValue, weekOpenValue),
       weekGainPercent: computeWeekGainPercent(currentValue, weekOpenValue),
     };
