@@ -73,7 +73,13 @@ export async function fetchCachedCryptoQuotes(
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
   if (unique.length === 0) return {};
 
-  const supabase = createServiceClient();
+  let supabase;
+  try {
+    supabase = createServiceClient();
+  } catch {
+    return {};
+  }
+
   const { data, error } = await supabase
     .from("crypto_prices")
     .select("symbol, price, change_percent, updated_at")
@@ -91,7 +97,13 @@ export async function fetchCachedCryptoQuotes(
 export async function fetchAllCachedCryptoQuotes(): Promise<
   Record<string, CachedQuote>
 > {
-  const supabase = createServiceClient();
+  let supabase;
+  try {
+    supabase = createServiceClient();
+  } catch {
+    return {};
+  }
+
   const { data, error } = await supabase
     .from("crypto_prices")
     .select("symbol, price, change_percent, updated_at");
