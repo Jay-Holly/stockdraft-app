@@ -52,7 +52,13 @@ export async function fetchCachedStockQuotes(
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
   if (unique.length === 0) return {};
 
-  const supabase = createServiceClient();
+  let supabase;
+  try {
+    supabase = createServiceClient();
+  } catch {
+    return {};
+  }
+
   const { data, error } = await supabase
     .from("stock_prices")
     .select("symbol, price, change_percent, updated_at")
