@@ -112,11 +112,18 @@ export function resolveSeasonSettings(
     };
   }
 
+  const weekCalendar = parseWeekCalendar(row.week_calendar);
+  // beta_daily requires a valid week_calendar; fall back to standard if missing
+  const seasonFormat =
+    row.season_format === "beta_daily" && !weekCalendar
+      ? "standard"
+      : row.season_format;
+
   return {
     rulesApply: true,
-    seasonFormat: row.season_format,
+    seasonFormat,
     regularSeasonWeeks: row.regular_season_weeks,
-    weekCalendar: parseWeekCalendar(row.week_calendar),
+    weekCalendar,
   };
 }
 
