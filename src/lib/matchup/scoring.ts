@@ -1138,6 +1138,12 @@ export async function ensureAiLeagueReadyForMatchups(
     ? allLeagues.filter((league) => league.id === scopeLeagueId)
     : allLeagues;
   const supabase = await createClient();
+  let serviceClient;
+  try {
+    serviceClient = createServiceClient();
+  } catch {
+    // Service client unavailable, will fall back to authenticated client
+  }
   let lastError: string | undefined;
 
   for (const league of leagues) {
@@ -1154,7 +1160,7 @@ export async function ensureAiLeagueReadyForMatchups(
         .eq("league_id", league.id);
 
       if (!count || count === 0) {
-        const result = await activateAiLeagueSchedule(league.id, userId);
+        const result = await activateAiLeagueSchedule(league.id, userId, serviceClient ?? undefined);
         if (result.error) lastError = result.error;
       }
       continue;
@@ -1171,7 +1177,7 @@ export async function ensureAiLeagueReadyForMatchups(
     }
     if (humanState.state.draft.status !== "complete") continue;
 
-    const result = await activateAiLeagueSchedule(league.id, userId);
+    const result = await activateAiLeagueSchedule(league.id, userId, serviceClient ?? undefined);
     if (result.error) lastError = result.error;
   }
 
@@ -1180,7 +1186,8 @@ export async function ensureAiLeagueReadyForMatchups(
 
 export async function ensureHumanLeagueReadyForMatchups(
   userId: string,
-  scopeLeagueId?: string
+  scopeLeagueId?: string,
+  serviceClient?: ReturnType<typeof createServiceClient>
 ): Promise<{ error?: string }> {
   const { listHumanLeaguesForUser } = await import("@/lib/league/human-league");
 
@@ -1189,6 +1196,14 @@ export async function ensureHumanLeagueReadyForMatchups(
     ? allHumanLeagues.filter((item) => item.league.id === scopeLeagueId)
     : allHumanLeagues;
   const supabase = await createClient();
+  let admin = serviceClient;
+  if (!admin) {
+    try {
+      admin = createServiceClient();
+    } catch {
+      // Service client unavailable, will fall back to authenticated client
+    }
+  }
   let lastError: string | undefined;
 
   for (const item of humanLeagues) {

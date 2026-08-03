@@ -315,9 +315,18 @@ export async function deleteAiLeagueForUser(
 
 export async function activateAiLeagueSchedule(
   leagueId: string,
-  humanUserId: string
+  humanUserId: string,
+  serviceClient?: ReturnType<typeof createServiceClient>
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
+  let admin = serviceClient;
+  if (!admin) {
+    try {
+      admin = createServiceClient();
+    } catch {
+      // Service client unavailable, will fall back to authenticated client
+    }
+  }
 
   const { count } = await supabase
     .from("league_matchups")
@@ -402,7 +411,7 @@ export async function activateAiLeagueSchedule(
       sportsLeagueId: leagueMeta?.sports_league_id,
     })
   ) {
-    await ensureIrSlotsForLeague(supabase, leagueId);
+    await ensureIrSlotsForLeague(admin ?? supabase, leagueId);
   }
 
   await captureWeekBaselinesForLeague(leagueId, 1);
