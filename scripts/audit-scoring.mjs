@@ -176,6 +176,10 @@ async function main() {
   }
 
   // Recompute a team's week from the baselines stored beneath it.
+  // Leagues score in percent or in dollars (leagues.scoring_mode), so return
+  // both and let the caller compare in the league's own unit — comparing a
+  // percentage against a dollar score reports every game in a dollar_gain
+  // league as broken when nothing is wrong.
   const recompute = (leagueId, userId, week) => {
     const rows = (byWeek.get(weekKey(leagueId, userId, week)) ?? []).filter(
       contributes
@@ -183,14 +187,24 @@ async function main() {
     let open = 0;
     let close = 0;
     let n = 0;
+    let missingClose = 0;
     for (const b of rows) {
-      if (b.value_at_open == null || b.value_at_close == null) continue;
+      if (b.value_at_open == null || b.value_at_close == null) {
+        if (b.value_at_open != null) missingClose++;
+        continue;
+      }
       open += Number(b.value_at_open);
       close += Number(b.value_at_close);
       n++;
     }
-    return n === 0 ? null : { pct: pct(open, close), n };
+    return n === 0
+      ? null
+      : { pct: pct(open, close), dollars: close - open, n, missingClose };
   };
+
+  const scoringModeByLeague = new Map(
+    leagues.map((l) => [l.id, l.scoring_mode === "dollar_gain" ? "dollar" : "percent"])
+  );
 
   // 2-4. Finalized games versus their own data.
   const finals = scopedMatchups.filter(
@@ -213,14 +227,31 @@ async function main() {
     const home = recompute(m.league_id, m.home_user_id, m.week_number);
     const away = recompute(m.league_id, m.away_user_id, m.week_number);
 
-    if (!home || !away || home.pct == null || away.pct == null) {
+    if (!home || !away) {
       findings.orphans.push({ league: m.league_id, week: m.week_number });
       continue;
     }
 
-    const dh = home.pct - stored.home;
-    const da = away.pct - stored.away;
-    if (Math.abs(dh) < SCORE_TOLERANCE && Math.abs(da) < SCORE_TOLERANCE) {
+    const mode = scoringModeByLeague.get(m.league_id) ?? "percent";
+    const hv = mode === "dollar" ? home.dollars : home.pct;
+    const av = mode === "dollar" ? away.dollars : away.pct;
+
+    if (hv == null || av == null) {
+      findings.orphans.push({ league: m.league_id, week: m.week_number });
+      continue;
+    }
+
+    // A dollar score is a raw gain, so an absolute tolerance in points makes
+    // no sense there — compare it proportionally instead.
+    const tolerance =
+      mode === "dollar"
+        ? Math.max(50, Math.abs(hv) * 0.01, Math.abs(av) * 0.01)
+        : SCORE_TOLERANCE;
+
+    if (
+      Math.abs(hv - stored.home) < tolerance &&
+      Math.abs(av - stored.away) < tolerance
+    ) {
       reproduces++;
       continue;
     }
@@ -229,9 +260,11 @@ async function main() {
     findings.drift.push({
       league: m.league_id,
       week: m.week_number,
+      mode,
       stored,
-      recomputed: { home: home.pct, away: away.pct },
-      flips: storedWinnerIsHome !== home.pct > away.pct,
+      recomputed: { home: hv, away: av },
+      missingClose: home.missingClose + away.missingClose,
+      flips: storedWinnerIsHome !== hv > av,
     });
   }
 
