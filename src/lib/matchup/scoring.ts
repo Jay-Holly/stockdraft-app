@@ -960,6 +960,15 @@ export async function scoreMatchupForLeague(
     await captureWeekBaselinesForLeague(leagueId, currentWeek, serviceClient);
   }
 
+  // Everything below that writes on behalf of the WHOLE league — closes,
+  // standings, calendar advance — has the same problem the open capture above
+  // solves. Under the viewer's RLS session those writes silently apply to the
+  // viewer's own rows and skip every other manager, with no error. That is how
+  // sdpl8 week 1 finalized with 110 of 110 week-2 opens (service client) and
+  // 0 of 109 week-1 closes (viewer client). Reads still use `supabase`; only
+  // league-wide writes use this.
+  const leagueWriteClient = serviceClient ?? supabase;
+
   const canFinalize = await canFinalizeLeagueWeek(leagueId, currentWeek);
   const { settings } = await loadSeasonCalendarForLeague(leagueId);
 
@@ -1012,7 +1021,7 @@ export async function scoreMatchupForLeague(
   const sameDayClose = usesSameDayCloseCapture(settings, currentWeek);
 
   if (sameDayClose) {
-    await captureWeekCloseSnapshots(leagueId, currentWeek, supabase);
+    await captureWeekCloseSnapshots(leagueId, currentWeek, leagueWriteClient);
   }
 
   let lastError: string | undefined;
@@ -1021,7 +1030,7 @@ export async function scoreMatchupForLeague(
 
   for (const matchup of weekMatchups as LeagueMatchupRow[]) {
     if (matchup.game_date && !closedGameDates.has(matchup.game_date)) {
-      await captureDayCloseForLeague(leagueId, matchup.game_date, supabase);
+      await captureDayCloseForLeague(leagueId, matchup.game_date, leagueWriteClient);
       closedGameDates.add(matchup.game_date);
     }
 
@@ -1037,9 +1046,9 @@ export async function scoreMatchupForLeague(
   }
 
   if (!sameDayClose) {
-    await captureWeekCloseSnapshots(leagueId, currentWeek, supabase);
+    await captureWeekCloseSnapshots(leagueId, currentWeek, leagueWriteClient);
   }
-  await applyStandingsForCompletedWeek(leagueId, currentWeek);
+  await applyStandingsForCompletedWeek(leagueId, currentWeek, leagueWriteClient);
 
   const { computeWeeklyAwardsForLeagueWeek } = await import(
     "@/lib/awards/finalize"
@@ -1059,7 +1068,7 @@ export async function scoreMatchupForLeague(
   const notice =
     cryptoSource && cryptoSource !== "live" ? SCORING_DEGRADED_MESSAGE : undefined;
 
-  await advanceLeagueCalendar(leagueId, playerCount, currentWeek);
+  await advanceLeagueCalendar(leagueId, playerCount, currentWeek, leagueWriteClient);
 
   return { scored: true, notice };
 }
