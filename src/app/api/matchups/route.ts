@@ -23,13 +23,13 @@ export async function GET(request: Request) {
 
     return NextResponse.json(result.data);
   } catch (error) {
-    console.error("GET /api/matchups failed:", error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : "";
+    console.error("GET /api/matchups failed:", { errorMsg, stack });
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Internal server error loading matchups.",
+        error: errorMsg || "Internal server error loading matchups.",
+        details: process.env.NODE_ENV === "development" ? stack : undefined,
       },
       { status: 500 }
     );

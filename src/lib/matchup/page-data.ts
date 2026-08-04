@@ -76,7 +76,10 @@ async function loadTeamSide(
   weekNumber: number
 ): Promise<MatchupTeamSide | null> {
   const rosterResult = await loadRosterView(userId, leagueId, { weekNumber });
-  if (!rosterResult.ok) return null;
+  if (!rosterResult.ok) {
+    console.warn(`[loadTeamSide] Failed to load roster for ${userId}: ${rosterResult.error}`);
+    return null;
+  }
 
   const { roster } = rosterResult;
   const starterIds = new Set(roster.starters.map((pick) => pick.id));
