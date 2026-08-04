@@ -29,6 +29,10 @@
       "schedule": "30 14 * * *"
     },
     {
+      "path": "/api/cron/refresh-stock-prices",
+      "schedule": "0 20 * * 1-5"
+    },
+    {
       "path": "/api/cron/sddfs-lifecycle",
       "schedule": "*/15 * * * *"
     },
