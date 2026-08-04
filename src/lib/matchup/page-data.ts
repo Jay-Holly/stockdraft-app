@@ -20,8 +20,6 @@ import {
 } from "@/lib/roster/team-stats";
 import type { RosterPickView } from "@/lib/roster/types";
 import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
-import { getCryptoQuotesMap } from "@/lib/roster/quotes";
-import { fetchBuyerCounts } from "@/lib/draft/server";
 
 export type MatchupTeamSide = {
   userId: string;
@@ -75,20 +73,12 @@ async function loadTeamSide(
   leagueId: string,
   userId: string,
   viewerUserId: string,
-  weekNumber: number,
-  shared?: {
-    cryptoQuoteMap?: Record<string, { price: number; changePercent: number }>;
-    buyerCounts?: Record<string, number>;
-  }
+  weekNumber: number
 ): Promise<MatchupTeamSide | null> {
   const start = performance.now();
   console.time(`[loadTeamSide] for user ${userId}`);
 
-  const rosterResult = await loadRosterView(userId, leagueId, {
-    weekNumber,
-    cachedCryptoQuotes: shared?.cryptoQuoteMap,
-    cachedBuyerCounts: shared?.buyerCounts,
-  });
+  const rosterResult = await loadRosterView(userId, leagueId, { weekNumber });
   if (!rosterResult.ok) {
     console.warn(`[loadTeamSide] Failed to load roster for ${userId}: ${rosterResult.error}`);
     return null;
@@ -149,17 +139,13 @@ async function buildMatchupDetail(
   leagueId: string,
   scoringMode: LeagueScoringMode,
   viewerUserId: string,
-  weekNumber: number,
-  shared?: {
-    cryptoQuoteMap?: Record<string, { price: number; changePercent: number }>;
-    buyerCounts?: Record<string, number>;
-  }
+  weekNumber: number
 ): Promise<MatchupDetail | null> {
   if (!matchup.home_user_id || !matchup.away_user_id) return null;
 
   const [home, away] = await Promise.all([
-    loadTeamSide(leagueId, matchup.home_user_id, viewerUserId, weekNumber, shared),
-    loadTeamSide(leagueId, matchup.away_user_id, viewerUserId, weekNumber, shared),
+    loadTeamSide(leagueId, matchup.home_user_id, viewerUserId, weekNumber),
+    loadTeamSide(leagueId, matchup.away_user_id, viewerUserId, weekNumber),
   ]);
 
   if (!home || !away) return null;
@@ -269,14 +255,6 @@ export async function loadMatchupsPageData(
       : null) ??
     findHumanMatchupForWeek(weekMatchups as LeagueMatchupRow[], userId, viewWeek);
 
-  // Fetch league-wide resources once instead of per-team
-  console.time("[matchups] fetch shared resources (crypto quotes, buyer counts)");
-  const [cryptoQuoteMap, buyerCounts] = await Promise.all([
-    getCryptoQuotesMap(),
-    fetchBuyerCounts(supabase, league.id),
-  ]);
-  console.timeEnd("[matchups] fetch shared resources (crypto quotes, buyer counts)");
-
   console.time("[matchups] buildMatchupDetail for all matchups");
   const details = (
     await Promise.all(
@@ -286,8 +264,7 @@ export async function loadMatchupsPageData(
           league.id,
           scoringMode,
           userId,
-          viewWeek,
-          { cryptoQuoteMap, buyerCounts }
+          viewWeek
         ).then((detail) => {
           if (detail) {
             console.log(
