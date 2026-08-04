@@ -117,7 +117,13 @@ export async function ensureIrSlotsForDraft(
 
   const { error: insertError } = await supabase.from("draft_picks").insert(inserts);
   if (insertError) {
-    throw new Error(`IR slot insert failed: ${insertError.message}`);
+    // Log but don't throw — IR slots are nice-to-have but shouldn't break the page.
+    // RLS violations are expected when the user doesn't own all drafts in a league.
+    console.warn(
+      `[ensureIrSlotsForDraft] Failed to create IR slots for draft ${draftId}:`,
+      insertError.message
+    );
+    return { created: 0 };
   }
 
   return { created: missing };
