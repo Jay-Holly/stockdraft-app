@@ -26,6 +26,10 @@ export async function fetchStockQuotes(
   if (unique.length === 0) return map;
 
   const cached = await fetchCachedStockQuotes(unique);
+
+  // Track which symbols still need fallback
+  const stillMissing = [];
+
   for (const symbol of unique) {
     const quote = cached[symbol];
     if (quote?.price) {
@@ -36,10 +40,41 @@ export async function fetchStockQuotes(
       continue;
     }
     const fallback = getFallbackStockQuote(symbol);
-    map.set(symbol, {
-      price: fallback?.price ?? 0,
-      changePercent: fallback?.changePercent ?? 0,
-    });
+    if (fallback?.price) {
+      map.set(symbol, {
+        price: fallback.price,
+        changePercent: fallback.changePercent,
+      });
+      continue;
+    }
+    stillMissing.push(symbol);
+  }
+
+  // For symbols with no cached or fallback price, use last-known DB price
+  if (stillMissing.length > 0) {
+    const { createServiceClient } = await import("@/lib/supabase/service");
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from("draft_picks")
+      .select("symbol, price_at_open")
+      .in("symbol", stillMissing)
+      .order("created_at", { ascending: false })
+      .limit(stillMissing.length);
+
+    const dbPrices = new Map<string, number>();
+    for (const row of data ?? []) {
+      if (!dbPrices.has(row.symbol.toUpperCase()) && row.price_at_open) {
+        dbPrices.set(row.symbol.toUpperCase(), row.price_at_open);
+      }
+    }
+
+    for (const symbol of stillMissing) {
+      const dbPrice = dbPrices.get(symbol) ?? 0;
+      map.set(symbol, {
+        price: dbPrice,
+        changePercent: 0,
+      });
+    }
   }
 
   return map;

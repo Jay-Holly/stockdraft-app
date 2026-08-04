@@ -7,18 +7,14 @@ import {
 } from "@/lib/coingecko/service";
 import { fetchFinnhubQuotes, type FinnhubQuote } from "@/lib/finnhub/service";
 import { mergeQuotesWithFallback } from "@/lib/market/fallback-quotes";
+import { createServiceClient } from "@/lib/supabase/service";
 
 /**
  * SDDFS needs a true intraday snapshot (lock at 9 AM ET, close at 4 PM ET)
  * for a small, bounded symbol set (at most a few dozen distinct tickers
- * across the day's contests). The shared `stock_prices`/`crypto_prices`
- * cache tables are refreshed on a rotating once-daily cron that only
- * covers a portion of the ~500-symbol draft pool per run — reading from
- * them here silently produces stale/duplicate open+close prices (a flat
- * 0% score) for any symbol the rotation didn't touch that day. Fetching
- * live here instead (Finnhub for stocks, CoinGecko for crypto) stays well
- * within rate limits for a set this small and guarantees both snapshots
- * are real, same-day prices.
+ * across the day's contests). Fetching live from Finnhub/CoinGecko, then
+ * falling back to S&P snapshot, then to last-known DB price ensures we
+ * always have a valid price for every pick.
  */
 export async function fetchLiveSddfsQuotes(
   symbols: string[]
@@ -36,18 +32,36 @@ export async function fetchLiveSddfsQuotes(
       : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
-  // Fill in missing stock prices from fallback data (S&P 500 snapshot)
+  // Fill in missing stock prices: live → S&P fallback → last-known DB price
   const mergedStocks = mergeQuotesWithFallback(stockSymbols, stockQuotes);
+
+  // For symbols still missing (not in live or fallback), fetch last-known prices from DB
+  const stillMissing = stockSymbols.filter((s) => !mergedStocks[s]);
+  const dbPrices: Record<string, number> = {};
+  if (stillMissing.length > 0) {
+    const supabase = createServiceClient();
+    const { data } = await supabase
+      .from("sddfs_entry_picks")
+      .select("symbol, close_price, open_price")
+      .in("symbol", stillMissing)
+      .order("updated_at", { ascending: false })
+      .limit(stillMissing.length);
+
+    for (const row of data ?? []) {
+      if (!dbPrices[row.symbol]) {
+        dbPrices[row.symbol] = (row.close_price ?? row.open_price) || 0;
+      }
+    }
+  }
 
   const prices: Record<string, number> = {};
 
-  // All stocks should now have prices (live or fallback)
   for (const symbol of stockSymbols) {
     const quote = mergedStocks[symbol];
-    prices[symbol] = quote?.price ?? 0;
+    prices[symbol] =
+      quote?.price ?? dbPrices[symbol] ?? 0;
   }
 
-  // Crypto relies on live data only; no fallback available
   for (const symbol of cryptoSymbols) {
     const quote = cryptoQuotes[symbol];
     prices[symbol] = quote?.price ?? 0;

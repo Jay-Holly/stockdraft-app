@@ -75,12 +75,16 @@ async function loadTeamSide(
   viewerUserId: string,
   weekNumber: number
 ): Promise<MatchupTeamSide | null> {
+  const start = performance.now();
+  console.time(`[loadTeamSide] for user ${userId}`);
+
   const rosterResult = await loadRosterView(userId, leagueId, { weekNumber });
   if (!rosterResult.ok) {
     console.warn(`[loadTeamSide] Failed to load roster for ${userId}: ${rosterResult.error}`);
     return null;
   }
 
+  console.timeEnd(`[loadTeamSide] for user ${userId}`);
   const { roster } = rosterResult;
   const starterIds = new Set(roster.starters.map((pick) => pick.id));
   const standaloneCrypto = roster.crypto.filter((pick) => !starterIds.has(pick.id));
@@ -188,25 +192,35 @@ export async function loadMatchupsPageData(
   userId: string,
   options?: { weekNumber?: number }
 ): Promise<{ ok: true; data: MatchupsPageData } | { ok: false; error: string }> {
+  const startTime = performance.now();
+  console.log(`[matchups] Starting loadMatchupsPageData for user ${userId}`);
+
   const season = await requireSeasonLeague(userId);
   if ("error" in season) return { ok: false, error: season.error };
 
   const { league } = season;
   const supabase = await createClient();
   const scoringMode = parseLeagueScoringMode(league.scoring_mode);
+
+  console.time(`[matchups] getSeasonWeekContext for ${league.id}`);
   const weekContext = await getSeasonWeekContext(league.id, userId);
+  console.timeEnd(`[matchups] getSeasonWeekContext for ${league.id}`);
+
   const viewWeek = clampViewWeek(
     options?.weekNumber ?? weekContext.currentWeek,
     weekContext.maxViewableWeek
   );
   const isHistorical = viewWeek < weekContext.currentWeek;
 
+  console.time("[matchups] fetch league row");
   const { data: leagueRow } = await supabase
     .from("leagues")
     .select("name")
     .eq("id", league.id)
     .maybeSingle();
+  console.timeEnd("[matchups] fetch league row");
 
+  console.time("[matchups] fetch week matchups");
   const { data: weekMatchups } = await supabase
     .from("league_matchups")
     .select("*")
@@ -215,6 +229,8 @@ export async function loadMatchupsPageData(
     .not("home_user_id", "is", null)
     .not("away_user_id", "is", null)
     .order("created_at", { ascending: true });
+  console.timeEnd("[matchups] fetch week matchups");
+  console.log(`[matchups] Found ${weekMatchups?.length ?? 0} matchups`);
 
   if (!weekMatchups?.length) {
     return {
@@ -239,19 +255,28 @@ export async function loadMatchupsPageData(
       : null) ??
     findHumanMatchupForWeek(weekMatchups as LeagueMatchupRow[], userId, viewWeek);
 
+  console.time("[matchups] buildMatchupDetail for all matchups");
   const details = (
     await Promise.all(
-      weekMatchups.map((row) =>
+      weekMatchups.map((row, idx) =>
         buildMatchupDetail(
           row as LeagueMatchupRow,
           league.id,
           scoringMode,
           userId,
           viewWeek
-        )
+        ).then((detail) => {
+          if (detail) {
+            console.log(
+              `[matchups] matchup ${idx + 1}/${weekMatchups.length} built (${detail.homeTeamName} vs ${detail.awayTeamName})`
+            );
+          }
+          return detail;
+        })
       )
     )
   ).filter((detail): detail is MatchupDetail => detail !== null);
+  console.timeEnd("[matchups] buildMatchupDetail for all matchups");
 
   if (details.length === 0) {
     return { ok: false, error: "Could not load matchup rosters." };
@@ -262,6 +287,11 @@ export async function loadMatchupsPageData(
     if (!a.includesViewer && b.includesViewer) return 1;
     return a.homeTeamName.localeCompare(b.homeTeamName);
   });
+
+  const elapsed = performance.now() - startTime;
+  console.log(
+    `[matchups] loadMatchupsPageData completed in ${(elapsed / 1000).toFixed(2)}s for ${details.length} matchups`
+  );
 
   return {
     ok: true,
