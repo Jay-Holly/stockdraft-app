@@ -40,7 +40,7 @@ export function tierNameForBuyIn(buyIn: number): string {
 }
 
 const DFS_LOCK_HOUR_ET = 9;
-const DFS_LOCK_MINUTE_ET = 0;
+const DFS_LOCK_MINUTE_ET = 30;
 /** Next day's contests become active for entry 1 hour after today's lock —
  * same rule as SDWFS flipping to next week 1 hour after its Monday lock. */
 const NEXT_CONTEST_ACTIVE_HOUR_ET = DFS_LOCK_HOUR_ET + 1;

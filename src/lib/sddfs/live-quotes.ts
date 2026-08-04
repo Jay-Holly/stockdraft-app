@@ -10,7 +10,7 @@ import { mergeQuotesWithFallback } from "@/lib/market/fallback-quotes";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
- * SDDFS needs a true intraday snapshot (lock at 9 AM ET, close at 4 PM ET)
+ * SDDFS needs a true intraday snapshot (lock at 9:30 AM ET, close at 4 PM ET)
  * for a small, bounded symbol set (at most a few dozen distinct tickers
  * across the day's contests). Fetching live from Finnhub/CoinGecko, then
  * falling back to S&P snapshot, then to last-known DB price ensures we
