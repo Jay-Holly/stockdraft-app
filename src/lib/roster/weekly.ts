@@ -737,52 +737,87 @@ export async function captureWeekCloseSnapshots(
     .select("user_id")
     .eq("league_id", leagueId);
 
-  for (const draft of drafts ?? []) {
-    let picks = (
-      await loadUserDraftPicks(supabase, draft.user_id, leagueId)
-    ).filter((pick) => pick.pick_type !== "skip");
+  if (!drafts?.length) return;
 
-    if (picks.length === 0) {
-      const state = await loadDraftStateDetailed(draft.user_id, { leagueId });
-      if (!state.ok) continue;
-      picks = state.state.picks.filter((pick) => pick.pick_type !== "skip");
-    }
+  // Load every roster up front so quotes are fetched once for the league.
+  // This used to sit inside a per-manager loop fetching Finnhub quotes one
+  // symbol at a time: a 32-team SDFL week came to 328 sequential fetches at
+  // ~340ms each, ~112s measured for a single league-week, against a 300s cron
+  // budget shared by every due week on the platform. The finalize cron timed
+  // out before reaching most of them and died in the same place every run, so
+  // weeks stopped finalizing and the backlog could not drain.
+  const rosters = (
+    await Promise.all(
+      drafts.map(async (draft) => {
+        let picks = (
+          await loadUserDraftPicks(supabase, draft.user_id, leagueId)
+        ).filter((pick) => pick.pick_type !== "skip");
 
-    picks = picksEligibleForWeekBaselines(picks);
-
-    const prices = await fetchPricesForPicks(picks);
-
-    const finnhubKey = process.env.NEXT_PUBLIC_FINNHUB_KEY;
-    if (finnhubKey) {
-      const stockSymbols = [
-        ...new Set(
-          picks
-            .filter(
-              (pick) =>
-                pick.pick_type === "stock" || pick.pick_type === "bench"
-            )
-            .map((pick) => pick.symbol.toUpperCase())
-        ),
-      ];
-      for (const symbol of stockSymbols) {
-        const quote = await fetchFinnhubQuote(symbol, finnhubKey);
-        if (quote?.price && quote.price > 0) {
-          prices.set(symbol, quote.price);
+        if (picks.length === 0) {
+          const state = await loadDraftStateDetailed(draft.user_id, { leagueId });
+          if (!state.ok) return null;
+          picks = state.state.picks.filter((pick) => pick.pick_type !== "skip");
         }
-      }
-    }
 
-    // captureClosingValues writes the open too when a pick has no row yet, so
-    // this is a single read and a single write for the whole roster.
+        return {
+          userId: draft.user_id,
+          picks: picksEligibleForWeekBaselines(picks),
+        };
+      })
+    )
+  ).filter(
+    (entry): entry is { userId: string; picks: DraftPick[] } => entry !== null
+  );
+
+  const allPicks = rosters.flatMap((roster) => roster.picks);
+  if (allPicks.length === 0) return;
+
+  const prices = await fetchPricesForPicks(allPicks);
+
+  // Refresh quotes in parallel batches. Finnhub's free tier caps at 60
+  // calls/minute, so on a large league most of these come back empty — that
+  // is safe, since a failed quote leaves the cached price untouched rather
+  // than substituting a guess, and refresh-stock-prices now also runs at
+  // 4:00 PM ET so the cache holds an actual closing price.
+  const finnhubKey = process.env.NEXT_PUBLIC_FINNHUB_KEY;
+  if (finnhubKey) {
+    const stockSymbols = [
+      ...new Set(
+        allPicks
+          .filter(
+            (pick) => pick.pick_type === "stock" || pick.pick_type === "bench"
+          )
+          .map((pick) => pick.symbol.toUpperCase())
+      ),
+    ].filter((symbol) => symbol !== "__OPEN__");
+
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < stockSymbols.length; i += BATCH_SIZE) {
+      const chunk = stockSymbols.slice(i, i + BATCH_SIZE);
+      const quotes = await Promise.all(
+        chunk.map((symbol) =>
+          fetchFinnhubQuote(symbol, finnhubKey).catch(() => null)
+        )
+      );
+      chunk.forEach((symbol, index) => {
+        const quote = quotes[index];
+        if (quote?.price && quote.price > 0) prices.set(symbol, quote.price);
+      });
+    }
+  }
+
+  // captureClosingValues writes the open too when a pick has no row yet, so
+  // this is a single read and a single write per manager.
+  for (const roster of rosters) {
     await captureClosingValues(
       supabase,
       {
         table: "roster_week_baselines",
         leagueId,
-        userId: draft.user_id,
+        userId: roster.userId,
         weekNumber,
       },
-      picks.map((pick) => ({
+      roster.picks.map((pick) => ({
         pick,
         closePrice: prices.get(pick.symbol.toUpperCase()) ?? null,
       }))
