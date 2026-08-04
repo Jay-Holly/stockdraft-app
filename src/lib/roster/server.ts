@@ -250,7 +250,11 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
 export async function loadRosterView(
   userId: string,
   leagueId: string,
-  options?: { weekNumber?: number }
+  options?: {
+    weekNumber?: number;
+    cachedCryptoQuotes?: Record<string, { price: number; changePercent: number }>;
+    cachedBuyerCounts?: Record<string, number>;
+  }
 ): Promise<{ ok: true; roster: RosterView } | { ok: false; error: string }> {
   const state = await loadDraftStateDetailed(userId, { leagueId });
   if (!state.ok) return { ok: false, error: state.error };
@@ -350,16 +354,22 @@ export async function loadRosterView(
   );
 
   const enriched = await enrichPicks(livePicks);
-  const buyerCounts = await fetchBuyerCounts(supabase, leagueId);
-  const cryptoQuoteMap = await getCryptoQuotesMap();
-  const cryptoQuotes: Record<string, { price: number; changePercent: number }> =
-    {};
-  for (const symbol of Object.keys(cryptoQuoteMap)) {
-    const quote = cryptoQuoteMap[symbol];
-    cryptoQuotes[symbol] = {
-      price: quote?.price ?? 0,
-      changePercent: quote?.changePercent ?? 0,
-    };
+
+  // Use cached values if provided (from matchups page), otherwise fetch
+  const buyerCounts = options?.cachedBuyerCounts ?? (await fetchBuyerCounts(supabase, leagueId));
+
+  let cryptoQuotes: Record<string, { price: number; changePercent: number }> = {};
+  if (options?.cachedCryptoQuotes) {
+    cryptoQuotes = options.cachedCryptoQuotes;
+  } else {
+    const cryptoQuoteMap = await getCryptoQuotesMap();
+    for (const symbol of Object.keys(cryptoQuoteMap)) {
+      const quote = cryptoQuoteMap[symbol];
+      cryptoQuotes[symbol] = {
+        price: quote?.price ?? 0,
+        changePercent: quote?.changePercent ?? 0,
+      };
+    }
   }
   const baselineMap = await ensureWeekBaselines(
     supabase,
