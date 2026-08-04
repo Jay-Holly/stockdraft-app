@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     );
 
     // Verify
-    const { data: verify, count } = await serviceClient
+    const { count } = await serviceClient
       .from("roster_week_baselines")
       .select("*", { count: "exact" })
       .eq("league_id", league.id)
