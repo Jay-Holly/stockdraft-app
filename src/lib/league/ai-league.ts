@@ -323,8 +323,11 @@ export async function activateAiLeagueSchedule(
   if (!admin) {
     try {
       admin = createServiceClient();
-    } catch {
-      // Service client unavailable, will fall back to authenticated client
+    } catch (err) {
+      console.error(
+        "[activateAiLeagueSchedule] Failed to create service client:",
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
 
