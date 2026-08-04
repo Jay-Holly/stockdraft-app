@@ -177,6 +177,14 @@ export async function loadAwardsPageData(
     ? stockPickOptionsFromState(draftState.state.picks)
     : [];
 
+  const userOwnedCryptos = draftState.ok
+    ? new Set(
+        draftState.state.picks
+          .filter((pick) => pick.pick_type === "crypto" && pick.budget_spent > 0.01)
+          .map((pick) => pick.symbol.toUpperCase())
+      )
+    : new Set<string>();
+
   const { data: resultWeekRows } = await supabase
     .from("weekly_award_results")
     .select("week_number")
@@ -306,10 +314,12 @@ export async function loadAwardsPageData(
         weekAwards: [],
         pending,
         pendingPlayoff,
-        cryptoOptions: cryptoPool.map((coin) => ({
-          symbol: coin.symbol,
-          name: coin.name,
-        })),
+        cryptoOptions: cryptoPool
+          .filter((coin) => userOwnedCryptos.has(coin.symbol.toUpperCase()))
+          .map((coin) => ({
+            symbol: coin.symbol,
+            name: coin.name,
+          })),
         viewerUserId: userId,
       },
     };
@@ -375,10 +385,12 @@ export async function loadAwardsPageData(
       weekAwards,
       pending,
       pendingPlayoff,
-      cryptoOptions: cryptoPool.map((coin) => ({
-        symbol: coin.symbol,
-        name: coin.name,
-      })),
+      cryptoOptions: cryptoPool
+        .filter((coin) => userOwnedCryptos.has(coin.symbol.toUpperCase()))
+        .map((coin) => ({
+          symbol: coin.symbol,
+          name: coin.name,
+        })),
       viewerUserId: userId,
     },
   };

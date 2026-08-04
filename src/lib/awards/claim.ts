@@ -117,33 +117,20 @@ export async function applyAwardToCryptoPool(
   if (!state.ok) return { error: state.error };
 
   const existing = findActiveCryptoPick(state.state.picks, upper);
-  const shares = computeSharesFromBudget(amountUsd, quote.price);
-  let targetPickId = existing?.id;
-
-  if (existing) {
-    const patch = await patchDraftPick(supabase, userId, existing.id, {
-      budget_spent: existing.budget_spent + amountUsd,
-      shares: existing.shares + shares,
-      effective_value: existing.effective_value + amountUsd,
-      price_at_pick: quote.price,
-    });
-    if (patch.error) return { error: patch.error };
-  } else {
-    const anchor =
-      state.state.picks.find((pick) => pick.pick_type === "crypto") ??
-      state.state.picks[0];
-    const maxOrder = Math.max(...state.state.picks.map((pick) => pick.pick_order), 0);
-    const insert = await insertDraftPick(supabase, userId, state.state.draft.id, {
-      round_number: anchor?.round_number ?? 1,
-      symbol: upper,
-      price_at_pick: quote.price,
-      budget_spent: amountUsd,
-      shares,
-      pick_order: maxOrder + 1,
-    });
-    if (insert.error) return { error: insert.error };
-    targetPickId = insert.pick?.id;
+  if (!existing) {
+    return { error: "You can only apply awards to crypto you already own." };
   }
+
+  const shares = computeSharesFromBudget(amountUsd, quote.price);
+  const patch = await patchDraftPick(supabase, userId, existing.id, {
+    budget_spent: existing.budget_spent + amountUsd,
+    shares: existing.shares + shares,
+    effective_value: existing.effective_value + amountUsd,
+    price_at_pick: quote.price,
+  });
+  if (patch.error) return { error: patch.error };
+
+  const targetPickId = existing.id;
 
   if (!targetPickId) {
     return { error: "Could not resolve the target crypto pick." };
