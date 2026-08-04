@@ -274,15 +274,6 @@ export async function loadRosterView(
     sportsLeagueId: league?.sports_league_id,
   });
 
-  if (sportsSimIrEnabled && !isHistorical) {
-    await ensureIrSlotsForDraft(
-      supabase,
-      userId,
-      state.state.draft.id,
-      { rules: "sports_sim" }
-    );
-  }
-
   const scoringMode = parseLeagueScoringMode(league?.scoring_mode);
   const picks = state.state.picks.filter((p) => p.pick_type !== "skip");
 
