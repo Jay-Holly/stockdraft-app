@@ -56,15 +56,15 @@ export async function fetchStockQuotes(
     const supabase = createServiceClient();
     const { data } = await supabase
       .from("draft_picks")
-      .select("symbol, price_at_open")
+      .select("symbol, price_at_pick")
       .in("symbol", stillMissing)
       .order("created_at", { ascending: false })
       .limit(stillMissing.length);
 
     const dbPrices = new Map<string, number>();
     for (const row of data ?? []) {
-      if (!dbPrices.has(row.symbol.toUpperCase()) && row.price_at_open) {
-        dbPrices.set(row.symbol.toUpperCase(), row.price_at_open);
+      if (!dbPrices.has(row.symbol.toUpperCase()) && row.price_at_pick) {
+        dbPrices.set(row.symbol.toUpperCase(), row.price_at_pick);
       }
     }
 
