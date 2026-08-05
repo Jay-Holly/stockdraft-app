@@ -615,7 +615,7 @@ export default function GameRulesPage() {
           headers={["Component", "Count", "Details"]}
           rows={[
             ["Starters", "10", "5 stocks + 5 crypto (fixed split)"],
-            ["Bench", "3", "Stocks or crypto — depth, don't score"],
+            ["Bench", "3", "Stocks only — depth, don't score (crypto changeable anytime)"],
             ["IR Slots", "3", "Separate from roster — injured players"],
             ["Total Picks", "13", "Rounds 1–10: starters, 11–13: bench"],
             ["Total Cap", "$1,000,000", "$100,000 budget, $1M individual cap"],
