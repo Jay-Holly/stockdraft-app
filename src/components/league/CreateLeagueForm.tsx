@@ -167,6 +167,11 @@ function SportsLeaguePicker({
                   Sign Up Now
                 </span>
               )}
+              {selected && (
+                <span className="block text-[0.6875rem] font-semibold mt-1 text-gold">
+                  Selected, scroll down to create your league.
+                </span>
+              )}
               <button
                 type="button"
                 onClick={(e) => {
@@ -615,7 +620,7 @@ export function CreateLeagueForm({
 
       {formatType === "sports_league" && (
         <p className="text-xs text-muted rounded-xl border border-dark-border bg-dark/40 px-4 py-3">
-          Sports League draft order will eventually follow each format&apos;s prior-season
+          Sports League draft order will follow each format&apos;s prior-season
           standings (NFL, NHL, NBA, MLB) — refreshed automatically the day after each
           championship. Until then, pick order is assigned with a random shuffle at draft
           start. Only StockDraft franchise identities appear in the app.
