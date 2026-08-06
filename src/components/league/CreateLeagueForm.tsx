@@ -26,6 +26,12 @@ import {
 } from "@/lib/league/draft-order";
 import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
 import { isGenericMapLeague } from "@/lib/league/generic-map-sport";
+import { LeagueRulesModal } from "@/components/league/LeagueRulesModal";
+import {
+  SdflRulesContent,
+  SdlbSdhlSdbaRulesContent,
+  SdplRulesContent,
+} from "@/components/league/rules-content";
 
 const inputClass =
   "w-full rounded-xl border border-dark-border bg-dark px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm";
@@ -88,18 +94,42 @@ function SportsLeaguePicker({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const [rulesFor, setRulesFor] = useState<"sdfl" | "shared" | null>(null);
+
   return (
     <fieldset className="space-y-2">
       <legend className="text-sm font-semibold text-white">Sports league</legend>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+
+      {rulesFor === "sdfl" && (
+        <LeagueRulesModal title="SDFL Rules" onClose={() => setRulesFor(null)}>
+          <SdflRulesContent />
+        </LeagueRulesModal>
+      )}
+      {rulesFor === "shared" && (
+        <LeagueRulesModal
+          title="SDLB / SDHL / SDBA Rules"
+          onClose={() => setRulesFor(null)}
+        >
+          <SdlbSdhlSdbaRulesContent />
+        </LeagueRulesModal>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
         {SPORTS_LEAGUE_FORMATS.map((format) => {
           const selected = value === format.id;
+          const comingSoon = format.id === "sdhl" || format.id === "sdba";
+          const comingNextSpring = format.id === "sdlb";
+          const signUpNow = format.id === "sdfl";
           return (
-            <button
+            <div
               key={format.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => onChange(format.id)}
-              className={`rounded-xl border p-2.5 text-center transition-colors ${
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") onChange(format.id);
+              }}
+              className={`rounded-xl border p-3 pb-2 text-center transition-colors cursor-pointer ${
                 selected
                   ? "border-gold/60 bg-gold/10 text-white"
                   : "border-dark-border bg-dark/40 text-muted hover:border-dark-border hover:text-white"
@@ -109,12 +139,12 @@ function SportsLeaguePicker({
                 <Image
                   src={format.logoSrc}
                   alt=""
-                  width={56}
-                  height={70}
-                  className="mx-auto mb-1.5 rounded"
+                  width={160}
+                  height={200}
+                  className="mx-auto -mb-1 rounded-lg w-full h-auto max-w-[160px]"
                 />
               ) : (
-                <span className="mx-auto mb-1.5 flex h-[70px] w-[56px] items-center justify-center rounded border border-dashed border-dark-border text-[0.6875rem] text-muted">
+                <span className="mx-auto -mb-1 flex h-[200px] w-full max-w-[160px] items-center justify-center rounded border border-dashed border-dark-border text-xs text-muted">
                   {format.label}
                 </span>
               )}
@@ -122,7 +152,32 @@ function SportsLeaguePicker({
               <span className="block text-[0.6875rem] mt-0.5 opacity-80">
                 {format.description}
               </span>
-            </button>
+              {comingSoon && (
+                <span className="block text-[0.6875rem] font-semibold mt-1 text-gold">
+                  Coming Soon
+                </span>
+              )}
+              {comingNextSpring && (
+                <span className="block text-[0.6875rem] font-semibold mt-1 text-gold">
+                  Coming Spring 2027
+                </span>
+              )}
+              {signUpNow && (
+                <span className="block text-[0.6875rem] font-semibold mt-1 text-emerald-400">
+                  Sign Up Now
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRulesFor(format.id === "sdfl" ? "sdfl" : "shared");
+                }}
+                className="block w-full text-[0.6875rem] font-medium text-gold hover:underline mt-1.5"
+              >
+                Rules
+              </button>
+            </div>
           );
         })}
       </div>
@@ -145,6 +200,9 @@ export function CreateLeagueForm({
       : entryParam === "sports"
         ? "sports_league"
         : null;
+  const isSdplEntry = entryParam === "player";
+  const [sdplSizeConfirmed, setSdplSizeConfirmed] = useState(!isSdplEntry);
+  const [sdplRulesOpen, setSdplRulesOpen] = useState(false);
   const [formatType, setFormatType] = useState<LeagueFormatType>(
     lockedFormat ?? "standard"
   );
@@ -372,8 +430,121 @@ export function CreateLeagueForm({
     );
   }
 
+  if (isSdplEntry && !sdplSizeConfirmed) {
+    return (
+      <div className="space-y-6">
+        {sdplRulesOpen && (
+          <LeagueRulesModal
+            title="SDPL Rules"
+            onClose={() => setSdplRulesOpen(false)}
+          >
+            <SdplRulesContent />
+          </LeagueRulesModal>
+        )}
+
+        <div className="text-center">
+          <Image
+            src="/images/leagues/sdpl.png"
+            alt="SDPL"
+            width={180}
+            height={180}
+            className="mx-auto rounded-2xl"
+            priority
+          />
+          <h1 className="text-xl font-bold mt-4">Pick a league size</h1>
+          <p className="text-muted text-sm mt-2">
+            Choose how many teams you want in your Player League.
+          </p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setSdplRulesOpen(true)}
+              className="text-sm font-medium text-gold hover:underline"
+            >
+              SDPL Rules
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          {playerCountOptions.map((count) => (
+            <button
+              key={count}
+              type="button"
+              onClick={() => {
+                setPlayerCount(count);
+                setSdplSizeConfirmed(true);
+              }}
+              className="rounded-xl border border-dark-border bg-dark-card p-3 text-center transition-colors hover:border-gold/60 hover:bg-gold/5"
+            >
+              <Image
+                src={`/images/leagues/SDPL${count}.png`}
+                alt={`${count}-team player league`}
+                width={120}
+                height={120}
+                className="mx-auto rounded-lg w-full h-auto"
+              />
+              <span className="block text-xs mt-1 text-muted">
+                {count} teams
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          onClick={() => router.push("/dashboard")}
+        >
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {isSdplEntry && sdplRulesOpen && (
+        <LeagueRulesModal
+          title="SDPL Rules"
+          onClose={() => setSdplRulesOpen(false)}
+        >
+          <SdplRulesContent />
+        </LeagueRulesModal>
+      )}
+
+      {isSdplEntry && (
+        <div className="text-center">
+          <Image
+            src={`/images/leagues/SDPL${playerCount}.png`}
+            alt={`${playerCount}-team SDPL`}
+            width={140}
+            height={140}
+            className="mx-auto rounded-2xl"
+            priority
+          />
+          <h1 className="text-xl font-bold mt-4">{playerCount}-team league</h1>
+          <div className="flex items-center justify-center gap-3 mt-1">
+            <button
+              type="button"
+              onClick={() => setSdplSizeConfirmed(false)}
+              className="text-sm font-medium text-gold hover:underline"
+            >
+              Change size
+            </button>
+            <span className="text-dark-border">·</span>
+            <button
+              type="button"
+              onClick={() => setSdplRulesOpen(true)}
+              className="text-sm font-medium text-gold hover:underline"
+            >
+              SDPL Rules
+            </button>
+          </div>
+        </div>
+      )}
+
       {!lockedFormat && (
         <OptionGroup<LeagueFormatType>
           label="Format type"
@@ -410,7 +581,7 @@ export function CreateLeagueForm({
         />
       )}
 
-      {formatType === "standard" && (
+      {formatType === "standard" && !isSdplEntry && (
         <OptionGroup<LeaguePlayerCount>
           label="Player count"
           value={playerCount}
