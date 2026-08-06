@@ -1,15 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { SPORTS_LEAGUE_FORMATS } from "@/lib/league/league-config";
 import type { HumanLeagueListItem } from "@/lib/league/human-league";
+import { LeagueRulesModal } from "@/components/league/LeagueRulesModal";
+import {
+  SdflRulesContent,
+  SdlbSdhlSdbaRulesContent,
+} from "@/components/league/rules-content";
 
 export function SportsSimLandingPageContent({
   leagues,
 }: {
   leagues: HumanLeagueListItem[];
 }) {
+  const [rulesFor, setRulesFor] = useState<"sdfl" | "shared" | null>(null);
   const countByLeagueId: Record<string, number> = {};
 
   for (const item of leagues) {
@@ -26,34 +33,73 @@ export function SportsSimLandingPageContent({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      {rulesFor === "sdfl" && (
+        <LeagueRulesModal title="SDFL Rules" onClose={() => setRulesFor(null)}>
+          <SdflRulesContent />
+        </LeagueRulesModal>
+      )}
+      {rulesFor === "shared" && (
+        <LeagueRulesModal
+          title="SDLB / SDHL / SDBA Rules"
+          onClose={() => setRulesFor(null)}
+        >
+          <SdlbSdhlSdbaRulesContent />
+        </LeagueRulesModal>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
         {SPORTS_LEAGUE_FORMATS.map((format) => {
           const teamCount = countByLeagueId[format.id] || 0;
+          const comingSoon = format.id === "sdhl" || format.id === "sdba";
+          const comingNextSpring = format.id === "sdlb";
+          const signUpNow = format.id === "sdfl";
           return (
-            <Link
+            <div
               key={format.id}
-              href={`/dashboard/sports-sim?sport=${format.id}`}
-              className="group relative block rounded-xl overflow-hidden transition-transform duration-300 hover:-translate-y-0.5 active:scale-[0.98]"
+              className="rounded-xl border border-dark-border bg-dark/40 p-3 pb-2 text-center"
             >
-              <div className="relative aspect-square bg-dark/40 border border-dark-border rounded-xl flex flex-col items-center justify-center p-1 group-hover:border-dark-border/60">
-                {format.logoSrc && (
-                  <div className="relative w-full flex-1 min-h-0 mb-1">
-                    <Image
-                      src={format.logoSrc}
-                      alt={format.label}
-                      fill
-                      className="object-contain"
-                    />
-                  </div>
+              <Link href={`/dashboard/sports-sim?sport=${format.id}`}>
+                {format.logoSrc ? (
+                  <Image
+                    src={format.logoSrc}
+                    alt=""
+                    width={160}
+                    height={200}
+                    className="mx-auto -mb-1 rounded-lg w-full h-auto max-w-[160px]"
+                  />
+                ) : (
+                  <span className="mx-auto -mb-1 flex h-[200px] w-full max-w-[160px] items-center justify-center rounded border border-dashed border-dark-border text-xs text-muted">
+                    {format.label}
+                  </span>
                 )}
-                <div className="text-center">
-                  <p className="text-sm font-semibold">{format.label}</p>
-                  <p className="text-xs text-muted mt-1">
-                    {teamCount} {teamCount === 1 ? "team" : "teams"}
-                  </p>
-                </div>
-              </div>
-            </Link>
+                <span className="block text-sm font-semibold">{format.label}</span>
+                <span className="block text-[0.6875rem] mt-0.5 text-muted">
+                  {teamCount} {teamCount === 1 ? "team" : "teams"}
+                </span>
+              </Link>
+              {comingSoon && (
+                <span className="block text-[0.6875rem] font-semibold mt-1 text-gold">
+                  Coming Soon
+                </span>
+              )}
+              {comingNextSpring && (
+                <span className="block text-[0.6875rem] font-semibold mt-1 text-gold">
+                  Coming Spring 2027
+                </span>
+              )}
+              {signUpNow && (
+                <span className="block text-[0.6875rem] font-semibold mt-1 text-emerald-400">
+                  Sign Up Now
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setRulesFor(format.id === "sdfl" ? "sdfl" : "shared")}
+                className="block w-full text-[0.6875rem] font-medium text-gold hover:underline mt-1.5"
+              >
+                Rules
+              </button>
+            </div>
           );
         })}
       </div>
