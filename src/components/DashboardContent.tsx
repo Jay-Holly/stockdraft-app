@@ -22,6 +22,49 @@ import { Button } from "@/components/Button";
 import { LiveTickerTape } from "@/components/LiveTickerTape";
 import type { DayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summary";
 import Image from "next/image";
+import { LeagueRulesModal } from "@/components/league/LeagueRulesModal";
+import {
+  SdaiRulesContent,
+  SdplRulesContent,
+  SportsSimRulesContent,
+  DayTraderRulesContent,
+  SddfsRulesContent,
+  SdwfsRulesContent,
+} from "@/components/league/rules-content";
+
+type RulesKey =
+  | "sdai"
+  | "sdpl"
+  | "sports-sim"
+  | "day-trader"
+  | "sddfs"
+  | "sdwfs";
+
+const RULES_TITLES: Record<RulesKey, { title: string }> = {
+  sdai: { title: "SDAI Rules" },
+  sdpl: { title: "SDPL Rules" },
+  "sports-sim": { title: "Sports Sim Rules" },
+  "day-trader": { title: "Day Trader Rules" },
+  sddfs: { title: "SDDFS Rules" },
+  sdwfs: { title: "SDWFS Rules" },
+};
+
+function RulesContentFor({ rulesKey }: { rulesKey: RulesKey }) {
+  switch (rulesKey) {
+    case "sdai":
+      return <SdaiRulesContent />;
+    case "sdpl":
+      return <SdplRulesContent />;
+    case "sports-sim":
+      return <SportsSimRulesContent />;
+    case "day-trader":
+      return <DayTraderRulesContent />;
+    case "sddfs":
+      return <SddfsRulesContent />;
+    case "sdwfs":
+      return <SdwfsRulesContent />;
+  }
+}
 
 type TileArt =
   | "create-free-sim"
@@ -86,6 +129,7 @@ type SheetHotspot = {
   width: string;
   height: string;
   badge?: string;
+  rulesKey?: RulesKey;
 };
 
 /**
@@ -101,10 +145,12 @@ function DashboardSheet({
   src,
   alt,
   hotspots,
+  onOpenRules,
 }: {
   src: string;
   alt: string;
   hotspots: SheetHotspot[];
+  onOpenRules?: (key: RulesKey) => void;
 }) {
   return (
     <div className="relative w-full">
@@ -137,6 +183,31 @@ function DashboardSheet({
           </button>
         );
       })}
+      {hotspots.map(
+        (h) =>
+          h.rulesKey &&
+          onOpenRules && (
+            <button
+              key={`${h.label}-rules`}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenRules(h.rulesKey!);
+              }}
+              aria-label={`${h.label} rules`}
+              className="absolute z-10 text-[11px] font-semibold text-white/90 hover:text-white hover:underline drop-shadow"
+              style={{
+                top: `calc(${h.top} + ${h.height} - 1.35rem)`,
+                left: `calc(${h.left} + ${h.width} - 3.5rem)`,
+                width: "3.25rem",
+                height: "1.15rem",
+                textAlign: "right",
+              }}
+            >
+              Rules
+            </button>
+          )
+      )}
     </div>
   );
 }
@@ -181,6 +252,7 @@ export function DashboardContent({
   const [message, setMessage] = useState<string | null>(null);
   const [leagueError, setLeagueError] = useState<string | null>(null);
   const [contactUsOpen, setContactUsOpen] = useState(false);
+  const [openRulesKey, setOpenRulesKey] = useState<RulesKey | null>(null);
 
   useEffect(() => {
     if (searchParams.get("deleted") !== "1") return;
@@ -273,6 +345,67 @@ export function DashboardContent({
     (item) => item.league.format_type === "sports_league"
   );
 
+  if (showBotSelection) {
+    return (
+      <div className="min-h-screen flex flex-col px-4 py-8" data-league-theme="sdai">
+        {openRulesKey && (
+          <LeagueRulesModal
+            title={RULES_TITLES[openRulesKey].title}
+            onClose={() => setOpenRulesKey(null)}
+          >
+            <RulesContentFor rulesKey={openRulesKey} />
+          </LeagueRulesModal>
+        )}
+        <div className="max-w-md mx-auto w-full flex-1 flex flex-col">
+          <button
+            type="button"
+            onClick={() => {
+              setShowBotSelection(false);
+              setLeagueError(null);
+            }}
+            className="season-nav-link season-nav-link--active self-start mb-4"
+          >
+            ← Cancel
+          </button>
+          <div className="text-center mb-8">
+            <Image
+              src="/images/leagues/sdai.png"
+              alt="StockDraft Artificial Intelligence"
+              width={220}
+              height={220}
+              className="mx-auto rounded-2xl"
+              priority
+            />
+            <h1 className="text-xl font-bold mt-4">SDAI</h1>
+            <p className="text-muted text-sm mt-2">
+              Draft live against three AI managers. Pick your opponents below.
+            </p>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setOpenRulesKey("sdai")}
+                className="text-sm font-medium text-gold hover:underline"
+              >
+                SDAI Rules
+              </button>
+            </div>
+          </div>
+
+          <BotSelectionPanel
+            defaultTeamName={profile.team_name}
+            onCancel={() => {
+              setShowBotSelection(false);
+              setLeagueError(null);
+            }}
+            onConfirm={handleCreateLeague}
+            confirming={startingLeague}
+            error={leagueError}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <DeleteLeagueModal
@@ -288,6 +421,15 @@ export function DashboardContent({
         email={profile.email}
         onClose={() => setContactUsOpen(false)}
       />
+
+      {openRulesKey && (
+        <LeagueRulesModal
+          title={RULES_TITLES[openRulesKey].title}
+          onClose={() => setOpenRulesKey(null)}
+        >
+          <RulesContentFor rulesKey={openRulesKey} />
+        </LeagueRulesModal>
+      )}
 
       {message && (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
@@ -340,80 +482,73 @@ export function DashboardContent({
       <LiveTickerTape />
 
       <section className="crest-card p-0.5 space-y-4">
-        {!showBotSelection && (
-          <DashboardSheet
-            src="/images/dashboard-cards/create-league-sheet.png"
-            alt="Create New League"
-            hotspots={[
-              {
-                label: "Create Free Sim League",
-                onClick: () => {
-                  setLeagueError(null);
-                  setShowBotSelection(true);
-                },
-                top: "43.2%",
-                left: "4.8%",
-                width: "43.9%",
-                height: "13.8%",
+        <DashboardSheet
+          src="/images/dashboard-cards/create-league-sheet.png"
+          alt="Create New League"
+          onOpenRules={(key) => setOpenRulesKey(key)}
+          hotspots={[
+            {
+              label: "Create Free Sim League",
+              onClick: () => {
+                setLeagueError(null);
+                setShowBotSelection(true);
               },
-              {
-                label: "Create Player League",
-                href: "/leagues/create?entry=player",
-                top: "43.2%",
-                left: "50.9%",
-                width: "44%",
-                height: "13.8%",
-              },
-              {
-                label: "Create Sports Sim League",
-                href: "/leagues/create?entry=sports",
-                top: "59.4%",
-                left: "4.8%",
-                width: "43.9%",
-                height: "14.8%",
-              },
-              {
-                label: "StockDraft Day Trader",
-                href: "/day-trader",
-                top: "59.4%",
-                left: "50.9%",
-                width: "44%",
-                height: "14.8%",
-              },
-              {
-                label: "StockDraft Daily Fantasy Sport",
-                href: "/stockdraft-dfs",
-                top: "76.5%",
-                left: "4.8%",
-                width: "43.9%",
-                height: "14.6%",
-              },
-              {
-                label: "StockDraft Weekly Fantasy Sport",
-                href: "/stockdraft-wfs",
-                top: "76.5%",
-                left: "50.9%",
-                width: "44%",
-                height: "14.6%",
-              },
-            ]}
-          />
-        )}
+              top: "43.2%",
+              left: "4.8%",
+              width: "43.9%",
+              height: "13.8%",
+              rulesKey: "sdai",
+            },
+            {
+              label: "Create Player League",
+              href: "/leagues/create?entry=player",
+              top: "43.2%",
+              left: "50.9%",
+              width: "44%",
+              height: "13.8%",
+              rulesKey: "sdpl",
+            },
+            {
+              label: "Create Sports Sim League",
+              href: "/leagues/create?entry=sports",
+              top: "59.4%",
+              left: "4.8%",
+              width: "43.9%",
+              height: "14.8%",
+              rulesKey: "sports-sim",
+            },
+            {
+              label: "StockDraft Day Trader",
+              href: "/day-trader",
+              top: "59.4%",
+              left: "50.9%",
+              width: "44%",
+              height: "14.8%",
+              rulesKey: "day-trader",
+            },
+            {
+              label: "StockDraft Daily Fantasy Sport",
+              href: "/stockdraft-dfs",
+              top: "76.5%",
+              left: "4.8%",
+              width: "43.9%",
+              height: "14.6%",
+              rulesKey: "sddfs",
+            },
+            {
+              label: "StockDraft Weekly Fantasy Sport",
+              href: "/stockdraft-wfs",
+              top: "76.5%",
+              left: "50.9%",
+              width: "44%",
+              height: "14.6%",
+              rulesKey: "sdwfs",
+            },
+          ]}
+        />
 
-        {leagueError && !showBotSelection && (
+        {leagueError && (
           <p className="text-sm text-red-400">{leagueError}</p>
-        )}
-        {showBotSelection && (
-          <BotSelectionPanel
-            defaultTeamName={profile.team_name}
-            onCancel={() => {
-              setShowBotSelection(false);
-              setLeagueError(null);
-            }}
-            onConfirm={handleCreateLeague}
-            confirming={startingLeague}
-            error={leagueError}
-          />
         )}
       </section>
 
