@@ -11,6 +11,7 @@ import {
   type SportsLeagueDraftOrderContext,
 } from "@/lib/league/sports-league-draft-order";
 import { parseSportsLeagueId } from "@/lib/league/sports-league-standings";
+import { computeSdfl2026DraftOrder } from "@/lib/sim/sdfl-2026-draft-order";
 
 export async function loadLeagueMemberIds(
   leagueId: string,
@@ -78,14 +79,33 @@ export async function resolveDraftOrderForLeague(
       return { draftOrder: [], error: "Invalid sports league format." };
     }
 
-    const context: SportsLeagueDraftOrderContext = {
-      leagueId,
-      sportsLeagueId,
-      playerCount,
-      standingsSeason: league.sports_standings_season ?? null,
-    };
+    if (sportsLeagueId === "sdfl") {
+      // SDFL 2026: draft order mirrors the real 2026 NFL Draft's original
+      // round 1 order. Falls back to the standard sports-league placeholder
+      // (random shuffle) only if fewer members have a real-team mapping
+      // than there are members — shouldn't happen in practice since the
+      // identity-claim gate requires every slot filled before a draft can
+      // start, but this avoids silently dropping a member from the order.
+      const sdflOrder = await computeSdfl2026DraftOrder(supabase, leagueId);
+      draftOrder =
+        sdflOrder.length === memberIds.length
+          ? sdflOrder
+          : applySportsLeagueDraftOrder(memberIds, {
+              leagueId,
+              sportsLeagueId,
+              playerCount,
+              standingsSeason: league.sports_standings_season ?? null,
+            });
+    } else {
+      const context: SportsLeagueDraftOrderContext = {
+        leagueId,
+        sportsLeagueId,
+        playerCount,
+        standingsSeason: league.sports_standings_season ?? null,
+      };
 
-    draftOrder = applySportsLeagueDraftOrder(memberIds, context);
+      draftOrder = applySportsLeagueDraftOrder(memberIds, context);
+    }
   } else {
     const method = parseDraftOrderMethodSetting(league.draft_order_method);
     draftOrder = applyStandardDraftOrderMethod(
