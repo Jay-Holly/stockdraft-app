@@ -422,15 +422,6 @@ export function DashboardContent({
         onClose={() => setContactUsOpen(false)}
       />
 
-      {openRulesKey && (
-        <LeagueRulesModal
-          title={RULES_TITLES[openRulesKey].title}
-          onClose={() => setOpenRulesKey(null)}
-        >
-          <RulesContentFor rulesKey={openRulesKey} />
-        </LeagueRulesModal>
-      )}
-
       {message && (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           {message}
@@ -485,7 +476,6 @@ export function DashboardContent({
         <DashboardSheet
           src="/images/dashboard-cards/create-league-sheet.png"
           alt="Create New League"
-          onOpenRules={(key) => setOpenRulesKey(key)}
           hotspots={[
             {
               label: "Create Free Sim League",
@@ -497,7 +487,6 @@ export function DashboardContent({
               left: "4.8%",
               width: "43.9%",
               height: "13.8%",
-              rulesKey: "sdai",
             },
             {
               label: "Create Player League",
@@ -506,7 +495,6 @@ export function DashboardContent({
               left: "50.9%",
               width: "44%",
               height: "13.8%",
-              rulesKey: "sdpl",
             },
             {
               label: "Create Sports Sim League",
@@ -515,7 +503,6 @@ export function DashboardContent({
               left: "4.8%",
               width: "43.9%",
               height: "14.8%",
-              rulesKey: "sports-sim",
             },
             {
               label: "StockDraft Day Trader",
@@ -524,7 +511,6 @@ export function DashboardContent({
               left: "50.9%",
               width: "44%",
               height: "14.8%",
-              rulesKey: "day-trader",
             },
             {
               label: "StockDraft Daily Fantasy Sport",
@@ -533,7 +519,6 @@ export function DashboardContent({
               left: "4.8%",
               width: "43.9%",
               height: "14.6%",
-              rulesKey: "sddfs",
             },
             {
               label: "StockDraft Weekly Fantasy Sport",
@@ -542,7 +527,6 @@ export function DashboardContent({
               left: "50.9%",
               width: "44%",
               height: "14.6%",
-              rulesKey: "sdwfs",
             },
           ]}
         />

@@ -681,11 +681,7 @@ export function DayTraderRulesContent() {
           purchase necessary. Free to enter. One entry per user per week.
         </p>
         <p>
-          Prize eligibility depends on the week&rsquo;s sponsor and prize type.
-          Some prizes (gift cards, merch, StockDraft credits) are open to
-          all ages. Prizes involving financial accounts (brokerage credits,
-          cash transfers) require winners to be 18+ or a parent/guardian
-          claim.
+          Entrants must be 18 years or older. Void where prohibited by law.
         </p>
       </RuleSection>
 

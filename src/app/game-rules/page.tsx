@@ -355,10 +355,9 @@ export default function GameRulesPage() {
         </BodyText>
 
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Day Trader Prize Contests: eligibility depends on the week&apos;s
-          sponsor. Gift cards, merch, and StockDraft credits are open to all
-          ages; anything touching a real financial account requires you to
-          be 18+, or claimed by a parent/guardian.
+          Day Trader, SDDFS, and SDWFS are 18+ only — entrants must be 18
+          years or older to enter any of these three contests, void where
+          prohibited by law.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
           No purchase necessary to enter or win. StockDraft is the sole
