@@ -1,14 +1,53 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Logo } from "@/components/Logo";
+import { LeagueRulesModal } from "@/components/league/LeagueRulesModal";
+import {
+  SdplRulesContent,
+  SdflRulesContent,
+  SdlbSdhlSdbaRulesContent,
+  DayTraderRulesContent,
+  SddfsRulesContent,
+  SdwfsRulesContent,
+} from "@/components/league/rules-content";
+
+type RulesKey = "sdpl" | "sdfl" | "sim" | "day-trader" | "sddfs" | "sdwfs";
+
+const RULES_TITLES: Record<RulesKey, string> = {
+  sdpl: "SDPL / SDAI Rules",
+  sdfl: "SDFL Rules",
+  sim: "SDLB / SDHL / SDBA Rules",
+  "day-trader": "Day Trader Rules",
+  sddfs: "SDDFS Rules",
+  sdwfs: "SDWFS Rules",
+};
+
+function RulesContentFor({ rulesKey }: { rulesKey: RulesKey }) {
+  switch (rulesKey) {
+    case "sdpl":
+      return <SdplRulesContent />;
+    case "sdfl":
+      return <SdflRulesContent />;
+    case "sim":
+      return <SdlbSdhlSdbaRulesContent />;
+    case "day-trader":
+      return <DayTraderRulesContent />;
+    case "sddfs":
+      return <SddfsRulesContent />;
+    case "sdwfs":
+      return <SdwfsRulesContent />;
+  }
+}
 
 function SectionDivider() {
   return <hr className="border-dark-border my-8" />;
 }
 
-function SectionTitle({ children }: { children: ReactNode }) {
+function NumberedSectionTitle({ children }: { children: ReactNode }) {
   return (
-    <h2 className="text-lg font-bold text-gold mt-8 mb-3 first:mt-0">{children}</h2>
+    <h2 className="text-xl font-bold text-gold mt-8 mb-3 first:mt-0">{children}</h2>
   );
 }
 
@@ -28,866 +67,315 @@ function BulletList({ items }: { items: ReactNode[] }) {
   );
 }
 
-function RulesTable({
-  headers,
-  rows,
+function StatTile({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="rounded-xl border border-dark-border bg-dark-card p-3 text-center">
+      <p className="text-xl font-bold text-gold">{value}</p>
+      <p className="text-xs text-white/70 mt-1 leading-snug">{label}</p>
+    </div>
+  );
+}
+
+function LeagueCard({
+  eyebrow,
+  title,
+  children,
+  linkLabel,
+  rulesKey,
+  onOpenRules,
 }: {
-  headers: string[];
-  rows: string[][];
+  eyebrow: string;
+  title: string;
+  children: ReactNode;
+  linkLabel: string;
+  rulesKey: RulesKey;
+  onOpenRules: (key: RulesKey) => void;
 }) {
   return (
-    <div className="overflow-x-auto mt-3 rounded-xl border border-dark-border">
-      <table className="w-full text-sm border-collapse min-w-[280px]">
-        <thead>
-          <tr className="border-b border-dark-border bg-dark-card">
-            {headers.map((header) => (
-              <th
-                key={header}
-                className="text-left py-2.5 px-3 text-gold font-semibold text-xs uppercase tracking-wider"
-              >
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr
-              key={i}
-              className="border-b border-dark-border/50 last:border-b-0"
-            >
-              {row.map((cell, j) => (
-                <td key={j} className="py-2.5 px-3 text-white/90 align-top">
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="rounded-xl border border-dark-border bg-dark-card p-4">
+      <p className="text-sm font-bold uppercase tracking-wider text-gold">
+        {eyebrow}
+      </p>
+      <h3 className="text-base font-bold text-white mt-1">{title}</h3>
+      <div className="space-y-2 mt-2">{children}</div>
+      <button
+        type="button"
+        onClick={() => onOpenRules(rulesKey)}
+        className="text-sm text-gold hover:underline mt-3"
+      >
+        {linkLabel}
+      </button>
     </div>
   );
 }
 
 export default function GameRulesPage() {
+  const [openRules, setOpenRules] = useState<RulesKey | null>(null);
+
   return (
     <div className="min-h-screen flex flex-col bg-dark">
       <header className="px-4 py-4 border-b border-dark-border">
         <Logo />
       </header>
 
+      {openRules && (
+        <LeagueRulesModal
+          title={RULES_TITLES[openRules]}
+          onClose={() => setOpenRules(null)}
+        >
+          <RulesContentFor rulesKey={openRules} />
+        </LeagueRulesModal>
+      )}
+
       <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
-        <h1 className="text-2xl font-bold text-white mb-1 uppercase tracking-wide">
-          StockDraft Game Rules
-        </h1>
+        <p className="text-sm font-bold uppercase tracking-widest text-gold">
+          StockDraft — Rules Reference
+        </p>
+        <h1 className="text-2xl font-bold text-white mt-1 mb-1">How to Play</h1>
         <p className="text-muted text-sm mb-6 italic">
           Now the market has a season.
         </p>
 
-        <SectionTitle>THE CONCEPT</SectionTitle>
         <BodyText>
-          StockDraft is fantasy sports for the stock market. You draft real stocks
-          and crypto like players, compete head-to-head against other managers
-          every week, and win based on how your portfolio actually performs — not
-          predictions, not trivia. Real markets. Real money movement. Real
-          competition. Real shit talking with your friends.
+          You draft real stocks and crypto like players. You compete
+          head-to-head every week. You win when your portfolio actually beats
+          theirs — not because you predicted anything, not because you knew
+          trivia. Real markets. Real money movement. Real smack talking.
         </BodyText>
+        <p className="text-sm text-white/90 leading-relaxed mt-3">
+          Every format below runs on the same core engine — draft, lock,
+          score, repeat — but each one bends the rules of &quot;fantasy sports
+          meets stock market&quot; in a different direction. Some strip out
+          everything that makes fantasy sports maddening. Some put it all
+          back in, on purpose. Pick your poison.
+        </p>
+
+        <SectionDivider />
+
+        <NumberedSectionTitle>01 &nbsp; The Pitch</NumberedSectionTitle>
         <BodyText>
-          And best of all? StockDraft eliminates every single thing that has ever
-          made you want to throw your phone across the room on a Sunday afternoon.
+          Fantasy sports without the parts that make you want to throw your
+          phone against the wall every Sunday:
         </BodyText>
         <BulletList
           items={[
             <>
-              <strong>No bye weeks.</strong> Your entire starting lineup is
-              available every single week. The market doesn&apos;t take Sundays
-              off — and neither do you.
+              No bye weeks. Every stock plays, every week. The crypto market
+              doesn&apos;t take weekends off.
             </>,
             <>
-              <strong>No injuries.</strong> You don&apos;t have to worry about
-              your stud player blowing out his damn knee in Week 2 and being
-              lost for the entire season. NVDA isn&apos;t going on the 10-day DL
-              because it &quot;felt tightness&quot; in warmups.
+              No injuries — in the base game. You&apos;re #1 overall pick
+              isn&apos;t landing on the 10-day DL because it &quot;felt
+              tightness.&quot; (Sports Sim leagues bring this back on purpose.
+              More on that shortly.)
             </>,
             <>
-              <strong>No weather.</strong> Your stock isn&apos;t getting 4
-              carries because the game went 28-0 in the first quarter and the
-              coach spent the rest of it handing off to a backup.
+              No coaching decisions, no contract disputes, no weather.
+              Nothing benches your pick except the market itself.
             </>,
             <>
-              <strong>No contract disputes.</strong> Your stocks aren&apos;t
-              holding out for a better deal or demanding a trade to a contender.
-            </>,
-            <>
-              <strong>No coaching decisions.</strong> Nobody is benching your
-              star for &quot;load management&quot; or moving it to a different
-              role midseason because a new offensive coordinator wants to
-              &quot;establish the run.&quot;
-            </>,
-            <>
-              <strong>No waiver wire sniping.</strong> Well... actually the free
-              agency window is still there. But at least it&apos;s fair. Worst
-              record picks first. No one is dropping a player at 11:59 PM on a
-              Tuesday and sniping him before you wake up.
+              No waiver sniping. Free agency is first-click-wins — no queue,
+              no priority order, no setting an alarm for midnight.
             </>,
           ]}
         />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          And on top of all that? StockDraft is a genuinely great way to learn
-          how the market actually works — without risking a dime of your own
-          money. Whether you&apos;re 14 or 140, if markets have ever felt
-          intimidating or out of reach, this is your way in.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Every SDPL (StockDraft Player League) season runs 13 weeks — 11 weeks
-          of regular season play plus a 2-week playoff — mirroring the same
-          13-week financial quarters the real market runs on. That&apos;s not a
-          coincidence. That&apos;s the whole point.
-        </p>
 
         <SectionDivider />
 
-        <SectionTitle>YOUR ROSTER</SectionTitle>
-        <BodyText>Every manager drafts the same structure:</BodyText>
-        <BulletList
-          items={[
-            <>
-              <strong>10 Starting Stocks</strong> — your core lineup, scored in
-              every matchup. No bye weeks. No injuries. All ten available every
-              single week.
-            </>,
-            <>
-              <strong>2 Bench Spots</strong> — hold backup stocks, swap them in
-              during free agency
-            </>,
-            <>
-              <strong>Crypto Flex Pool</strong> — $200,000 to invest across 1–3
-              cryptocurrencies, always live, always tradeable
-            </>,
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Stocks come from the S&P 500 pool. NVDA isn&apos;t going on the 10-day
-          DL. Crypto runs 24/7 and never locks — more on that below.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>THE DRAFT</SectionTitle>
+        <NumberedSectionTitle>02 &nbsp; The Mechanics, Fast</NumberedSectionTitle>
         <BodyText>
-          StockDraft uses a salary cap draft. Every manager gets $80,000 per
-          stock slot to spend on each of their 10 starters and 2 bench spots.
+          The full breakdown lives in each league&apos;s rules doc.
+          Here&apos;s what&apos;s true almost everywhere:
         </BodyText>
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <StatTile value="$80K" label="per roster slot, salary cap draft" />
+          <StatTile value="9:30" label="daily lineup lock, ET" />
+          <StatTile value="13" label="week season, SDPL/SDAI" />
+          <StatTile value="1st" label="click wins any free agent claim" />
+        </div>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Crypto works differently. Your $200,000 crypto budget is spent during
-          the draft across as many coins as you want. But here&apos;s the catch
-          — the more managers that draft the same coin, the more expensive it
-          gets. Each additional buyer pays a surcharge:
+          Crypto is the wild card — it trades 24/7, and in leagues with a
+          flex pool, it gets more expensive the more managers pile into the
+          same coin. Draft smart. Don&apos;t chase the crowd.
         </p>
-        <BulletList
-          items={[
-            "1st buyer: no surcharge",
-            "2nd buyer: +5%",
-            "3rd buyer: +10%",
-            "4th buyer: +20%",
-            "5th buyer: +40%",
-            "6th+ buyer: +80%",
-          ]}
-        />
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          That surcharge money goes directly into the Weekly Bonus Pool — more on
-          that below. Draft smart. Don&apos;t chase the crowd.
+          And always bear in mind. Is a league based on making the most
+          dollars to win, or is it based on having the highest percentage
+          gain to win. A $5 stock or crypto can out gain a $1000 stock
+          percentage wise with ease. That&apos;s what makes StockDraft so
+          fun!
         </p>
 
         <SectionDivider />
 
-        <SectionTitle>WEEKLY SCORING &amp; MATCHUPS</SectionTitle>
+        <NumberedSectionTitle>03 &nbsp; Pick Your League</NumberedSectionTitle>
         <BodyText>
-          Just like fantasy football, each week you face one opponent
-          head-to-head. The manager whose portfolio gains more wins the matchup
-          — simple as that.
+          Eight ways to play. Same market, wildly different amounts of
+          chaos.
         </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Your score is based on your 10 starting stocks plus your crypto flex
-          pool. Bench spots don&apos;t score in matchups — they&apos;re depth,
-          not starters.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          The week doesn&apos;t end Friday. Stocks freeze at Friday 4:00 PM ET
-          market close, but crypto keeps moving all weekend. If you&apos;re down
-          going into the weekend, your crypto trades can still flip the result
-          before the final whistle. No game script. No garbage time. No coach
-          pulling your guy because the game is out of hand.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Final scores lock Friday 4:00 PM ET. That&apos;s when the week
-          officially ends, winners are determined, and the next week begins.
-          <em className="text-xs text-white/70"> (For sports sim leagues SDBA/SDHL/SDLB, scores lock Sunday 4:00 PM ET to capture weekend crypto scoring.)</em>
-        </p>
 
-        <SectionDivider />
-
-        <SectionTitle>DAILY LINEUP LOCK</SectionTitle>
-        <BodyText>
-          Lineups lock every day at 9:30 AM ET when the market opens. You
-          can&apos;t swap bench players to starters or change your active lineup
-          during market hours.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          At 4:00 PM ET market close, lineups unlock and you can make changes
-          until the next morning&apos;s 9:30 AM lock.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Nobody is putting your stock on a snap count. Nobody is moving it to a
-          different role. It plays. Every day. Full time.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Crypto is always exempt. Buy, sell, and rebalance your crypto flex pool
-          any time — day, night, weekend, holidays. No locks, ever.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>FREE AGENCY</SectionTitle>
-        <BodyText>
-          Your roster is locked for the entire week — no free agent pickups, no
-          drops, no adding new stocks from Monday 9:30 AM ET through Friday 4:00
-          PM ET. You play the week with the starters and bench you have. Period.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          The free agent pickup window opens every Saturday at 9:30 AM ET and
-          closes Monday at 9:30 AM ET. That&apos;s your one window each week to
-          drop underperformers and add new stocks to your bench.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          There is also a waiver wire for the first round of pickup moves.
-          Waiver priority goes to the manager with the worst weekly gain
-          percentage the prior week — worst record gets first pick, best record
-          picks last.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Plan your roster before Monday morning. Once the market opens,
-          you&apos;re committed.
-        </p>
-
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Roster Composition:
-        </p>
-        <RulesTable
-          headers={["Component", "SDPL", "SDFL (Sports Sim)"]}
-          rows={[
-            ["Starters", "10 stocks", "7 stocks + 3 crypto"],
-            ["Bench", "2 stocks", "3 stocks"],
-            ["Crypto Flex", "Up to 3 picks from $200K pool", "—"],
-            ["IR Slots", "—", "3"],
-            ["Total Cap", "$1,000,000", "$1,000,000"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          <strong>Scoring:</strong> Your 10 starters + crypto flex pool score matchups. Bench spots are depth only. Crypto is always tradeable, even during market hours.
-        </p>
-
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Full Schedule:
-        </p>
-        <RulesTable
-          headers={["What", "When"]}
-          rows={[
-            ["Scoring week", "Monday 9:30 AM → Friday 4:00 PM"],
-            ["Weekend", "Prices frozen — nothing scores Sat/Sun"],
-            ["Final scores lock", "Friday 4:00 PM ET"],
-            ["Lineups locked", "Every weekday 9:30 AM – 4:00 PM"],
-            ["Lineups editable", "Weekdays after 4:00 PM + all weekend"],
-            ["Free agency open", "Saturday 9:30 AM → Monday 9:30 AM"],
-            ["Free agency closed", "Monday 9:30 AM → Saturday 9:30 AM (no adds/drops all week)"],
-          ]}
-        />
-
-        <SectionDivider />
-
-        <SectionTitle>LEAGUE FORMATS — SDPL (STOCK DRAFT PLAYER LEAGUES)</SectionTitle>
-        <BodyText>
-          StockDraft Player Leagues come in five sizes. The rules are identical
-          across all five — the only difference is how many managers
-          you&apos;re competing against:
-        </BodyText>
-        <RulesTable
-          headers={["Format", "Teams", "Weekly Matchups", "Playoff Teams"]}
-          rows={[
-            ["SDPL4", "4 teams", "2 games/week", "All 4"],
-            ["SDPL6", "6 teams", "3 games/week", "Top 4"],
-            ["SDPL8", "8 teams", "4 games/week", "Top 4"],
-            ["SDPL10", "10 teams", "5 games/week", "Top 4"],
-            ["SDPL12", "12 teams", "6 games/week", "Top 4"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          All formats run 11 regular season weeks followed by a 2-week playoff.
-          The top 4 teams always make the playoffs, regardless of league size.
-          In a 4-team league, everyone gets in. In a 12-team league, you need
-          to earn it.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>PLAYOFFS</SectionTitle>
-        <BodyText>
-          The top 4 teams by regular season record advance. Seeding is determined
-          by wins, then losses, then season gain percentage as a tiebreaker.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Week 12 — Semifinals:
-        </p>
-        <BulletList
-          items={["#1 seed vs #4 seed", "#2 seed vs #3 seed"]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Week 13 — Championship + 3rd Place:
-        </p>
-        <BulletList
-          items={[
-            "Semifinal winners play for the championship",
-            "Semifinal losers play for 3rd place",
-            "3rd place matters. In leagues with prize pools, 3rd place typically gets their money back.",
-          ]}
-        />
-
-        <SectionDivider />
-
-        <SectionTitle>WEEKLY BONUS AWARDS</SectionTitle>
-        <BodyText>
-          Every week, 7 bonus awards are paid out from the $100,000 season bonus
-          pool — funded at the start of the season and supplemented by crypto
-          surcharge money from the draft. Weekly base payout: $8,636/week.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Award money deposits directly into your crypto flex pool — you choose
-          which coin to add it to. No locks, no waiting. It&apos;s yours to
-          invest immediately.
-        </p>
-        <RulesTable
-          headers={["Award", "Payout", "How to Win"]}
-          rows={[
-            ["🏆 Winner of the Week", "$2,000", "Highest total dollar gain in the league"],
-            ["🌟 Rookie of the Week", "$1,500", "Best single stock % gain"],
-            ["💎 Diamond Hands", "$1,500", "Biggest recovery swing on a stock you held all week"],
-            ["🎰 Lottery Hit", "$1,500", "A non-Top-100 stock up 10%+ on your roster"],
-            ["🔥 Sweep Week", "$1,500", "Every single starter finishes green"],
-            ["😢 Loser of the Week", "$832", "Worst weekly % — a consolation prize, not a penalty"],
-            ["🪑 Bench Curse", "$1", "Your bench outperformed your starters. One dollar. No sympathy."],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Unclaimed awards roll into the Playoff Bonus Pool.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>PLAYOFF BONUS POOL</SectionTitle>
-        <BodyText>
-          $5,000 is seeded into the Playoff Bonus Pool at the start of every
-          season. Every unclaimed weekly award adds to it throughout the year.
-          Watch it grow on the Awards page.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          When the playoffs begin (Week 12), all 4 playoff teams split the
-          accumulated pool based on their seed:
-        </p>
-        <BulletList
-          items={[
-            "🥇 1st seed: 40%",
-            "🥈 2nd seed: 25%",
-            "🥉 3rd seed: 20%",
-            "4th seed: 15%",
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Each team&apos;s share gets invested into one stock they currently own
-          — starters or bench, their choice. No deadline — claim anytime during
-          the playoff weeks.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>DAY TRADER — FREE WEEKLY CONTEST</SectionTitle>
-        <BodyText>
-          Day Trader is a free weekly contest open to anyone with a StockDraft
-          team. No new draft required — just pick one of your existing league
-          teams as your entry.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          How it works:
-        </p>
-        <BulletList
-          items={[
-            "Select any team from any league you're currently in",
-            "Your 10 starting stocks are copied and reset to a flat $50,000 each ($500,000 total) — leveling the playing field for everyone",
-            "Trade freely during market hours (Monday 9:30 AM – Friday 4:00 PM ET)",
-            "The week resets every Monday — enter a different team if you want",
-            "Entry window: Opens Monday 10:00 AM ET. Lock in your team anytime until Monday 9:30 AM ET the following week, then trading begins.",
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Two leaderboards run simultaneously:
-        </p>
-        <BulletList
-          items={[
-            "🏆 Top $ Gainer — most total dollar gain on your $500K portfolio",
-            "📈 Top % Gainer — best percentage gain on your $500K portfolio",
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Tied scores rank by earliest entry time — so signing up early matters.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Weekly prizes are sponsor-funded and announced each Monday. Check the
-          Day Trader page for this week&apos;s contest name, sponsor, and prize
-          details.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          No purchase necessary. Free to enter. One entry per user per week.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>SDDFS — STOCKDRAFT DAILY FANTASY SPORT</SectionTitle>
-        <BodyText>
-          SDDFS is a single-day contest, separate from your season leagues.
-          Build a 12-pick lineup each morning, lock it in at the open, and see
-          where you land when the market closes that afternoon.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Building your lineup:
-        </p>
-        <BulletList
-          items={[
-            "12 picks total — one stock or crypto from each of the 11 GICS sectors (Technology, Financials, Healthcare, Consumer Discretionary, Consumer Staples, Energy, Industrials, Materials, Real Estate, Utilities, Communication Services) plus one Crypto pick",
-            "Picks are not exclusive — any number of players can roster the same stock or coin. It's not first-come-first-served, so draft the pick you think will actually move.",
-            "One entry per contest, one contest per buy-in tier per day",
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Contest tiers:
-        </p>
-        <RulesTable
-          headers={["Contest", "Buy-in", "Entrant cap"]}
-          rows={[
-            ["The $2 Bill", "$2", "150"],
-            ["The 5 Spot", "$5", "100"],
-            ["The 10'er", "$10", "75"],
-            ["The 25 Spot", "$25", "50"],
-            ["The Fiddy Hundred Cent", "$50", "20"],
-            ["The Big Ciento", "$100", "10"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Lineup Composition:
-        </p>
-        <RulesTable
-          headers={["Component", "Details"]}
-          rows={[
-            ["Total Picks", "12"],
-            ["Sector Picks", "One from each of 11 GICS sectors"],
-            ["Crypto Pick", "1 crypto (any coin from eligible pool)"],
-            ["Starters/Bench", "No distinction — all 12 count equally"],
-            ["Scoring", "Open-to-close % change, summed across all 12"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Schedule:
-        </p>
-        <RulesTable
-          headers={["What", "When"]}
-          rows={[
-            ["Entry opens", "10:00 AM ET (1 hour after prior day's 9:00 AM lock)"],
-            ["Entry closes / Lineups lock", "9:00 AM ET on contest day"],
-            ["Contest runs", "9:30 AM – 4:00 PM ET, same day"],
-            ["Scored", "After 4:00 PM ET close, same day"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Payouts:
-        </p>
-        <BulletList
-          items={[
-            "Scored at 4:00 PM ET (market close) on each pick's open-to-close % change, summed across all 12 picks — highest total score wins",
-            "Top 3 finishers split 50% / 30% / 20% of a prize pool equal to 92% of all buy-ins collected",
-            "Ties split the pooled share evenly across every tied entry, even when a tie straddles the paid places (e.g. a 3-way tie for 2nd splits the 2nd + 3rd shares evenly across all three)",
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Track your live standings and projected payout anytime from My Teams
-          — scores update throughout the day as the market moves, not just
-          once at close.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>SDWFS — STOCKDRAFT WEEKLY FANTASY SPORT</SectionTitle>
-        <BodyText>
-          SDWFS is the weekly sibling of SDDFS, separate from your season
-          leagues. Build a 12-pick lineup once entry opens, lock it in Monday
-          morning, and see where you land when the market closes that Friday
-          afternoon.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Building your lineup:
-        </p>
-        <BulletList
-          items={[
-            "12 picks total — one stock or crypto from each of the 11 GICS sectors (Technology, Financials, Healthcare, Consumer Discretionary, Consumer Staples, Energy, Industrials, Materials, Real Estate, Utilities, Communication Services) plus one Crypto pick",
-            "Picks are not exclusive — any number of players can roster the same stock or coin. It's not first-come-first-served, so draft the pick you think will actually move.",
-            "One entry per contest, one contest per buy-in tier per week",
-            "Entry opens Monday 10:00 AM for next week's contest — open for 7 days until the following Monday 9:30 AM",
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Lineup Composition:
-        </p>
-        <RulesTable
-          headers={["Component", "Details"]}
-          rows={[
-            ["Total Picks", "12"],
-            ["Sector Picks", "One from each of 11 GICS sectors"],
-            ["Crypto Pick", "1 crypto (any coin from eligible pool)"],
-            ["Starters/Bench", "No distinction — all 12 count equally"],
-            ["Scoring", "Cumulative Monday-open to Friday-close % change, summed"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Contest tiers:
-        </p>
-        <RulesTable
-          headers={["Contest", "Buy-in", "Entrant cap"]}
-          rows={[
-            ["The $2 Bill", "$2", "150"],
-            ["The 5 Spot", "$5", "100"],
-            ["The 10'er", "$10", "75"],
-            ["The 25 Spot", "$25", "50"],
-            ["The Fiddy Hundred Cent", "$50", "20"],
-            ["The Big Ciento", "$100", "10"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Schedule:
-        </p>
-        <RulesTable
-          headers={["What", "When"]}
-          rows={[
-            ["Next week's entry opens", "Monday 10:00 AM ET"],
-            ["This week's entry closes / Lineups lock", "Monday 9:30 AM ET"],
-            ["Contest runs", "Monday 9:30 AM – Friday 4:00 PM ET"],
-            ["Scored", "Friday 4:00 PM ET"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 text-xs text-white/70">
-          Entry window: ~7 days (Monday 10:00 AM through following Monday 9:30 AM)
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Scoring and payouts:
-        </p>
-        <BulletList
-          items={[
-            "Scored at 4:00 PM ET Friday (market close) on each pick's cumulative Monday-open-to-Friday-close % change, summed across all 12 picks — highest total score wins",
-            "Top 3 finishers split 50% / 30% / 20% of a prize pool equal to 92% of all buy-ins collected",
-            "Ties split the pooled share evenly across every tied entry, even when a tie straddles the paid places (e.g. a 3-way tie for 2nd splits the 2nd + 3rd shares evenly across all three)",
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Track your live standings and projected payout anytime from My Teams
-          — scores update throughout the week as the market moves, not just
-          once at Friday&apos;s close.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>SPORTS SIM LEAGUES — SDBA, SDHL, SDLB</SectionTitle>
-        <BodyText>
-          StockDraft Sport Sim leagues mirror real professional seasons. Same game, same rules — but now add everything fantasy sports is famous for: injuries, IR slots, bye weeks, weather, bad coaching decisions. The whole nightmare. Welcome back.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          The critical difference: crypto scores all weekend to account for games played Sat/Sun. Stocks freeze at Friday 4:00 PM, but crypto keeps moving through Sunday to capture the full week.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Roster Composition (SDBA, SDHL, SDLB):
-        </p>
-        <RulesTable
-          headers={["Component", "Count", "Details"]}
-          rows={[
-            ["Starters", "10", "5 stocks + 5 crypto (fixed split)"],
-            ["Bench", "3", "Stocks only — depth, don't score (crypto changeable anytime)"],
-            ["IR Slots", "3", "Separate from roster — injured players"],
-            ["Total Picks", "13", "Rounds 1–10: starters, 11–13: bench"],
-            ["Total Cap", "$1,000,000", "$100,000 budget, $1M individual cap"],
-          ]}
-        />
-        <p className="text-sm text-white/90 leading-relaxed mt-3 font-semibold">
-          Schedule (same for SDBA, SDHL, SDLB):
-        </p>
-        <RulesTable
-          headers={["What", "When"]}
-          rows={[
-            ["Scoring week (stocks)", "Monday 9:30 AM → Friday 4:00 PM"],
-            ["Weekend", "Stocks frozen — crypto scores Sat/Sun"],
-            ["Final scores lock", "Sunday 4:00 PM ET"],
-            ["Lineups locked", "Every weekday 9:30 AM – 4:00 PM"],
-            ["Lineups editable", "Weekdays after 4:00 PM + all weekend"],
-            ["Free agency open", "Saturday 9:30 AM → Monday 9:30 AM"],
-            ["Free agency closed", "Daily 9:30 AM – 4:00 PM (trading hours only)"],
-          ]}
-        />
-
-        <SectionDivider />
-
-        <SectionTitle>THE FOUR LEAGUES</SectionTitle>
         <div className="space-y-4 mt-3">
-          <div className="rounded-xl border border-dark-border bg-dark-card p-4">
-            <h3 className="text-base font-bold text-gold">SDFL — Stock Draft Football League</h3>
-            <p className="text-sm text-white/90 mt-2 leading-relaxed">
-              Mirrors the NFL. 32 franchises, weekly matchups, 17-week regular
-              season. Playoff bracket mirrors the NFL postseason. Your season
-              starts when the NFL starts, ends when the NFL ends, and your
-              championship happens the same week as the Super Bowl.
+          <LeagueCard
+            eyebrow="SDPL · SDAI — Season · Weekly Matchups"
+            title="Player Leagues &amp; Free Sim"
+            linkLabel="Read the full SDPL/SDAI rules →"
+            rulesKey="sdpl"
+            onOpenRules={setOpenRules}
+          >
+            <p className="text-sm text-white/90 leading-relaxed">
+              The purest version. 10 starters, a crypto flex pool, 13 weeks
+              to prove you actually know something.
             </p>
-          </div>
-          <div className="rounded-xl border border-dark-border bg-dark-card p-4">
-            <h3 className="text-base font-bold text-gold">SDHL — Stock Draft Hockey League</h3>
-            <p className="text-sm text-white/90 mt-2 leading-relaxed">
-              Mirrors the NHL. 32 franchises, near-daily matchups Monday through
-              Friday. Hockey&apos;s relentless pace translates perfectly — new
-              opponent almost every trading day, no weekends (the market&apos;s
-              closed and everyone deserves a break), deep roster management all
-              season long.
+            <p className="text-sm text-white/90 leading-relaxed">
+              Squad up with real people (SDPL) or throw down against the
+              house bots (SDAI). No injuries, no waiver drama — just your
+              picks against the tape, week after week, all the way to a
+              2-week playoff. Draft the same crypto as everyone else and pay
+              a surcharge for it, and chase weekly bonus awards like Diamond
+              Hands and the dreaded Bench Curse along the way.
             </p>
-          </div>
-          <div className="rounded-xl border border-dark-border bg-dark-card p-4">
-            <h3 className="text-base font-bold text-gold">SDBA — Stock Draft Basketball Association</h3>
-            <p className="text-sm text-white/90 mt-2 leading-relaxed">
-              Mirrors the NBA. 30 franchises, same daily rotation format as the
-              SDHL. Fast-paced, high-scoring, constant action. Built for
-              managers who want to be making decisions every single morning.
+          </LeagueCard>
+
+          <LeagueCard
+            eyebrow="SDFL — Weekly · 17-Week Season"
+            title="Football League"
+            linkLabel="Read the full SDFL rules →"
+            rulesKey="sdfl"
+            onOpenRules={setOpenRules}
+          >
+            <p className="text-sm text-white/90 leading-relaxed">
+              Here&apos;s the puzzle: every stock is secretly wearing a
+              jersey. Get hurt in the real league, and your stock lands on
+              IR — you won&apos;t know whose jersey it was until it happens.
             </p>
-          </div>
-          <div className="rounded-xl border border-dark-border bg-dark-card p-4">
-            <h3 className="text-base font-bold text-gold">SDLB — Stock Draft League Baseball</h3>
-            <p className="text-sm text-white/90 mt-2 leading-relaxed">
-              Mirrors MLB. 30 franchises, series format — same opponent for 3–4
-              trading days, then rotate. 162 total matchups over the season. The
-              longest, deepest format in StockDraft. A marathon grind to October.
-              Not for the faint of heart.
+            <p className="text-sm text-white/90 leading-relaxed">
+              Same engine as SDPL, mirrored onto the NFL. 32 franchises, real
+              injury data, real bye weeks, real schedule.
             </p>
-          </div>
+          </LeagueCard>
+
+          <LeagueCard
+            eyebrow="SDHL · SDBA · SDLB — Daily / Series · Sunday Close"
+            title="Hockey, Basketball &amp; Baseball"
+            linkLabel="Read the full Sports Sim rules →"
+            rulesKey="sim"
+            onOpenRules={setOpenRules}
+          >
+            <p className="text-sm text-white/90 leading-relaxed">
+              SDFL&apos;s siblings — same injury-to-IR pipeline, different
+              math entirely. 5 stocks and 5 crypto start every single
+              lineup, fixed, no exceptions, with 3 IR slots waiting for
+              whichever one gets hurt.
+            </p>
+            <p className="text-sm text-white/90 leading-relaxed">
+              Hockey and basketball throw a new opponent at you almost
+              daily; baseball runs series like the real thing, 3–4 days per
+              matchup. And because these leagues cryptos score straight
+              through the weekend, free agency doesn&apos;t open until
+              Sunday 4:00 PM ET — the one scheduling quirk that trips up
+              everybody&apos;s first week.
+            </p>
+          </LeagueCard>
+
+          <LeagueCard
+            eyebrow="Day Trader — Weekly · Free · $500K Flat"
+            title="Free Weekly Contest"
+            linkLabel="Read the full Day Trader rules →"
+            rulesKey="day-trader"
+            onOpenRules={setOpenRules}
+          >
+            <p className="text-sm text-white/90 leading-relaxed">
+              Everyone starts with the exact same $500,000. No draft-day
+              edge, no lucky salary-cap math — just you, the tape, and
+              Friday&apos;s bell.
+            </p>
+            <p className="text-sm text-white/90 leading-relaxed">
+              Copy any team you&apos;ve already drafted, reset flat, and
+              trade freely all week. It&apos;s the closest thing here to
+              pure skill with the training wheels off — and it&apos;s free
+              to enter.
+            </p>
+            <p className="text-sm text-white/90 leading-relaxed">
+              Your one entry is competing for that week&apos;s sponsor
+              prize — two winners every week: Top $ Gainer (most total
+              dollar gain) and Top % Gainer (best percentage gain), both
+              measured against everyone else entered.
+            </p>
+          </LeagueCard>
+
+          <LeagueCard
+            eyebrow="SDDFS — Single Day · No Safety Net"
+            title="Daily Fantasy Sport"
+            linkLabel="Read the full SDDFS rules →"
+            rulesKey="sddfs"
+            onOpenRules={setOpenRules}
+          >
+            <p className="text-sm text-white/90 leading-relaxed">
+              Put your money where your mouth is! Daily contests. Add money
+              to your wallet and invest $2-$100 into a pool to see who wins.
+              Your skill wins you real MONEY! No bench. No free agency. No
+              do-overs. Twelve picks, one morning, one closing bell.
+            </p>
+            <p className="text-sm text-white/90 leading-relaxed">
+              One from each of 11 GICS sectors, plus a crypto wildcard —
+              lock it in at the open, and live with it until close.
+              It&apos;s the same market skill as the season-long leagues,
+              just with the safety rails removed. Higher variance, same
+              brain required.
+            </p>
+          </LeagueCard>
+
+          <LeagueCard
+            eyebrow="SDWFS — Weekly · Same Bet, Longer Fuse"
+            title="Weekly Fantasy Sport"
+            linkLabel="Read the full SDWFS rules →"
+            rulesKey="sdwfs"
+            onOpenRules={setOpenRules}
+          >
+            <p className="text-sm text-white/90 leading-relaxed">
+              SDDFS&apos;s calmer sibling — same 12-pick format, but
+              you&apos;ve got all week for the market to prove you right.
+            </p>
+            <p className="text-sm text-white/90 leading-relaxed">
+              Lock your lineup Monday morning, then watch it play out
+              through Friday&apos;s close. Still no bench, still no
+              mid-week bailout — you&apos;re just given more runway before
+              the scoreboard&apos;s final.
+            </p>
+          </LeagueCard>
         </div>
 
         <SectionDivider />
 
-        <SectionTitle>YOUR CITY, YOUR FRANCHISE</SectionTitle>
+        <NumberedSectionTitle>04 &nbsp; Who&apos;s This For</NumberedSectionTitle>
         <BodyText>
-          When you join a sports sim league, you type in your city. The system
-          validates it against a 100-mile radius from every real pro
-          team&apos;s home market for that sport. If your city qualifies, you
-          claim that division slot — and it&apos;s yours for the season.
+          Anyone. Whether you&apos;re 14 or 114, if the market has ever felt
+          like a locked room, this is the door in. Learn how it actually
+          moves — no real money at risk, no permission required.
         </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          First come, first served. Once a city is claimed, it&apos;s gone.
-          Cities that fall within 100 miles of multiple pro markets get to
-          choose which conference and division they want to represent. Border
-          city? You pick your side.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Every franchise identity is user-created — your team name, your brand,
-          your call. The city just determines which division you belong to.
-        </p>
 
-        <SectionDivider />
-
-        <SectionTitle>THE STOCK-TO-PLAYER MAPPING</SectionTitle>
-        <BodyText>
-          Here&apos;s where Sports Sim leagues get truly unique.
-        </BodyText>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Every S&amp;P 500 stock is mapped to a real NFL/NHL/NBA/MLB player,
-          ranked in parallel. The #1 stock by market cap maps to the #1 ranked
-          player. Stock #47 maps to player #47. All the way down the list.
+          Day Trader Prize Contests: eligibility depends on the week&apos;s
+          sponsor. Gift cards, merch, and StockDraft credits are open to all
+          ages; anything touching a real financial account requires you to
+          be 18+, or claimed by a parent/guardian.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          When you draft a stock in a sports sim league, you&apos;re not just
-          drafting a company. You&apos;re drafting that player&apos;s history.
+          No purchase necessary to enter or win. StockDraft is the sole
+          sponsor of the Day Trader contest and any associated prizes — not
+          affiliated with, endorsed by, or administered by Apple Inc. or
+          Google LLC.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          And that history plays out on your roster.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>THE INJURY SYSTEM</SectionTitle>
-        <BodyText>
-          Using real 2025 season injury data, stocks go to IR on the same
-          schedule their mapped player actually got hurt.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          If the player mapped to your stock blew out their knee in Week 6 and
-          missed three weeks — your stock goes to IR in Week 6 and sits out
-          three weeks. You need a replacement. Just like real fantasy sports.
+          Platform Fee: StockDraft keeps 10% of each contest&apos;s prize
+          pool to cover operating costs — servers, market data, and payment
+          processing. That 10% is the only portion of any contest that is
+          ever forwarded to a StockDraft account.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          The injury schedule is published before every season. You can see
-          exactly which stocks carry injury risk going in. Draft around it. Plan
-          for it. Ignore it at your own peril.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>THE IR SLOT</SectionTitle>
-        <BodyText>
-          Sports sim leagues include 2 IR slots per roster — separate from your
-          bench spots.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          A stock on IR doesn&apos;t score. It doesn&apos;t count against your
-          active lineup. And you can pick up a replacement during the free
-          agency window to fill the gap.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          When the IR period ends — matching the real player&apos;s return date
-          from 2025 — your stock comes back off IR and is eligible to return to
-          your active lineup.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>BYE WEEKS</SectionTitle>
-        <BodyText>
-          Every stock has a bye week — matching the real team bye week of the
-          player it&apos;s mapped to. During your stock&apos;s bye week, it
-          doesn&apos;t score. It just sits there. Staring at you. Like a useless
-          $80,000 mistake.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Plan around it. Or don&apos;t. But don&apos;t say we didn&apos;t warn
-          you.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>WEATHER</SectionTitle>
-        <BodyText>
-          Outdoor stadium games in bad weather affect scoring. Stocks mapped to
-          players on teams playing in cold, rain, or snow conditions that week
-          take a scoring modifier — reflecting the real historical impact
-          weather had on that game in 2025.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Dome teams are safe. Buffalo in January is not.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>DRAFT ORDER</SectionTitle>
-        <BodyText>
-          Draft order mirrors real prior-season league standings. Worst real-world
-          record picks first. Best record picks last. Same as the real draft —
-          the worst team gets the best pick.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Until the live standings data pipeline is built, draft order defaults
-          to random shuffle.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>BOT FILL — BETA ONLY</SectionTitle>
-        <BodyText>
-          During the StockDraft beta, any open roster slot in a sports sim
-          league is filled by an AI manager — clearly identified in the
-          standings so you always know who&apos;s real and who&apos;s a bot.
-          This keeps your league competitive and running from day one while real
-          managers from your region sign up. Once a real human claims a slot,
-          the AI steps aside permanently.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Every league has an Invite button. Use it. The more real managers in
-          your division, the better the competition and the more the trash talk
-          means something.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Bot opponents are a beta feature only. At full launch, if a division
-          slot isn&apos;t claimed by a real player, it stays open. Real humans
-          only.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>SCHEDULING CADENCE</SectionTitle>
-        <RulesTable
-          headers={["League", "Format", "Matchup Style"]}
-          rows={[
-            ["SDFL", "Weekly", "1 matchup per week, scores lock Friday 4 PM ET"],
-            ["SDHL", "Daily", "New opponent nearly every trading day"],
-            ["SDBA", "Daily", "Same as SDHL, NBA geography"],
-            ["SDLB", "Series", "Same opponent 3–4 trading days, then rotate"],
-          ]}
-        />
-
-        <div className="rounded-xl border border-dark-border bg-dark-card p-4 mt-6">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gold mb-2">
-            Beta note
-          </p>
-          <p className="text-sm text-white/90 leading-relaxed">
-            During the beta period, sports sim leagues can begin at any time.
-            Season schedules are structured to reflect the 2025 real league
-            seasons. The geographic city-claiming system, live injury data feed,
-            and annual standings pipeline are in active development.
-          </p>
-          <p className="text-sm text-white/90 leading-relaxed mt-2">
-            Sports sim leagues are currently in development. Join the waitlist
-            on the dashboard to be notified when your sport launches.
-          </p>
-        </div>
-
-        <SectionDivider />
-
-        <SectionTitle>WHO CAN PLAY</SectionTitle>
-        <BodyText>
-          StockDraft is open to all ages. Whether you&apos;re 14 or 140, if you
-          want to learn how the market works while competing against friends,
-          you&apos;re in.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-4 font-semibold text-gold">
-          Day Trader Prize Contests
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-2">
-          Prize eligibility depends on the week&apos;s sponsor and prize type.
-          Some prizes (gift cards, merch, StockDraft credits) are open to all
-          ages. Prizes involving financial accounts (brokerage credits, cash
-          transfers) require winners to be 18 or older — or have a parent or
-          guardian claim on their behalf.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          When you win, the prize details page will tell you exactly
-          what&apos;s required to collect. No surprises.
-        </p>
-
-        <SectionDivider />
-
-        <SectionTitle>SWEEPSTAKES DISCLAIMER</SectionTitle>
-        <BodyText>
-          No purchase necessary to enter or win. StockDraft is the sole sponsor
-          of the Day Trader contest and any associated prizes. Prizes may be
-          funded or provided by third-party sponsors named in that week&apos;s
-          contest, but StockDraft is solely responsible for administering the
-          contest, determining winners, and awarding prizes.
-        </BodyText>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          This promotion is in no way sponsored, endorsed, administered by, or
-          associated with Apple Inc. or Google LLC. Apple and Google have no
-          involvement in or responsibility for this contest.
-        </p>
-        <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Prize eligibility varies by contest. Some prizes require winners to be
-          18 or older or have parental consent to claim. Full eligibility
-          requirements are listed on each week&apos;s Day Trader contest page.
-          Void where prohibited by law.
+          Your Funds: All other funds deposited by users are held in
+          third-party escrow — safely, and never managed or held directly
+          by StockDraft.
         </p>
 
         <p className="text-center mt-8">
