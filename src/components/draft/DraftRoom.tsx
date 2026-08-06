@@ -11,7 +11,6 @@ import {
   type LiveDraftStateRow,
 } from "@/hooks/useLiveDraftClock";
 import { usePoolQuotes } from "@/hooks/usePoolQuotes";
-import { getTop100PoolSymbols } from "@/lib/market/draft-pool";
 import {
   getDuplicateRosterError,
   isCryptoSymbol,
@@ -39,7 +38,6 @@ import { DraftWaitingRoomPanel } from "./DraftWaitingRoomPanel";
 import type { BotDraftBoard } from "@/lib/league/ai-league";
 import { DRAFT_COUNTDOWN_TICK_MS } from "@/lib/league/scheduled-draft";
 
-const POOL_QUOTE_BATCH = 80;
 const POLL_STALE_MS = 30000;
 const LIVE_POLL_SAFETY_NET_MS = 20000;
 const DRAFT_LOAD_TIMEOUT_MS = 45_000;
@@ -162,15 +160,13 @@ export function DraftRoom({
   }, [state?.myStockSymbols, state?.myCryptoSymbols, state?.sportsSimDraftRules]);
 
   const poolSymbols = useMemo(() => {
-    // Top 100 re-ranks live as picks come off the board, so quote coverage
-    // has to follow the current 100, not the static rank<=100 set.
-    const drafted = new Set(
-      [...myDrafted, ...leagueOffBoard].map((s) => s.toUpperCase())
-    );
-    const top100 = getTop100PoolSymbols(poolStocks, drafted);
-    const batch = poolStocks.slice(0, POOL_QUOTE_BATCH).map((s) => s.symbol);
-    return [...new Set([...top100, ...batch, ...cryptoSymbols])];
-  }, [poolStocks, cryptoSymbols, myDrafted, leagueOffBoard]);
+    // Fetched once when the draft room loads and held for the whole draft —
+    // deliberately NOT keyed on myDrafted/leagueOffBoard so a pick never
+    // triggers a refetch of the whole pool's quotes.
+    return [
+      ...new Set([...poolStocks.map((s) => s.symbol), ...cryptoSymbols]),
+    ];
+  }, [poolStocks, cryptoSymbols]);
 
   const { orderedQuotes: poolQuotes, loading: poolQuotesLoading } =
     usePoolQuotes(poolSymbols);

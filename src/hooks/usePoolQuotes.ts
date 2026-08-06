@@ -46,19 +46,26 @@ export function usePoolQuotes(symbols: string[]) {
     try {
       const merged: Record<string, MarketQuote> = {};
       const chunkSize = 25;
-
+      const chunks: string[][] = [];
       for (let i = 0; i < list.length; i += chunkSize) {
-        const chunk = list.slice(i, i + chunkSize);
-        const response = await fetch(
-          `/api/market/stocks?symbols=${encodeURIComponent(chunk.join(","))}`
-        );
-        if (!response.ok) throw new Error("Failed to fetch pool quotes");
+        chunks.push(list.slice(i, i + chunkSize));
+      }
 
-        const data = (await response.json()) as Record<
-          string,
-          { price: number; prevClose: number; changePercent: number }
-        >;
+      const results = await Promise.all(
+        chunks.map(async (chunk) => {
+          const response = await fetch(
+            `/api/market/stocks?symbols=${encodeURIComponent(chunk.join(","))}`
+          );
+          if (!response.ok) throw new Error("Failed to fetch pool quotes");
+          const data = (await response.json()) as Record<
+            string,
+            { price: number; prevClose: number; changePercent: number }
+          >;
+          return { chunk, data };
+        })
+      );
 
+      for (const { chunk, data } of results) {
         for (const symbol of chunk) {
           const quote = data[symbol];
           if (!quote) continue;
