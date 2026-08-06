@@ -21,7 +21,7 @@ import {
 import { fetchFinnhubQuote } from "@/lib/market/refresh-stock-prices";
 import { isPastFinalizeAt } from "@/lib/season/finalize-times";
 import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
-import { loadInjuredSymbolsForLeague } from "@/lib/sim/injury-status";
+import { loadInjuredSymbolsForLeague } from "@/lib/sim/injury-eligibility-dispatch";
 import { isMultiAssetSimLeague } from "@/lib/season/sdpl-league";
 import type { SeasonSettings } from "@/lib/season/types";
 import {
@@ -579,10 +579,49 @@ export async function captureWeekBaselinesForUser(
   );
 }
 
+// Caps how many managers' DB round trips run at once during the bulk
+// league-wide capture below. Unbounded Promise.all across a full 32-team
+// league fired every capture concurrently from a single request (e.g.
+// right as a draft finishes), bursting Postgres load hard enough to
+// saturate Supabase and trip the auth middleware's timeout for everyone.
+const WEEK_BASELINE_CAPTURE_CONCURRENCY = 6;
+
+async function runWithConcurrencyCap<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  let cursor = 0;
+  async function runNext(): Promise<void> {
+    const index = cursor++;
+    if (index >= items.length) return;
+    await worker(items[index]);
+    await runNext();
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, runNext)
+  );
+}
+
+/**
+ * Bulk version of captureWeekBaselinesForUser for an entire league at once
+ * (draft-finish, week rollover, etc.) — everyone in a league is about to
+ * hit their own team page within seconds of each other, so staggering by
+ * priority only decides who's last, it doesn't make the batch fast.
+ *
+ * Instead this fetches live prices for the league's whole deduplicated
+ * symbol set ONCE (a stock-draft pool has heavy overlap across managers),
+ * instead of each manager separately re-fetching quotes for their own
+ * picks. That's the actual bottleneck this replaces: 32 external
+ * quote-provider calls collapse into one. Per-user DB reads/writes still
+ * run concurrency-capped, and priorityUserId (e.g. the draft-completing
+ * owner) still goes first within that cap as a tie-breaker.
+ */
 export async function captureWeekBaselinesForLeague(
   leagueId: string,
   weekNumber: number,
-  supabaseClient?: SupabaseClient
+  supabaseClient?: SupabaseClient,
+  priorityUserId?: string | null
 ): Promise<void> {
   const supabase = supabaseClient ?? (await createClient());
   const { data: drafts } = await supabase
@@ -606,12 +645,105 @@ export async function captureWeekBaselinesForLeague(
   );
   if (uncoveredDrafts.length === 0) return;
 
-  // Each manager's capture does its own live quote fetch — running them
-  // sequentially meant a league visit paid for N round trips back to back.
-  await Promise.all(
-    uncoveredDrafts.map((draft) =>
-      captureWeekBaselinesForUser(supabase, leagueId, draft.user_id, weekNumber)
-    )
+  if (!(await isWeekOpenForBaselines(supabase, leagueId, weekNumber))) return;
+
+  if (priorityUserId) {
+    uncoveredDrafts.sort((a, b) => {
+      if (a.user_id === priorityUserId) return -1;
+      if (b.user_id === priorityUserId) return 1;
+      return 0;
+    });
+  }
+
+  type PendingCapture = {
+    userId: string;
+    picks: DraftPick[];
+    priorCloseByPick: Map<string, number>;
+  };
+
+  const pending: PendingCapture[] = [];
+
+  // Pass 1: figure out per-user picks + what already carries forward from
+  // last week's close, without touching the quote provider yet.
+  await runWithConcurrencyCap(
+    uncoveredDrafts,
+    WEEK_BASELINE_CAPTURE_CONCURRENCY,
+    async (draft) => {
+      let picks = (
+        await loadUserDraftPicks(supabase, draft.user_id, leagueId)
+      ).filter((p) => p.pick_type !== "skip");
+
+      if (picks.length === 0) {
+        const state = await loadDraftStateDetailed(draft.user_id, {
+          leagueId,
+        });
+        if (!state.ok) return;
+        picks = state.state.picks.filter((p) => p.pick_type !== "skip");
+      }
+
+      picks = picksEligibleForWeekBaselines(picks);
+      if (picks.length === 0) return;
+
+      let priorCloseByPick = new Map<string, number>();
+      if (weekNumber > 1) {
+        const { data: priorRows } = await supabase
+          .from("roster_week_baselines")
+          .select("pick_id, value_at_close")
+          .eq("league_id", leagueId)
+          .eq("user_id", draft.user_id)
+          .eq("week_number", weekNumber - 1);
+
+        priorCloseByPick = new Map(
+          (priorRows ?? [])
+            .filter((row) => row.value_at_close != null)
+            .map((row) => [row.pick_id as string, Number(row.value_at_close)])
+        );
+      }
+
+      pending.push({ userId: draft.user_id, picks, priorCloseByPick });
+    }
+  );
+
+  if (pending.length === 0) return;
+
+  // One shared fetch for every symbol anyone in the league still needs a
+  // live price for, deduplicated — this is the actual burst this replaces.
+  const picksNeedingLivePrice: DraftPick[] = [];
+  const seenSymbols = new Set<string>();
+  for (const entry of pending) {
+    for (const pick of entry.picks) {
+      if (entry.priorCloseByPick.has(pick.id)) continue;
+      const symbol = pick.symbol.toUpperCase();
+      if (seenSymbols.has(symbol)) continue;
+      seenSymbols.add(symbol);
+      picksNeedingLivePrice.push(pick);
+    }
+  }
+
+  const prices =
+    picksNeedingLivePrice.length > 0
+      ? await fetchPricesForPicks(picksNeedingLivePrice)
+      : new Map<string, number>();
+
+  // Pass 2: cheap, price-free writes — safe to run concurrency-capped.
+  await runWithConcurrencyCap(
+    pending,
+    WEEK_BASELINE_CAPTURE_CONCURRENCY,
+    (entry) =>
+      captureOpeningValues(
+        supabase,
+        {
+          table: "roster_week_baselines",
+          leagueId,
+          userId: entry.userId,
+          weekNumber,
+        },
+        entry.picks.map((pick) => ({
+          pick,
+          priorClose: entry.priorCloseByPick.get(pick.id) ?? null,
+          livePrice: prices.get(pick.symbol.toUpperCase()) ?? null,
+        }))
+      )
   );
 }
 

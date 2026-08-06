@@ -297,7 +297,7 @@ export async function finalizeHumanLeagueAfterDraft(
     // week-open fallback and the finalize-time "current" value both
     // resolve to the same live quote, scoring that team a guaranteed ~0%
     // regardless of actual performance.
-    await captureWeekBaselinesForLeague(leagueId, 1, supabase);
+    await captureWeekBaselinesForLeague(leagueId, 1, supabase, ownerUserId);
   }
 
   return {};
