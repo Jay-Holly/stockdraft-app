@@ -1,10 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import { HumanLeagueCard } from "@/components/league/HumanLeagueCard";
 import { useLeagueSelection } from "@/hooks/useLeagueSelection";
 import type { HumanLeagueListItem } from "@/lib/league/human-league";
+import { LeagueRulesModal } from "@/components/league/LeagueRulesModal";
+import { SdplRulesContent } from "@/components/league/rules-content";
 
 type Visibility = "private" | "public";
 
@@ -18,6 +21,7 @@ export function PlayerLeaguesPageContent({
   activeLeagueId: string | null;
 }) {
   const [tab, setTab] = useState<Visibility>("private");
+  const [rulesOpen, setRulesOpen] = useState(false);
   const {
     switchingLeagueId,
     leagueError,
@@ -48,11 +52,34 @@ export function PlayerLeaguesPageContent({
         onClose={() => setDeleteTarget(null)}
       />
 
-      <div>
-        <h1 className="text-xl font-bold">Player Leagues</h1>
-        <p className="text-muted text-sm mt-1">
+      {rulesOpen && (
+        <LeagueRulesModal title="SDPL Rules" onClose={() => setRulesOpen(false)}>
+          <SdplRulesContent />
+        </LeagueRulesModal>
+      )}
+
+      <div className="text-center">
+        <Image
+          src="/images/leagues/sdpl.png"
+          alt="SDPL"
+          width={160}
+          height={160}
+          className="mx-auto rounded-2xl"
+          priority
+        />
+        <h1 className="text-xl font-bold mt-4">Player Leagues</h1>
+        <p className="text-muted text-sm mt-2">
           Draft against real managers, invite-only or open.
         </p>
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setRulesOpen(true)}
+            className="text-sm font-medium text-gold hover:underline"
+          >
+            SDPL Rules
+          </button>
+        </div>
       </div>
 
       <div className="draft-pool-filters">

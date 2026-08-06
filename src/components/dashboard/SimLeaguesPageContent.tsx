@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { DeleteLeagueModal } from "@/components/league/DeleteLeagueModal";
 import { AiLeagueCard } from "@/components/league/AiLeagueCard";
 import { useLeagueSelection } from "@/hooks/useLeagueSelection";
 import type { AiLeagueListItem } from "@/lib/league/ai-league";
+import { LeagueRulesModal } from "@/components/league/LeagueRulesModal";
+import { SdaiRulesContent } from "@/components/league/rules-content";
 
 export function SimLeaguesPageContent({
   leagues,
@@ -23,6 +26,7 @@ export function SimLeaguesPageContent({
     setActiveLeague,
     openDeleteLeagueModal,
   } = useLeagueSelection();
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -34,21 +38,35 @@ export function SimLeaguesPageContent({
         onClose={() => setDeleteTarget(null)}
       />
 
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">Sim Leagues</h1>
-          <p className="text-muted text-sm mt-1">
-            {leagues.length} league{leagues.length === 1 ? "" : "s"} vs. platform
-            bot managers
-          </p>
-        </div>
+      {rulesOpen && (
+        <LeagueRulesModal title="SDAI Rules" onClose={() => setRulesOpen(false)}>
+          <SdaiRulesContent />
+        </LeagueRulesModal>
+      )}
+
+      <div className="text-center">
         <Image
           src="/images/leagues/sdai.png"
-          alt=""
-          width={96}
-          height={144}
-          className="shrink-0 rounded-lg"
+          alt="SDAI"
+          width={160}
+          height={160}
+          className="mx-auto rounded-2xl"
+          priority
         />
+        <h1 className="text-xl font-bold mt-4">Sim Leagues</h1>
+        <p className="text-muted text-sm mt-2">
+          {leagues.length} league{leagues.length === 1 ? "" : "s"} vs. platform
+          bot managers
+        </p>
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setRulesOpen(true)}
+            className="text-sm font-medium text-gold hover:underline"
+          >
+            SDAI Rules
+          </button>
+        </div>
       </div>
 
       {leagueError && (
