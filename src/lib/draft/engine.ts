@@ -1,8 +1,9 @@
 import { MIN_STOCK_PRICE_USD } from "@/lib/market/draft-pool";
 import { isCryptoPoolSymbol } from "@/lib/crypto-pool/symbols";
-import { isSportsSimLeague } from "@/lib/season/sdpl-league";
+import { isMultiAssetSimLeague, isSportsSimLeague } from "@/lib/season/sdpl-league";
 import {
   getDraftRuleConstants,
+  SPORTS_SIM_SDFL_CRYPTO_CAP,
   SPORTS_SIM_STARTER_BUDGET,
   SPORTS_SIM_STARTER_CRYPTO_SLOTS,
   SPORTS_SIM_STARTER_STOCK_SLOTS,
@@ -63,6 +64,10 @@ function countStarterRoundPicksByType(
   return picks.filter(
     (p) => p.pick_type === pickType && p.round_number <= c.starterRounds
   ).length;
+}
+
+function countCryptoPicksAllRounds(picks: DraftPick[]): number {
+  return picks.filter((p) => p.pick_type === "crypto").length;
 }
 
 function countBenchSlotPicks(
@@ -308,13 +313,27 @@ export function calculatePushback(cryptoPicksInOpenPhase: DraftPick[]): number {
   return 0;
 }
 
-function sportsSimTurnLabel(round: number): string {
+function sportsSimTurnLabel(
+  round: number,
+  rule?: SportsSimEligibilityRule | null,
+  picks?: DraftPick[]
+): string {
   const c = getDraftRuleConstants("sports_sim");
+  const cryptoNote =
+    rule?.kind === "globalCryptoCap" && picks
+      ? ` · ${countCryptoPicksAllRounds(picks)}/${rule.cryptoCap} crypto used`
+      : "";
+
   if (round <= c.starterRounds) {
-    return `Round ${round} — starter (stock or crypto $${formatCompact(c.starterBudget)})`;
+    if (rule?.kind === "multiAssetSplit" && picks) {
+      const stockCount = countStarterRoundPicksByType(picks, "sports_sim", "stock");
+      const cryptoCount = countStarterRoundPicksByType(picks, "sports_sim", "crypto");
+      return `Round ${round} — starter (${stockCount}/${rule.stockSlots} stock, ${cryptoCount}/${rule.cryptoSlots} crypto)`;
+    }
+    return `Round ${round} — starter (stock or crypto $${formatCompact(c.starterBudget)})${cryptoNote}`;
   }
   if (round <= c.totalRounds) {
-    return `Round ${round} — bench (stock or crypto, free)`;
+    return `Round ${round} — bench (stock or crypto, free)${cryptoNote}`;
   }
   return `Round ${round}`;
 }
@@ -337,15 +356,48 @@ function openTurnLabel(
   return `Round ${round} — open pick`;
 }
 
+/**
+ * SDBA/SDHL/SDLB (multiAssetSplit): the 10 starter slots split exactly
+ * 5 stock / 5 crypto; bench rounds are unrestricted by type.
+ *
+ * SDFL (globalCryptoCap): no round-based type restriction at all — stock or
+ * crypto can be picked in any of the 13 rounds, starter or bench, capped
+ * only by a running total (max cryptoCap crypto picks across the whole
+ * draft). This is deliberate: capping WHEN a type can be picked reintroduces
+ * the confusing "bench is stock-only" behavior that was tried and reverted;
+ * the actual fix for lopsided crypto rosters is a HOW-MANY cap, not a
+ * WHEN restriction.
+ */
+type SportsSimEligibilityRule =
+  | { kind: "multiAssetSplit"; stockSlots: number; cryptoSlots: number }
+  | { kind: "globalCryptoCap"; cryptoCap: number };
+
+function getSportsSimEligibilityRule(
+  sportsLeagueId?: string | null
+): SportsSimEligibilityRule | null {
+  if (isMultiAssetSimLeague(sportsLeagueId)) {
+    return {
+      kind: "multiAssetSplit",
+      stockSlots: SPORTS_SIM_STARTER_STOCK_SLOTS,
+      cryptoSlots: SPORTS_SIM_STARTER_CRYPTO_SLOTS,
+    };
+  }
+  if (sportsLeagueId?.toLowerCase() === "sdfl") {
+    return { kind: "globalCryptoCap", cryptoCap: SPORTS_SIM_SDFL_CRYPTO_CAP };
+  }
+  return null;
+}
+
 export function getTurn(
   draft: Draft,
   picks: DraftPick[],
   rules: DraftRulesMode = "standard",
-  enforceStarterSplit = false
+  sportsLeagueId?: string | null
 ): DraftTurn {
   const summary = summarizePicks(picks, rules);
   const round = draft.current_round;
   const c = getDraftRuleConstants(rules);
+  const rule = getSportsSimEligibilityRule(sportsLeagueId);
 
   if (draft.status === "complete" || isDraftComplete(picks, rules)) {
     return {
@@ -363,19 +415,19 @@ export function getTurn(
     if (round <= c.starterRounds) {
       let canPickStock = true;
       let canPickCrypto = true;
-      if (enforceStarterSplit) {
+      if (rule?.kind === "multiAssetSplit") {
         canPickStock =
-          countStarterRoundPicksByType(picks, rules, "stock") <
-          SPORTS_SIM_STARTER_STOCK_SLOTS;
+          countStarterRoundPicksByType(picks, rules, "stock") < rule.stockSlots;
         canPickCrypto =
-          countStarterRoundPicksByType(picks, rules, "crypto") <
-          SPORTS_SIM_STARTER_CRYPTO_SLOTS;
+          countStarterRoundPicksByType(picks, rules, "crypto") < rule.cryptoSlots;
+      } else if (rule?.kind === "globalCryptoCap") {
+        canPickCrypto = countCryptoPicksAllRounds(picks) < rule.cryptoCap;
       }
 
       return {
         type: "open",
         round,
-        label: sportsSimTurnLabel(round),
+        label: sportsSimTurnLabel(round, rule, picks),
         canPickStock,
         canPickCrypto,
         stockBudget: c.starterBudget,
@@ -384,12 +436,17 @@ export function getTurn(
     }
 
     if (round <= c.totalRounds) {
+      const canPickCrypto =
+        rule?.kind === "globalCryptoCap"
+          ? countCryptoPicksAllRounds(picks) < rule.cryptoCap
+          : true;
+
       return {
         type: "bench",
         round,
-        label: sportsSimTurnLabel(round),
+        label: sportsSimTurnLabel(round, rule, picks),
         canPickStock: true,
-        canPickCrypto: true,
+        canPickCrypto,
         stockBudget: 0,
         cryptoRemaining: 0,
       };

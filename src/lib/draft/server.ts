@@ -29,10 +29,7 @@ import {
   isStockPickEligible,
   summarizePicks,
 } from "./engine";
-import {
-  isMultiAssetSimLeague,
-  isSportsSimLeague,
-} from "@/lib/season/sdpl-league";
+import { isSportsSimLeague } from "@/lib/season/sdpl-league";
 import type {
   CryptoBuyerCounts,
   Draft,
@@ -315,9 +312,7 @@ export async function loadDraftStateDetailed(
     sportsLeagueId: leagueFormat?.sports_league_id,
   });
   const draftRules = draftRulesModeFromFlag(sportsSimDraftRules);
-  const enforceStarterSplit = isMultiAssetSimLeague(
-    leagueFormat?.sports_league_id
-  );
+  const sportsLeagueId = leagueFormat?.sports_league_id ?? null;
 
   let draftRow = draft as Draft;
   const buyerCounts = await fetchBuyerCounts(supabase, league.id);
@@ -367,7 +362,7 @@ export async function loadDraftStateDetailed(
     !sportsSimDraftRules &&
     isOpenPhaseComplete(pickList, draftRules) &&
     draftRow.pushback_skips_remaining > 0 &&
-    getTurn(draftRow, pickList, draftRules, enforceStarterSplit).type !== "pushback_skip"
+    getTurn(draftRow, pickList, draftRules, sportsLeagueId).type !== "pushback_skip"
   ) {
     await supabase
       .from("drafts")
@@ -377,7 +372,7 @@ export async function loadDraftStateDetailed(
   }
 
   summary = summarizePicks(pickList, draftRules);
-  const turn = getTurn(draftRow, pickList, draftRules, enforceStarterSplit);
+  const turn = getTurn(draftRow, pickList, draftRules, sportsLeagueId);
   const leagueOffBoardSet = await getLeagueOffBoardSymbols(league.id);
   const myStockSymbols = [...getMyStockSymbols(pickList)];
   const myCryptoSymbols = [...getMyCryptoSymbols(pickList)];
