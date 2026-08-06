@@ -59,7 +59,7 @@ import {
   isSportsSimLeague,
 } from "@/lib/season/sdpl-league";
 import { resolveIrResolutionState } from "@/lib/sim/ir-enforcement";
-import { isStockIrEligibleForLeague } from "@/lib/sim/injury-status";
+import { isStockIrEligibleForLeague } from "@/lib/sim/injury-eligibility-dispatch";
 import { ensureIrSlotsForDraft } from "@/lib/sim/ir-slots";
 import {
   computeGainPercent,

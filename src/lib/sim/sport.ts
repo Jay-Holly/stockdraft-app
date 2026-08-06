@@ -21,13 +21,16 @@ export function simSportUsesWeekNumbers(sport: SimSport): boolean {
 }
 
 /**
- * All sports-sim leagues are currently anchored to the 2024-25 real season —
- * the only season with seeded player/injury data. A calendar-year fallback
- * would silently drift wrong once the real year moves past 2024, so this
- * stays a fixed default until multi-season data (and a real per-league
- * season selector) exists.
+ * All sports-sim leagues share this one season constant. Flipped to 2026
+ * NFL data for the SDFL 2026 season launch — MLB/NBA/NHL (SDLB/SDBA/SDHL)
+ * do NOT have 2026 data seeded yet and are still only seeded for 2024. As
+ * of this flip there are zero non-SDFL sports-sim leagues in existence, so
+ * this has no live blast radius — but creating an SDLB/SDBA/SDHL league
+ * before those sports get their own 2026 seed data will silently resolve to
+ * missing/empty sim_* rows. Revisit this constant (or replace it with a
+ * real per-league season selector) before any of those three launch.
  */
-export const CURRENT_SIM_SEASON = "2024";
+export const CURRENT_SIM_SEASON = "2026";
 
 export function defaultSimSeason(
   sportsStandingsSeason: number | null | undefined

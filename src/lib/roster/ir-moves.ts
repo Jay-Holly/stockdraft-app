@@ -1,7 +1,7 @@
 import type { DraftPick } from "@/lib/draft/types";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
 import { createClient } from "@/lib/supabase/server";
-import { isStockIrEligibleForLeague } from "@/lib/sim/injury-status";
+import { isStockIrEligibleForLeague } from "@/lib/sim/injury-eligibility-dispatch";
 import {
   countOccupiedIrSlots,
   findOpenIrSlot,

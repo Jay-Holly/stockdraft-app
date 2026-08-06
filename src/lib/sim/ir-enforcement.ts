@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DraftPick } from "@/lib/draft/types";
-import { isStockIrEligibleForLeague } from "@/lib/sim/injury-status";
+import { isStockIrEligibleForLeague } from "@/lib/sim/injury-eligibility-dispatch";
 import { isOccupiedIrSlot } from "@/lib/sim/ir-slots";
 import type { IrResolutionState } from "@/lib/sim/types";
 
