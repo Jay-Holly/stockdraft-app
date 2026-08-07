@@ -33,13 +33,13 @@ function DocTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   );
 }
 
-/** SDPL_SDAI_Player_League_Rules.docx — verbatim. Shown for both the Player League and Free Sim League cards. */
+/** SDPL_SDAI_Player_League_Rules.docx — verbatim, minus SDAI (which now runs its own accelerated schedule; see SdaiRulesContent below). */
 export function SdplRulesContent() {
   return (
     <>
       <p className="font-bold text-lg" style={{ color: "#E8BE4A" }}>
-        SDPL2 / SDPL4 / SDPL6 / SDPL8 / SDPL10 / SDPL12 / SDAI — StockDraft
-        Player Leagues &amp; Free AI Leagues
+        SDPL2 / SDPL4 / SDPL6 / SDPL8 / SDPL10 / SDPL12 — StockDraft Player
+        Leagues
       </p>
 
       <RuleSection title="The Concept">
@@ -175,16 +175,16 @@ export function SdplRulesContent() {
 
       <RuleSection title="League Format">
         <p>
-          StockDraft Player Leagues (SDPL) come in five official sizes;
-          all-AI leagues (SDAI) run the same 4-team format populated entirely
-          by AI managers. The rules are identical across all sizes — only the
-          number of managers differs:
+          StockDraft Player Leagues (SDPL) come in five official sizes. The
+          rules are identical across all sizes — only the number of managers
+          differs. (Looking for the free, all-AI practice format? See SDAI
+          — it runs on its own accelerated schedule.)
         </p>
         <DocTable
           headers={["Format", "Teams", "Weekly Matchups", "Playoff Teams"]}
           rows={[
             ["SDPL2", "2 teams", "1 game/week", "Both teams"],
-            ["SDPL4 / SDAI", "4 teams", "2 games/week", "All 4"],
+            ["SDPL4", "4 teams", "2 games/week", "All 4"],
             ["SDPL6", "6 teams", "3 games/week", "Top 4"],
             ["SDPL8", "8 teams", "4 games/week", "Top 4"],
             ["SDPL10", "10 teams", "5 games/week", "Top 4"],
@@ -264,9 +264,179 @@ export function SdplRulesContent() {
   );
 }
 
-/** SDAI reuses the same SDPL_SDAI doc — there is no separate SDAI-only file. */
+/** SDAI — accelerated practice format, one business day = one SDPL week. */
 export function SdaiRulesContent() {
-  return <SdplRulesContent />;
+  return (
+    <>
+      <p className="font-bold text-lg" style={{ color: "#E8BE4A" }}>
+        SDAI — StockDraft Free AI Leagues
+      </p>
+
+      <RuleSection title="The Concept">
+        <p>
+          SDAI is the practice format — a free 4-team league against AI
+          managers, built to get you familiar with how StockDraft works fast.
+          You don&rsquo;t need a full 13-week season to learn the platform, so
+          SDAI compresses the same 13-week structure into 13 business days —
+          only days the stock market is open. One business day in SDAI equals
+          one full week everywhere else in StockDraft: a draft, a matchup, a
+          scoring lock, and a free agency window, all in a single trading
+          day.
+        </p>
+        <p>
+          Everything else runs on the same core engine as SDPL — same
+          $80,000-per-slot salary cap draft, same roster structure, same
+          scoring rules. Only the calendar is different.
+        </p>
+      </RuleSection>
+
+      <RuleSection title="Your Roster">
+        <p>Every manager drafts the same structure:</p>
+        <ul className="list-disc list-outside ml-5 space-y-1.5">
+          <li>
+            10 Starting Stocks — your core lineup, scored in every matchup.
+            No bye weeks, no injuries. All ten available every business day.
+          </li>
+          <li>
+            2 Bench Spots — hold backup stocks, swap them in during free
+            agency.
+          </li>
+          <li>
+            Crypto Flex Pool — $200,000 to invest across 1–3 cryptocurrencies,
+            always live, always tradeable.
+          </li>
+        </ul>
+        <p>Stocks come from the S&amp;P 500 pool. Crypto runs 24/7 and never locks.</p>
+      </RuleSection>
+
+      <RuleSection title="The Draft">
+        <p>
+          Salary cap draft. Every manager gets $80,000 per stock slot to
+          spend on each of their 10 starters and 2 bench spots.
+        </p>
+        <p>
+          Crypto works differently. Your $200,000 crypto budget is spent
+          during the draft across as many coins as you want. The more
+          managers that draft the same coin, the more expensive it gets —
+          each additional buyer pays a surcharge:
+        </p>
+        <ul className="list-disc list-outside ml-5 space-y-1">
+          <li>1st buyer: no surcharge</li>
+          <li>2nd buyer: +5%</li>
+          <li>3rd buyer: +10%</li>
+          <li>4th buyer: +15%</li>
+          <li>5th buyer: +20%</li>
+          <li>6th+ buyer: +25%</li>
+        </ul>
+        <p>Surcharge money goes directly into the Daily Bonus Pool.</p>
+      </RuleSection>
+
+      <RuleSection title="One Business Day = One Week">
+        <p>
+          SDAI runs on business days only — Monday through Friday, skipping
+          weekends and market holidays. Each business day is a complete
+          cycle:
+        </p>
+        <ul className="list-disc list-outside ml-5 space-y-1.5">
+          <li>
+            9:30 AM ET (market open) — lineups lock for the day. No starter
+            or bench swaps until the close.
+          </li>
+          <li>
+            4:00 PM ET (market close) — stocks freeze, that day&rsquo;s
+            matchup score locks, and lineups unlock.
+          </li>
+          <li>
+            4:00 PM ET — free agency opens immediately after scoring locks.
+            Claims are first-come, first-served, no waiver order, no queue.
+            In the rare case two claims land at the exact same instant, the
+            tiebreaker goes to whichever team currently has the worse record
+            in the standings.
+          </li>
+          <li>
+            9:30 AM ET the next business day — free agency closes and the
+            next day&rsquo;s cycle begins.
+          </li>
+        </ul>
+        <p>Crypto is always exempt — buy, sell, and rebalance any time, no locks, ever.</p>
+      </RuleSection>
+
+      <RuleSection title="League Format">
+        <p>
+          SDAI is a 4-team, all-AI league — you draft against three AI
+          managers with distinct draft logic. Every team makes the playoffs.
+        </p>
+        <p>
+          The season runs 13 business days total — 11 business days of
+          regular-season matchups followed by a 2-business-day playoff.
+        </p>
+      </RuleSection>
+
+      <RuleSection title="Playoffs">
+        <p>
+          All 4 teams advance. Seeding is by regular-season wins, then
+          losses, then season gain percentage as a tiebreaker.
+        </p>
+        <p>
+          Business Day 12 — Semifinals: #1 seed vs #4 seed, #2 seed vs #3
+          seed.
+        </p>
+        <p>
+          Business Day 13 — Championship + 3rd Place: semifinal winners play
+          for the championship; semifinal losers play for 3rd place.
+        </p>
+      </RuleSection>
+
+      <RuleSection title="Daily Bonus Awards">
+        <p>
+          Every business day, 7 bonus awards are paid out from the $100,000
+          season bonus pool — the same award structure as SDPL, just on a
+          daily clock instead of weekly. Daily base payout: $8,636/business
+          day. Award money deposits directly into your crypto flex pool.
+        </p>
+        <DocTable
+          headers={["Award", "Payout", "How to Win"]}
+          rows={[
+            ["Winner of the Day", "$2,000", "Highest total dollar gain in the league"],
+            ["Rookie of the Day", "$1,500", "Best single stock % gain"],
+            ["Diamond Hands", "$1,500", "Biggest recovery swing on a stock held all day"],
+            ["Lottery Hit", "$1,500", "A non-Top-100 stock up 10%+ on your roster"],
+            ["Sweep Day", "$1,500", "Every single starter finishes green"],
+            ["Loser of the Day", "$832", "Worst daily % — a consolation prize, not a penalty"],
+            ["Bench Curse", "$1", "Your bench outperformed your starters"],
+          ]}
+        />
+        <p>Unclaimed awards roll into the Playoff Bonus Pool.</p>
+      </RuleSection>
+
+      <RuleSection title="Playoff Bonus Pool">
+        <p>
+          $5,000 is seeded into the Playoff Bonus Pool at the start of every
+          season, plus every unclaimed daily award throughout the season.
+          When playoffs begin (Business Day 12), all 4 teams split the pool
+          by seed:
+        </p>
+        <ul className="list-disc list-outside ml-5 space-y-1">
+          <li>1st seed: 40%</li>
+          <li>2nd seed: 25%</li>
+          <li>3rd seed: 20%</li>
+          <li>4th seed: 15%</li>
+        </ul>
+        <p>
+          Each team&rsquo;s share is invested into one stock they currently own —
+          starters or bench, their choice.
+        </p>
+      </RuleSection>
+
+      <RuleSection title="Who Can Play">
+        <p>
+          StockDraft is open to all ages. Whether you&rsquo;re 14 or 114, if you
+          want to learn how the market works while competing against
+          friends, you&rsquo;re in.
+        </p>
+      </RuleSection>
+    </>
+  );
 }
 
 /** SDFL_Football_League_Rules.docx — verbatim. */
@@ -398,6 +568,22 @@ export function SdflRulesContent() {
           conditions that week take a scoring modifier reflecting the real
           historical impact weather had on that 2026 game. Dome teams are
           unaffected.
+        </p>
+      </RuleSection>
+
+      <RuleSection title="Draft Timer & Queue">
+        <p>
+          You have 30 seconds to make each pick. With 32 franchises in the
+          draft, that means plenty of time between your picks to do your
+          research and get ready for your next one — use it.
+        </p>
+        <p>
+          That&rsquo;s what makes the Queue button important. Always keep
+          stocks queued up, just in case you miss your pick — a slow
+          connection, a dropped tab, anything. If your timer runs out, the
+          draft auto-picks the next available stock from your queue instead
+          of leaving the pick to chance. Protect yourself by queuing up to
+          25 stocks at a time (crypto isn&rsquo;t queueable — stocks only).
         </p>
       </RuleSection>
 
@@ -592,6 +778,22 @@ export function SdlbSdhlSdbaRulesContent() {
           conditions that week take a scoring modifier reflecting the real
           historical impact weather had on that 2026 game. Dome teams are
           unaffected.
+        </p>
+      </RuleSection>
+
+      <RuleSection title="Draft Timer & Queue">
+        <p>
+          You have 30 seconds to make each pick. With 30–32 franchises in
+          the draft, that means plenty of time between your picks to do
+          your research and get ready for your next one — use it.
+        </p>
+        <p>
+          That&rsquo;s what makes the Queue button important. Always keep
+          stocks queued up, just in case you miss your pick — a slow
+          connection, a dropped tab, anything. If your timer runs out, the
+          draft auto-picks the next available stock from your queue instead
+          of leaving the pick to chance. Protect yourself by queuing up to
+          25 stocks at a time (crypto isn&rsquo;t queueable — stocks only).
         </p>
       </RuleSection>
 
