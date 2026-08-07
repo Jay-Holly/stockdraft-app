@@ -1269,6 +1269,12 @@ body:has(.landing-screen.sides-always) {
   justify-content: center;
   padding: 0.125rem;
   text-align: center;
+  /* Mobile Chrome/Firefox/Samsung Internet auto-inflate small text inside
+     narrow containers ("font boosting"); desktop browsers never do this.
+     That inflation breaks the centering here since the text is only 8px
+     to begin with. Disabling it keeps the box centered on every browser. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 .draft-round-slot--filled {
