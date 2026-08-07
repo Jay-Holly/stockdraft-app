@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
@@ -872,7 +873,18 @@ export async function getHumanLeagueOpponentBoards(
 export async function activateHumanLeagueSchedule(
   leagueId: string
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
+  // Writes baselines for every manager in the league, not just whoever's
+  // request triggered activation — needs a privileged client. A
+  // request-scoped client here only satisfies RLS for the triggering
+  // user's own row, silently rejecting every other manager's baseline
+  // insert (surfaced as a burst of "new row violates row-level security
+  // policy for table roster_week_baselines" in Postgres logs).
+  let supabase: SupabaseClient;
+  try {
+    supabase = createServiceClient();
+  } catch {
+    supabase = await createClient();
+  }
 
   const { error: leagueError } = await supabase
     .from("leagues")
@@ -896,6 +908,6 @@ export async function activateHumanLeagueSchedule(
     await ensureIrSlotsForLeague(supabase, leagueId, { rules: "sports_sim" });
   }
 
-  await captureWeekBaselinesForLeague(leagueId, 1);
+  await captureWeekBaselinesForLeague(leagueId, 1, supabase);
   return {};
 }
