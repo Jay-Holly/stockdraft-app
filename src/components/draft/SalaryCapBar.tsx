@@ -76,7 +76,13 @@ export function SalaryCapBar({
           <span className="draft-round-empty">SKIP</span>
         ) : (
           <span className="draft-round-empty">
-            {round >= benchStart ? "BN" : round <= starterRounds ? "O" : "—"}
+            {sportsSimDraftRules
+              ? "O"
+              : round >= benchStart
+                ? "BN"
+                : round <= starterRounds
+                  ? "O"
+                  : "—"}
           </span>
         )}
       </div>

@@ -26,10 +26,11 @@ export const SPORTS_SIM_STARTER_CRYPTO_SLOTS = 5;
 
 /**
  * SDFL only — no round-based restriction on pick type (stock or crypto,
- * any of the 13 rounds, starter or bench), just a hard cap on total crypto
- * a team can hold across the whole draft.
+ * any of the 13 rounds, starter or bench), just hard caps on total stock
+ * and total crypto a team can hold across the whole draft.
  */
 export const SPORTS_SIM_SDFL_CRYPTO_CAP = 3;
+export const SPORTS_SIM_SDFL_STOCK_CAP = 10;
 
 /** Begin bot provisioning this many ms before scheduled_draft_at (draft still starts on time). */
 export const SPORTS_SIM_BOT_PROVISION_LEAD_MS = 8 * 60 * 1000;

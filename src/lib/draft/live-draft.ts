@@ -212,10 +212,16 @@ export function formatDraftEventMessage(
     pick_type: string;
     budget_spent: number;
     surcharge_percent: number;
-  }
+  },
+  roundPickContext?: { globalPickNumber: number; playerCount: number }
 ): string {
+  const roundLabel =
+    roundPickContext && roundPickContext.playerCount > 0
+      ? `Round ${roundNumber} — Pick ${((roundPickContext.globalPickNumber - 1) % roundPickContext.playerCount) + 1} of ${roundPickContext.playerCount}`
+      : `Round ${roundNumber}`;
+
   if (pick.pick_type === "skip") {
-    return `Round ${roundNumber} — ${teamName}: Round skipped (crypto pushback)`;
+    return `${roundLabel} — ${teamName}: Round skipped (crypto pushback)`;
   }
 
   if (pick.pick_type === "crypto") {
@@ -223,14 +229,14 @@ export function formatDraftEventMessage(
       pick.surcharge_percent > 0
         ? `, ${pick.surcharge_percent}% surcharge`
         : "";
-    return `Round ${roundNumber} — ${teamName} drafted ${pick.symbol} (${formatMoney(pick.budget_spent)}${surcharge})`;
+    return `${roundLabel} — ${teamName} drafted ${pick.symbol} (${formatMoney(pick.budget_spent)}${surcharge})`;
   }
 
   if (pick.pick_type === "bench") {
-    return `Round ${roundNumber} — ${teamName} bench pick ${pick.symbol} (free)`;
+    return `${roundLabel} — ${teamName} bench pick ${pick.symbol} (free)`;
   }
 
-  return `Round ${roundNumber} — ${teamName} drafted ${pick.symbol} (${formatMoney(pick.budget_spent)})`;
+  return `${roundLabel} — ${teamName} drafted ${pick.symbol} (${formatMoney(pick.budget_spent)})`;
 }
 
 async function getTeamName(
@@ -677,11 +683,17 @@ async function recordDraftEvent(
   userId: string,
   pick: DraftPick,
   globalPickNumber: number,
-  isAutoPick: boolean
+  isAutoPick: boolean,
+  playerCount?: number
 ): Promise<DraftFeedEvent | null> {
   const supabase = await createClient();
   const teamName = await getTeamName(supabase, leagueId, userId);
-  const message = formatDraftEventMessage(teamName, pick.round_number, pick);
+  const message = formatDraftEventMessage(
+    teamName,
+    pick.round_number,
+    pick,
+    playerCount ? { globalPickNumber, playerCount } : undefined
+  );
 
   const { data: event, error: eventError } = await supabase
     .from("league_draft_events")
@@ -1205,7 +1217,14 @@ export async function advanceAfterPick(
 
   if (stateError) return { error: stateError.message };
 
-  await recordDraftEvent(leagueId, userId, pick, globalPickNumber, isAutoPick);
+  await recordDraftEvent(
+    leagueId,
+    userId,
+    pick,
+    globalPickNumber,
+    isAutoPick,
+    draftOrder.length
+  );
 
   if (draftComplete) {
     await supabase.from("leagues").update({ status: "active" }).eq("id", leagueId);

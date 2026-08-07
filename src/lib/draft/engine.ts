@@ -4,6 +4,7 @@ import { isMultiAssetSimLeague, isSportsSimLeague } from "@/lib/season/sdpl-leag
 import {
   getDraftRuleConstants,
   SPORTS_SIM_SDFL_CRYPTO_CAP,
+  SPORTS_SIM_SDFL_STOCK_CAP,
   SPORTS_SIM_STARTER_BUDGET,
   SPORTS_SIM_STARTER_CRYPTO_SLOTS,
   SPORTS_SIM_STARTER_STOCK_SLOTS,
@@ -68,6 +69,10 @@ function countStarterRoundPicksByType(
 
 function countCryptoPicksAllRounds(picks: DraftPick[]): number {
   return picks.filter((p) => p.pick_type === "crypto").length;
+}
+
+function countStockPicksAllRounds(picks: DraftPick[]): number {
+  return picks.filter((p) => p.pick_type === "stock").length;
 }
 
 function countBenchSlotPicks(
@@ -321,7 +326,7 @@ function sportsSimTurnLabel(
   const c = getDraftRuleConstants("sports_sim");
   const cryptoNote =
     rule?.kind === "globalCryptoCap" && picks
-      ? ` · ${countCryptoPicksAllRounds(picks)}/${rule.cryptoCap} crypto used`
+      ? ` · ${countCryptoPicksAllRounds(picks)}/${rule.cryptoCap} crypto used · ${countStockPicksAllRounds(picks)}/${rule.stockCap} stock used`
       : "";
 
   if (round <= c.starterRounds) {
@@ -360,17 +365,17 @@ function openTurnLabel(
  * SDBA/SDHL/SDLB (multiAssetSplit): the 10 starter slots split exactly
  * 5 stock / 5 crypto; bench rounds are unrestricted by type.
  *
- * SDFL (globalCryptoCap): no round-based type restriction at all — stock or
- * crypto can be picked in any of the 13 rounds, starter or bench, capped
- * only by a running total (max cryptoCap crypto picks across the whole
- * draft). This is deliberate: capping WHEN a type can be picked reintroduces
- * the confusing "bench is stock-only" behavior that was tried and reverted;
- * the actual fix for lopsided crypto rosters is a HOW-MANY cap, not a
- * WHEN restriction.
+ * SDFL (globalCryptoCap): no round-based type restriction on WHEN a type can
+ * be picked — stock or crypto can be picked in any of the 13 rounds, starter
+ * or bench. Capped only by running totals across the whole draft: a max of
+ * cryptoCap crypto picks and a max of stockCap stock picks per team. This is
+ * deliberate: capping WHEN a type can be picked reintroduces the confusing
+ * "bench is stock-only" behavior that was tried and reverted; the actual fix
+ * for lopsided rosters is a HOW-MANY cap, not a WHEN restriction.
  */
 type SportsSimEligibilityRule =
   | { kind: "multiAssetSplit"; stockSlots: number; cryptoSlots: number }
-  | { kind: "globalCryptoCap"; cryptoCap: number };
+  | { kind: "globalCryptoCap"; cryptoCap: number; stockCap: number };
 
 function getSportsSimEligibilityRule(
   sportsLeagueId?: string | null
@@ -383,7 +388,11 @@ function getSportsSimEligibilityRule(
     };
   }
   if (sportsLeagueId?.toLowerCase() === "sdfl") {
-    return { kind: "globalCryptoCap", cryptoCap: SPORTS_SIM_SDFL_CRYPTO_CAP };
+    return {
+      kind: "globalCryptoCap",
+      cryptoCap: SPORTS_SIM_SDFL_CRYPTO_CAP,
+      stockCap: SPORTS_SIM_SDFL_STOCK_CAP,
+    };
   }
   return null;
 }
@@ -422,6 +431,7 @@ export function getTurn(
           countStarterRoundPicksByType(picks, rules, "crypto") < rule.cryptoSlots;
       } else if (rule?.kind === "globalCryptoCap") {
         canPickCrypto = countCryptoPicksAllRounds(picks) < rule.cryptoCap;
+        canPickStock = countStockPicksAllRounds(picks) < rule.stockCap;
       }
 
       return {
@@ -440,12 +450,16 @@ export function getTurn(
         rule?.kind === "globalCryptoCap"
           ? countCryptoPicksAllRounds(picks) < rule.cryptoCap
           : true;
+      const canPickStock =
+        rule?.kind === "globalCryptoCap"
+          ? countStockPicksAllRounds(picks) < rule.stockCap
+          : true;
 
       return {
         type: "bench",
         round,
         label: sportsSimTurnLabel(round, rule, picks),
-        canPickStock: true,
+        canPickStock,
         canPickCrypto,
         stockBudget: 0,
         cryptoRemaining: 0,
