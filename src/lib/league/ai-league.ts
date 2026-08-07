@@ -28,7 +28,11 @@ import {
   generateCyclingRegularSeasonSchedule,
   normalizePlayerCount,
 } from "@/lib/matchup/schedule";
-import { SDPL_REGULAR_SEASON_WEEKS } from "@/lib/season/constants";
+import { SDPL_REGULAR_SEASON_WEEKS, SDPL_TOTAL_SEASON_WEEKS } from "@/lib/season/constants";
+import {
+  buildDailyWeekCalendar,
+  nextOrCurrentTradingDayIso,
+} from "@/lib/season/beta-schedule";
 import { getLeagueTeamIds, loadStandingSeeds } from "@/lib/matchup/league-teams";
 import { sortStandingsForSeeding } from "@/lib/matchup/schedule";
 import {
@@ -416,6 +420,18 @@ export async function activateAiLeagueSchedule(
   ) {
     await ensureIrSlotsForLeague(admin ?? supabase, leagueId);
   }
+
+  const startDateIso = nextOrCurrentTradingDayIso();
+  await (admin ?? supabase).from("league_season_settings").upsert(
+    {
+      league_id: leagueId,
+      season_format: "beta_daily",
+      regular_season_weeks: SDPL_REGULAR_SEASON_WEEKS,
+      week_calendar: buildDailyWeekCalendar(startDateIso, SDPL_TOTAL_SEASON_WEEKS),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "league_id" }
+  );
 
   await captureWeekBaselinesForLeague(leagueId, 1);
   await backfillFinalizeAtForLeague(leagueId);
