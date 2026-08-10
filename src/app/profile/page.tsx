@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ProfileContent } from "@/components/profile/ProfileContent";
 import { Logo } from "@/components/Logo";
 import type { Profile } from "@/lib/types";
+import { PROFILE_COLUMNS } from "@/lib/profile/columns";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -18,7 +19,7 @@ export default async function ProfilePage() {
 
   let { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_COLUMNS)
     .eq("id", user.id)
     .single();
 
@@ -39,7 +40,7 @@ export default async function ProfilePage() {
         team_name: teamName,
         avatar_color: avatarColor,
       })
-      .select()
+      .select(PROFILE_COLUMNS)
       .single();
 
     profile = newProfile;

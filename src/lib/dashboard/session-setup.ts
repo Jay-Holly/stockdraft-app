@@ -7,6 +7,7 @@ import {
   scoreActiveMatchupsOnVisit,
 } from "@/lib/matchup/scoring";
 import type { Profile } from "@/lib/types";
+import { PROFILE_COLUMNS } from "@/lib/profile/columns";
 
 export type DashboardSession = {
   profile: Profile;
@@ -25,7 +26,7 @@ export async function ensureDashboardSession(
 ): Promise<{ ok: true; session: DashboardSession } | { ok: false }> {
   let { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_COLUMNS)
     .eq("id", user.id)
     .single();
 
@@ -43,7 +44,7 @@ export async function ensureDashboardSession(
         team_name: teamName,
         avatar_color: avatarColor,
       })
-      .select()
+      .select(PROFILE_COLUMNS)
       .single();
 
     profile = newProfile;

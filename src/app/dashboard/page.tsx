@@ -20,6 +20,7 @@ import { loadDayTraderDashboardSummary } from "@/lib/day-trader/dashboard-summar
 import { getMyActiveDfsEntryCount } from "@/lib/dfs/my-teams";
 import { getMyActiveWfsEntryCount } from "@/lib/wfs/my-teams";
 import type { Profile } from "@/lib/types";
+import { PROFILE_COLUMNS } from "@/lib/profile/columns";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -34,7 +35,7 @@ export default async function DashboardPage() {
 
   let { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_COLUMNS)
     .eq("id", user.id)
     .single();
 
@@ -56,7 +57,7 @@ export default async function DashboardPage() {
         avatar_color: avatarColor,
         email: user.email,
       })
-      .select()
+      .select(PROFILE_COLUMNS)
       .single();
 
     profile = newProfile;

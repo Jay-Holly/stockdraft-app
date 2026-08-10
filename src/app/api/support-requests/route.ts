@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export async function POST(request: Request) {
   try {
@@ -22,7 +23,12 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
-    const { data: profile } = await supabase
+
+    // profiles.email is not readable by the `authenticated` role (see
+    // supabase/migrations/083_restrict_profile_email_visibility.sql), so the
+    // caller's own email is read with the service client. `user.id` comes from
+    // the verified session, so this stays scoped to the person asking.
+    const { data: profile } = await createServiceClient()
       .from("profiles")
       .select("email")
       .eq("id", user.id)

@@ -8,6 +8,7 @@ import {
 import { isHumanLeagueDraftFinished } from "@/lib/league/human-league";
 import { memberNeedsSdflIdentity, sdflIdentityPath } from "@/lib/league/team-identity";
 import { isSdflLeague } from "@/lib/league/sdfl-divisions";
+import { PROFILE_COLUMNS } from "@/lib/profile/columns";
 import {
   isGenericMapLeague,
   memberNeedsGenericMapClaim,
@@ -50,7 +51,7 @@ export default async function DraftPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_COLUMNS)
     .eq("id", user.id)
     .single();
 
