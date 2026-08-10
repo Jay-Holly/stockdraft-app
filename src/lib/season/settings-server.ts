@@ -3,6 +3,7 @@ import {
   getSeasonCalendarState,
   resolveSeasonSettings,
 } from "@/lib/season/calendar";
+import { enforcesStandardMoveGates } from "@/lib/season/sdpl-league";
 import type {
   LeagueFormatMeta,
   SeasonCalendarState,
@@ -15,10 +16,10 @@ export type SeasonCalendarPayload = {
   calendar: SeasonCalendarState;
 };
 
-export async function loadSeasonCalendarForLeague(
-  leagueId: string,
-  now: Date = new Date()
-): Promise<SeasonCalendarPayload> {
+async function loadLeagueSeasonInputs(leagueId: string): Promise<{
+  meta: LeagueFormatMeta;
+  settingsRow: SeasonSettingsRow | null;
+}> {
   const supabase = await createClient();
 
   const [{ data: leagueRow }, settingsResult] = await Promise.all([
@@ -41,16 +42,49 @@ export async function loadSeasonCalendarForLeague(
       ? null
       : (settingsResult.data as SeasonSettingsRow | null);
 
-  const meta: LeagueFormatMeta = {
-    formatType: leagueRow?.format_type ?? "standard",
-    sportsLeagueId: leagueRow?.sports_league_id ?? null,
-    playerCount: leagueRow?.player_count ?? null,
+  return {
+    meta: {
+      formatType: leagueRow?.format_type ?? "standard",
+      sportsLeagueId: leagueRow?.sports_league_id ?? null,
+      playerCount: leagueRow?.player_count ?? null,
+    },
+    settingsRow,
   };
+}
 
-  const settings = resolveSeasonSettings(
-    meta,
-    settingsRow
-  );
+export async function loadSeasonCalendarForLeague(
+  leagueId: string,
+  now: Date = new Date()
+): Promise<SeasonCalendarPayload> {
+  const { meta, settingsRow } = await loadLeagueSeasonInputs(leagueId);
+
+  const settings = resolveSeasonSettings(meta, settingsRow);
+  const calendar = getSeasonCalendarState(now, settings);
+
+  return { settings, calendar };
+}
+
+/**
+ * Same calendar, but with the lineup-lock and free-agency gates forced on for
+ * leagues that enforce move gates without using SDPL's season structure —
+ * today that means SDFL.
+ *
+ * Use this ONLY for roster-move enforcement and the lock/FA banner. Scoring,
+ * week finalization and awards must keep loadSeasonCalendarForLeague, whose
+ * rulesApply stays SDPL-only: turning it on for SDFL there would change when
+ * its weeks finalize and how closing prices are captured.
+ */
+export async function loadMoveGateCalendarForLeague(
+  leagueId: string,
+  now: Date = new Date()
+): Promise<SeasonCalendarPayload> {
+  const { meta, settingsRow } = await loadLeagueSeasonInputs(leagueId);
+
+  const base = resolveSeasonSettings(meta, settingsRow);
+  const settings =
+    base.rulesApply || !enforcesStandardMoveGates(meta)
+      ? base
+      : { ...base, rulesApply: true };
   const calendar = getSeasonCalendarState(now, settings);
 
   return { settings, calendar };

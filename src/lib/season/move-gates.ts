@@ -3,7 +3,7 @@ import {
   assertLineupUnlocked,
   SeasonCalendarError,
 } from "@/lib/season/calendar";
-import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import { loadMoveGateCalendarForLeague } from "@/lib/season/settings-server";
 import type { SeasonCalendarErrorCode } from "@/lib/season/types";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadDraftStateDetailed } from "@/lib/draft/server";
@@ -31,7 +31,7 @@ async function runSeasonGate(
   leagueId: string,
   gate: "lineup" | "freeAgency"
 ): Promise<RosterMoveResult | null> {
-  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  const { settings } = await loadMoveGateCalendarForLeague(leagueId);
   const now = new Date();
 
   try {

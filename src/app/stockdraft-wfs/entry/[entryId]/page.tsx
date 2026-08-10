@@ -79,7 +79,7 @@ export default async function WfsEntryLeaguePage({
             <p className="text-muted text-sm">
               ${buyIn} buy-in — {weekStartDate} —{" "}
               {contestStatus === "open"
-                ? "Open — editable until Monday 9:00 AM ET lock"
+                ? "Open — editable until Monday 9:30 AM ET lock"
                 : contestStatus === "locked"
                   ? "Locked — live standings below"
                   : "Final — contest scored"}

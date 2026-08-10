@@ -38,7 +38,7 @@ export function SdplRulesContent() {
   return (
     <>
       <p className="font-bold text-lg" style={{ color: "#E8BE4A" }}>
-        SDPL2 / SDPL4 / SDPL6 / SDPL8 / SDPL10 / SDPL12 — StockDraft Player
+        SDPL4 / SDPL6 / SDPL8 / SDPL10 / SDPL12 — StockDraft Player
         Leagues
       </p>
 
@@ -108,12 +108,13 @@ export function SdplRulesContent() {
 
       <RuleSection title="The Draft">
         <p>
-          Salary cap draft. Every manager gets $80,000 per stock slot to
-          spend on each of their 10 starters and 2 bench spots.
+          Salary cap draft. Every manager gets $80,000 per stock slot for
+          each of their 10 starters — $800,000 in stock. Your 2 bench picks
+          are free and don&rsquo;t count against the cap.
         </p>
         <p>
           Crypto works differently. Your $200,000 crypto budget is spent
-          during the draft across as many coins as you want. The more
+          during the draft across up to 3 coins. The more
           managers that draft the same coin, the more expensive it gets —
           each additional buyer pays a surcharge:
         </p>
@@ -145,8 +146,8 @@ export function SdplRulesContent() {
 
       <RuleSection title="Daily Lineup Lock">
         <p>
-          Lineups lock every day at 9:30 AM ET when the market opens — no
-          swaps during market hours.
+          Lineups lock every trading day at 9:30 AM ET when the market
+          opens — no swaps during market hours.
         </p>
         <p>
           At 4:00 PM ET market close, lineups unlock until the next
@@ -183,7 +184,6 @@ export function SdplRulesContent() {
         <DocTable
           headers={["Format", "Teams", "Weekly Matchups", "Playoff Teams"]}
           rows={[
-            ["SDPL2", "2 teams", "1 game/week", "Both teams"],
             ["SDPL4", "4 teams", "2 games/week", "All 4"],
             ["SDPL6", "6 teams", "3 games/week", "Top 4"],
             ["SDPL8", "8 teams", "4 games/week", "Top 4"],
@@ -193,16 +193,16 @@ export function SdplRulesContent() {
         />
         <p>
           All formats run 11 regular season weeks followed by a 2-week
-          playoff. In a 2- or 4-team league, everyone (or nearly everyone)
-          makes the playoffs; in a 12-team league, you need to earn it.
+          playoff. In a 4-team league everyone makes the playoffs; in a
+          12-team league, you need to earn it.
         </p>
       </RuleSection>
 
       <RuleSection title="Playoffs">
         <p>
-          The top 4 teams (or all teams, in SDPL2) by regular season record
-          advance. Seeding is by wins, then losses, then season gain
-          percentage as a tiebreaker.
+          The top 4 teams by regular season record advance — which in
+          SDPL4 means everyone. Seeding is by wins, then losses, then season
+          gain percentage as a tiebreaker.
         </p>
         <p>
           Week 12 — Semifinals: #1 seed vs #4 seed, #2 seed vs #3 seed.
@@ -311,12 +311,13 @@ export function SdaiRulesContent() {
 
       <RuleSection title="The Draft">
         <p>
-          Salary cap draft. Every manager gets $80,000 per stock slot to
-          spend on each of their 10 starters and 2 bench spots.
+          Salary cap draft. Every manager gets $80,000 per stock slot for
+          each of their 10 starters — $800,000 in stock. Your 2 bench picks
+          are free and don&rsquo;t count against the cap.
         </p>
         <p>
           Crypto works differently. Your $200,000 crypto budget is spent
-          during the draft across as many coins as you want. The more
+          during the draft across up to 3 coins. The more
           managers that draft the same coin, the more expensive it gets —
           each additional buyer pays a surcharge:
         </p>
@@ -447,7 +448,7 @@ export function SdflRulesContent() {
         SDFL — Stock Draft Football League
       </p>
       <p>
-        Mirrors the pro football season. 17-week regular season, playoff
+        Mirrors the pro football season. 18-week regular season, playoff
         bracket mirrors their postseason. Season starts when the real league
         starts, ends when their league ends, and the championship lands the
         same week as the Championship Game. Our SDFL Bowl.
@@ -456,24 +457,26 @@ export function SdflRulesContent() {
       <RuleSection title="The Concept">
         <p>
           SDFL runs on the same core StockDraft engine as the Player Leagues
-          (SDPL/SDAI) — same $80,000-per-slot salary cap draft, same daily
+          (SDPL/SDAI) — $100,000-per-slot salary cap draft, same daily
           lineup lock at market open/close, and free agency that opens
           automatically at Friday 4:00 PM ET (when trading closes for the
           week) through Monday 9:30 AM ET. Claims are first-come,
           first-served — whichever request registers first gets the stock; a
           genuine simultaneous tie is broken by worse record in the
-          standings. Roster structure differs: 10 starters (7 stocks + 3
-          crypto, fixed split) plus a 3-spot bench (stocks only) and 3 IR
-          slots. See the base StockDraft Player League rules for those
-          shared mechanics — one exception: the crypto surcharge system
-          (same-coin pricing markup) does NOT apply here. SDFL&rsquo;s 3 crypto
-          slots are fixed roster picks, not a flex pool, so there&rsquo;s
+          standings. Roster structure differs: 10 starters plus a 3-spot
+          bench and 3 IR slots — 13 picks in all. Any pick can be a stock
+          or a coin, in any round, starter or bench. The only limits are
+          totals: no more than 3 crypto and no more than 10 stocks across
+          the entire roster. See the base StockDraft Player League rules
+          for those shared mechanics — one exception: the crypto surcharge
+          system (same-coin pricing markup) does NOT apply here. SDFL
+          crypto picks are roster slots, not a flex pool, so there&rsquo;s
           nothing to surcharge.
         </p>
         <p>
           SDFL adds a sports-sim layer on top: it mirrors a real professional
           league&rsquo;s structure, schedule, and player outcomes — including the
-          chaos (injuries, bye weeks, weather) that Player Leagues
+          chaos (injuries, IR, bye weeks) that Player Leagues
           deliberately exclude.
         </p>
         <p>
@@ -486,12 +489,8 @@ export function SdflRulesContent() {
             your salary cap can&rsquo;t do a thing about it.
           </li>
           <li>
-            Real bye weeks. Every stock sits one week out, just like the
-            player it&rsquo;s mapped to.
-          </li>
-          <li>
-            Real weather. A snowed-out game can tank a stock&rsquo;s score no
-            matter how the market&rsquo;s doing that day.
+            Real bye weeks. Your franchise takes the same bye its
+            real-world team does — one week with no matchup at all.
           </li>
           <li>
             Real chaos. The one variable pure stock-picking skill can&rsquo;t
@@ -558,16 +557,12 @@ export function SdflRulesContent() {
       </RuleSection>
 
       <RuleSection title="Bye Weeks">
-        <p>Every stock has a bye week matching the real team bye week of the player it&rsquo;s mapped to. During that week it doesn&rsquo;t score.</p>
-      </RuleSection>
-
-      <RuleSection title="Weather">
         <p>
-          Outdoor stadium games in bad weather affect scoring — stocks
-          mapped to players on teams playing in cold, rain, or snow
-          conditions that week take a scoring modifier reflecting the real
-          historical impact weather had on that 2026 game. Dome teams are
-          unaffected.
+          Your franchise carries the same bye week as the real-world team
+          whose market you claimed. The SDFL schedule is built from that
+          league&rsquo;s actual week-by-week slate, so on your bye you simply
+          have no matchup — no opponent, no result, one week off. Plan for
+          it: it&rsquo;s on the schedule from day one.
         </p>
       </RuleSection>
 
@@ -638,7 +633,7 @@ export function SdlbSdhlSdbaRulesContent() {
       <RuleSection title="The Concept">
         <p>
           SDLB / SDHL / SDBA runs on the same core StockDraft engine as the
-          Player Leagues (SDPL/SDAI) — same $80,000-per-slot salary cap
+          Player Leagues (SDPL/SDAI) — $100,000-per-slot salary cap
           draft, same daily lineup lock at market open/close. Roster
           structure differs: 10 starters (5 stocks + 5 crypto, fixed split)
           plus a 3-spot bench (stocks only). Stocks lock at 9:30 AM ET
@@ -693,12 +688,8 @@ export function SdlbSdhlSdbaRulesContent() {
             mid-week, and your salary cap can&rsquo;t do a thing about it.
           </li>
           <li>
-            Real bye weeks. Every stock sits out on schedule, just like the
-            player it&rsquo;s mapped to.
-          </li>
-          <li>
-            Real weather. Outdoor games in bad weather can tank a stock&rsquo;s
-            score no matter how the market&rsquo;s doing that day.
+            Real scheduling. You play the same slate your real-world team
+            plays — back-to-backs, series, road stretches and all.
           </li>
           <li>
             Real chaos. The one variable pure stock-picking skill can&rsquo;t
@@ -764,20 +755,6 @@ export function SdlbSdhlSdbaRulesContent() {
           can pick up a replacement during the free agency window. When the
           IR period ends (matching the real player&rsquo;s 2026 return date),
           your stock is eligible to return to your active lineup.
-        </p>
-      </RuleSection>
-
-      <RuleSection title="Bye Weeks">
-        <p>Every stock has a bye week matching the real team bye week of the player it&rsquo;s mapped to. During that week it doesn&rsquo;t score.</p>
-      </RuleSection>
-
-      <RuleSection title="Weather">
-        <p>
-          Outdoor stadium games in bad weather affect scoring — stocks
-          mapped to players on teams playing in cold, rain, or snow
-          conditions that week take a scoring modifier reflecting the real
-          historical impact weather had on that 2026 game. Dome teams are
-          unaffected.
         </p>
       </RuleSection>
 
@@ -933,16 +910,16 @@ export function SddfsRulesContent() {
             SDDFS is single-shot: once your lineup locks, there&rsquo;s no bench
             and no free agency to fix a bad pick — unlike SDPL/SDAI&rsquo;s
             season-long format, where a bad stock can be benched or swapped
-            out in the next free agency window. Both formats are still pure
-            market skill and luck — no injuries in either. The Sports Sim
-            leagues (SDFL, SDHL, SDBA, SDLB) add a separate, unrelated luck
-            layer on top of the market: real-player injuries, bye weeks, and
-            weather can sideline your stock regardless of how it&rsquo;s trading
-            — so winning those leagues takes even more luck than picking
-            stocks alone. Among the four Sports Sim leagues, SDFL shares the
-            same injury/bye/weather system as SDHL, SDBA, and SDLB, but
-            differs in roster split (7 stocks + 3 crypto vs. 5 stocks + 5
-            crypto) and matchup cadence (weekly vs. daily/series).
+            out in the next free agency window. Neither format has injuries
+            or bye weeks — both are pure market skill and luck, start to
+            finish. The Sports Sim leagues (SDFL, SDHL, SDBA, SDLB) are
+            where that changes: a real player&rsquo;s injury can send your
+            stock to IR no matter how it&rsquo;s trading, and in SDFL your
+            franchise also sits out a real bye week with no matchup at all
+            — so those leagues take more luck than picking stocks alone.
+            SDFL is the outlier of the four: one matchup a week and a
+            3-crypto cap across the roster, against the other three&rsquo;s
+            fixed 5 stocks + 5 crypto and daily or series play.
           </p>
         </RuleCallout>
       </RuleSection>
@@ -991,7 +968,7 @@ export function SddfsRulesContent() {
           </li>
           <li>
             Top 3 finishers split 50% / 30% / 20% of a prize pool equal to
-            90% of all buy-ins collected
+            92% of all buy-ins collected
           </li>
           <li>
             Ties split the pooled share evenly across every tied entry, even
@@ -1062,16 +1039,16 @@ export function SdwfsRulesContent() {
             SDWFS is single-shot: once your lineup locks, there&rsquo;s no bench
             and no free agency to fix a bad pick — unlike SDPL/SDAI&rsquo;s
             season-long format, where a bad stock can be benched or swapped
-            out in the next free agency window. Both formats are still pure
-            market skill and luck — no injuries in either. The Sports Sim
-            leagues (SDFL, SDHL, SDBA, SDLB) add a separate, unrelated luck
-            layer on top of the market: real-player injuries, bye weeks, and
-            weather can sideline your stock regardless of how it&rsquo;s trading
-            — so winning those leagues takes even more luck than picking
-            stocks alone. Among the four Sports Sim leagues, SDFL shares the
-            same injury/bye/weather system as SDHL, SDBA, and SDLB, but
-            differs in roster split (7 stocks + 3 crypto vs. 5 stocks + 5
-            crypto) and matchup cadence (weekly vs. daily/series).
+            out in the next free agency window. Neither format has injuries
+            or bye weeks — both are pure market skill and luck, start to
+            finish. The Sports Sim leagues (SDFL, SDHL, SDBA, SDLB) are
+            where that changes: a real player&rsquo;s injury can send your
+            stock to IR no matter how it&rsquo;s trading, and in SDFL your
+            franchise also sits out a real bye week with no matchup at all
+            — so those leagues take more luck than picking stocks alone.
+            SDFL is the outlier of the four: one matchup a week and a
+            3-crypto cap across the roster, against the other three&rsquo;s
+            fixed 5 stocks + 5 crypto and daily or series play.
           </p>
         </RuleCallout>
       </RuleSection>
@@ -1103,7 +1080,7 @@ export function SdwfsRulesContent() {
         <ul className="list-disc list-outside ml-5 space-y-1.5">
           <li>Lineups lock at 9:30 AM ET Monday (market open) — make any last-minute swaps before then in the Free Agents panel on your entry&rsquo;s page</li>
           <li>Scored at 4:00 PM ET Friday (market close) on each pick&rsquo;s cumulative Monday-open-to-Friday-close % change, summed across all 12 picks — highest total score wins</li>
-          <li>Top 3 finishers split 50% / 30% / 20% of a prize pool equal to 90% of all buy-ins collected</li>
+          <li>Top 3 finishers split 50% / 30% / 20% of a prize pool equal to 92% of all buy-ins collected</li>
           <li>Ties split the pooled share evenly across every tied entry, even when a tie straddles the paid places</li>
         </ul>
         <p>

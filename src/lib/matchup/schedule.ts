@@ -73,7 +73,7 @@ export function formatPlayoffRoundLabel(
 }
 
 export function normalizePlayerCount(count: number | null | undefined): LeaguePlayerCount {
-  const allowed: LeaguePlayerCount[] = [2, 4, 6, 8, 10, 12];
+  const allowed: LeaguePlayerCount[] = [4, 6, 8, 10, 12];
   if (allowed.includes(count as LeaguePlayerCount)) {
     return count as LeaguePlayerCount;
   }

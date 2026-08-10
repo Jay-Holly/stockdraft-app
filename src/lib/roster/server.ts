@@ -52,7 +52,7 @@ import {
   clampViewWeek,
   getSeasonWeekContext,
 } from "@/lib/league/season-weeks";
-import { loadSeasonCalendarForLeague } from "@/lib/season/settings-server";
+import { loadMoveGateCalendarForLeague } from "@/lib/season/settings-server";
 import {
   isMultiAssetSimLeague,
   isSdplSeasonRulesLeague,
@@ -526,7 +526,7 @@ export async function loadMyTeamPageData(
   if (!result.ok) return { ok: false, error: result.error };
 
   const league = await resolveSeasonLeague(userId, season.league.id);
-  const { calendar } = await loadSeasonCalendarForLeague(season.league.id);
+  const { calendar } = await loadMoveGateCalendarForLeague(season.league.id);
 
   return {
     ok: true,
@@ -817,7 +817,7 @@ export async function loadFreeAgentsPageData(
   );
   const cryptoRemaining = Math.max(0, CRYPTO_POOL - cryptoSpent);
 
-  const { calendar } = await loadSeasonCalendarForLeague(league.id);
+  const { calendar } = await loadMoveGateCalendarForLeague(league.id);
 
   return {
     ok: true,

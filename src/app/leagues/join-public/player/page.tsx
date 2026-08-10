@@ -28,7 +28,7 @@ export default function JoinPublicPlayerPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          {STANDARD_PLAYER_COUNTS.filter((count) => count !== 2).map((count) => (
+          {STANDARD_PLAYER_COUNTS.map((count) => (
             <Link
               key={count}
               href={`/leagues/join-public/player/${count}`}

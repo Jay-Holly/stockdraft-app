@@ -79,7 +79,7 @@ export default async function DfsEntryLeaguePage({
             <p className="text-muted text-sm">
               ${buyIn} buy-in — {contestDate} —{" "}
               {contestStatus === "open"
-                ? "Open — editable until 9:00 AM ET lock"
+                ? "Open — editable until 9:30 AM ET lock"
                 : contestStatus === "locked"
                   ? "Locked — live standings below"
                   : "Final — contest scored"}

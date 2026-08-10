@@ -5,8 +5,9 @@ export const SEASON_TIMEZONE = "America/New_York";
 export const LINEUP_LOCK_START_MINUTES = 9 * 60 + 30;
 export const LINEUP_LOCK_END_MINUTES = 16 * 60;
 
-/** Standard SDPL free agency: Saturday 9:30 AM ET → Monday 9:30 AM ET. */
-export const FA_STANDARD_OPEN_MINUTES = LINEUP_LOCK_START_MINUTES;
+/** Standard SDPL free agency: Friday 4:00 PM ET → Monday 9:30 AM ET. */
+export const FA_STANDARD_OPEN_MINUTES = LINEUP_LOCK_END_MINUTES;
+export const FA_STANDARD_CLOSE_MINUTES = LINEUP_LOCK_START_MINUTES;
 
 /** Weekly matchup finalization (standard SDPL): Monday 6:00 AM ET. */
 export const MATCHUP_FINALIZE_STANDARD_MINUTES = 6 * 60;

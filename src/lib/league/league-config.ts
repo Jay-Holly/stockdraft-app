@@ -4,11 +4,17 @@ import type { DraftOrderMethodSetting } from "@/lib/league/draft-order";
 export type LeagueFormatType = "standard" | "sports_league";
 export type LeagueVisibility = "private" | "public";
 export type LeagueOpponentType = "all_ai" | "all_human" | "mixed";
-export type LeaguePlayerCount = 2 | 4 | 6 | 8 | 10 | 12 | 30 | 32;
+/**
+ * 2 is deliberately absent — SDPL2 was retired. Two-team leagues fell outside
+ * the SDPL season-rules set (no lineup lock, no free agency window), so the
+ * format is no longer offered. Legacy 2-team leagues may still exist in the
+ * database, and the `leagues` check constraint still permits the value.
+ */
+export type LeaguePlayerCount = 4 | 6 | 8 | 10 | 12 | 30 | 32;
 export type { LeagueScoringMode };
 
 export const STANDARD_PLAYER_COUNTS: LeaguePlayerCount[] = [
-  2, 4, 6, 8, 10, 12,
+  4, 6, 8, 10, 12,
 ];
 
 export const SPORTS_LEAGUE_PLAYER_COUNTS: LeaguePlayerCount[] = [30, 32];

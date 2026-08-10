@@ -282,10 +282,7 @@ export function CreateLeagueForm({
   const isGenericMap =
     formatType === "sports_league" && isGenericMapLeague(sportsLeagueId);
   const deferredIdentity = isSdfl || isGenericMap;
-  const playerCountOptions = playerCountsForFormat(
-    formatType,
-    sportsLeagueId
-  ).filter((count) => !(entryParam === "player" && count === 2));
+  const playerCountOptions = playerCountsForFormat(formatType, sportsLeagueId);
   const requiredSportsPlayerCount = playerCountForSportsLeague(sportsLeagueId);
 
   useEffect(() => {

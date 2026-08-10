@@ -188,7 +188,7 @@ export default function GameRulesPage() {
           Here&apos;s what&apos;s true almost everywhere:
         </BodyText>
         <div className="grid grid-cols-2 gap-3 mt-3">
-          <StatTile value="$80K" label="per roster slot, salary cap draft" />
+          <StatTile value="$1M" label="salary cap per manager, every league" />
           <StatTile value="9:30" label="daily lineup lock, ET" />
           <StatTile value="13" label="week season, SDPL/SDAI" />
           <StatTile value="1st" label="click wins any free agent claim" />
@@ -237,7 +237,7 @@ export default function GameRulesPage() {
           </LeagueCard>
 
           <LeagueCard
-            eyebrow="SDFL — Weekly · 17-Week Season"
+            eyebrow="SDFL — Weekly · 18-Week Season"
             title="Football League"
             linkLabel="Read the full SDFL rules →"
             rulesKey="sdfl"
@@ -366,9 +366,9 @@ export default function GameRulesPage() {
           Google LLC.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Platform Fee: StockDraft keeps 10% of each contest&apos;s prize
+          Platform Fee: StockDraft keeps 8% of each contest&apos;s prize
           pool to cover operating costs — servers, market data, and payment
-          processing. That 10% is the only portion of any contest that is
+          processing. That 8% is the only portion of any contest that is
           ever forwarded to a StockDraft account.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">

@@ -57,7 +57,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
               same ticker if that&apos;s where the conviction is.
             </p>
             <p>
-              Set your lineup any time before 9:00 AM ET Monday, when the
+              Set your lineup any time before 9:30 AM ET Monday, when the
               field locks for the week. Contests settle at 4:00 PM ET market
               close on Friday: each pick scores on its cumulative
               Monday-open-to-Friday-close percentage move, and your 12 picks

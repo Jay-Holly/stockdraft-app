@@ -35,9 +35,9 @@ function RulesModal({ onClose }: { onClose: () => void }) {
               different team if you want.
             </p>
             <p>
-              Entry opens Friday 4:00 PM ET, as soon as the previous week
-              ends. Lock in your team anytime over the weekend before trading
-              begins Monday 9:30 AM ET.
+              Entry opens Monday 10:00 AM ET for the following week. Lock in
+              your team anytime up until trading begins at 9:30 AM ET the
+              next Monday.
             </p>
           </section>
 

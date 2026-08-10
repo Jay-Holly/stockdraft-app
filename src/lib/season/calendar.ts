@@ -1,4 +1,5 @@
 import {
+  FA_STANDARD_CLOSE_MINUTES,
   FA_STANDARD_OPEN_MINUTES,
   LINEUP_LOCK_END_MINUTES,
   LINEUP_LOCK_START_MINUTES,
@@ -145,7 +146,7 @@ export function isLineupLocked(now: Date, settings: SeasonSettings): boolean {
 }
 
 /**
- * Standard SDPL: Saturday 9:30 AM ET through Monday 9:30 AM ET (exclusive at close).
+ * Standard SDPL: Friday 4:00 PM ET through Monday 9:30 AM ET (exclusive at close).
  * Beta daily: open outside weekday 9:30 AM – 4:00 PM windows (includes all weekend).
  */
 export function isFreeAgencyOpen(now: Date, settings: SeasonSettings): boolean {
@@ -162,9 +163,9 @@ function isStandardFreeAgencyOpen(now: Date): boolean {
   const { weekday, hour, minute } = getEasternParts(now);
   const mins = minutesOfDay(hour, minute);
 
-  if (weekday === "Sat" && mins >= FA_STANDARD_OPEN_MINUTES) return true;
-  if (weekday === "Sun") return true;
-  if (weekday === "Mon" && mins < FA_STANDARD_OPEN_MINUTES) return true;
+  if (weekday === "Fri" && mins >= FA_STANDARD_OPEN_MINUTES) return true;
+  if (weekday === "Sat" || weekday === "Sun") return true;
+  if (weekday === "Mon" && mins < FA_STANDARD_CLOSE_MINUTES) return true;
   return false;
 }
 
@@ -220,7 +221,7 @@ export function getSeasonCalendarState(
       ? null
       : settings.seasonFormat === "beta_daily"
         ? "Free agency opens at 4:00 PM ET when today's matchup closes."
-        : "Free agency opens Saturday at 9:30 AM ET.",
+        : "Free agency opens Friday at 4:00 PM ET.",
   };
 }
 
@@ -247,7 +248,7 @@ export function assertFreeAgencyOpen(
       "FA_CLOSED",
       settings.seasonFormat === "beta_daily"
         ? "Free agency opens at 4:00 PM ET when today's matchup closes."
-        : "Free agency opens Saturday at 9:30 AM ET."
+        : "Free agency opens Friday at 4:00 PM ET."
     );
   }
 }
@@ -295,13 +296,11 @@ function nextFaOpen(now: Date, settings: SeasonSettings): Date {
 
   const parts = getEasternParts(now);
   const weekdayIndex = WEEKDAY_TO_INDEX[parts.weekday] ?? 0;
-  const daysUntilSaturday = (6 - weekdayIndex + 7) % 7;
-  const saturdayParts =
-    daysUntilSaturday === 0 &&
+  const daysUntilFriday = (5 - weekdayIndex + 7) % 7;
+  return daysUntilFriday === 0 &&
     minutesOfDay(parts.hour, parts.minute) >= FA_STANDARD_OPEN_MINUTES
-      ? addEasternDays(parts, 7, 9, 30)
-      : addEasternDays(parts, daysUntilSaturday, 9, 30);
-  return saturdayParts;
+    ? addEasternDays(parts, 7, 16, 0)
+    : addEasternDays(parts, daysUntilFriday, 16, 0);
 }
 
 function nextFaClose(now: Date, settings: SeasonSettings): Date {
@@ -314,7 +313,7 @@ function nextFaClose(now: Date, settings: SeasonSettings): Date {
   const daysUntilMonday = (1 - weekdayIndex + 7) % 7;
   const mondayOffset =
     daysUntilMonday === 0 &&
-    minutesOfDay(parts.hour, parts.minute) >= FA_STANDARD_OPEN_MINUTES
+    minutesOfDay(parts.hour, parts.minute) >= FA_STANDARD_CLOSE_MINUTES
       ? 7
       : daysUntilMonday;
   return addEasternDays(parts, mondayOffset, 9, 30);

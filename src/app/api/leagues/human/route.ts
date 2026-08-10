@@ -14,7 +14,7 @@ import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
 import { parseLeagueScoringMode } from "@/lib/league/scoring-mode";
 
 const VALID_COUNTS: CreateLeagueConfig["playerCount"][] = [
-  2, 4, 6, 8, 10, 12, 30, 32,
+  4, 6, 8, 10, 12, 30, 32,
 ];
 
 export async function POST(request: Request) {

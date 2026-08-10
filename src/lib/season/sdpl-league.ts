@@ -23,6 +23,21 @@ export function isSdplSeasonRulesLeague(league: LeagueFormatMeta): boolean {
   return (SDPL_PLAYER_COUNTS as readonly number[]).includes(count);
 }
 
+/**
+ * Leagues that enforce the daily lineup lock and the Friday 4:00 PM → Monday
+ * 9:30 AM free agency window: SDPL/SDAI plus SDFL.
+ *
+ * Deliberately separate from isSdplSeasonRulesLeague, which additionally
+ * drives season length, week finalization timing, score capture, awards and
+ * playoff seeding. SDFL keeps its own 18-week schedule and 4-round
+ * postseason, so it must get the move gates without inheriting any of that.
+ * SDBA/SDHL/SDLB stay ungated until their calendars are built.
+ */
+export function enforcesStandardMoveGates(league: LeagueFormatMeta): boolean {
+  if (isSdplSeasonRulesLeague(league)) return true;
+  return league.sportsLeagueId?.toLowerCase() === "sdfl";
+}
+
 export function normalizeSdplPlayerCount(
   count: number | null | undefined
 ): SdplPlayerCount | null {

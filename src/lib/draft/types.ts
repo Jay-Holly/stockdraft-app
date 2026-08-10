@@ -15,8 +15,8 @@ export const CRYPTO_EARLY_MAX_ROUND = OPEN_ROUNDS;
 /** @deprecated Crypto is picked during open rounds 1–13, not a separate flex phase */
 export const CRYPTO_FLEX_ROUNDS = 0;
 
-/** Surcharge % by buyer index: 1st=0%, 2nd=5%, 3rd=10%, 4th=20%, 5th=40%, 6th+=80% */
-export const CRYPTO_SURCHARGE_TIERS = [0, 5, 10, 20, 40, 80] as const;
+/** Surcharge % by buyer index: 1st=0%, 2nd=5%, 3rd=10%, 4th=15%, 5th=20%, 6th+=25% */
+export const CRYPTO_SURCHARGE_TIERS = [0, 5, 10, 15, 20, 25] as const;
 
 export type PickType = "stock" | "bench" | "crypto" | "skip" | "ir";
 export type DraftStatus = "in_progress" | "complete";

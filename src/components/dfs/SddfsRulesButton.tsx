@@ -57,7 +57,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
               same ticker if that&apos;s where the conviction is.
             </p>
             <p>
-              Set your lineup any time before 9:00 AM ET, when the field
+              Set your lineup any time before 9:30 AM ET, when the field
               locks for the day. Contests settle at 4:00 PM ET market close:
               each pick scores on its open-to-close percentage move, and
               your 12 picks are added together for your total. First,
