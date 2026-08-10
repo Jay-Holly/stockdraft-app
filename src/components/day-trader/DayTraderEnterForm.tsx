@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
+import { EntryErrorNotice } from "@/components/identity/EntryErrorNotice";
 
 type EligibleLeague = {
   leagueId: string;
@@ -93,7 +94,7 @@ export function DayTraderEnterForm({ eligibleLeagues }: DayTraderEnterFormProps)
         </div>
       ) : null}
 
-      {error ? <p className="text-sm text-red-400">{error}</p> : null}
+      {error ? <EntryErrorNotice error={error} /> : null}
 
       <Button
         type="submit"

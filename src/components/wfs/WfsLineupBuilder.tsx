@@ -8,6 +8,7 @@ import { usePoolQuotes } from "@/hooks/usePoolQuotes";
 import { useCryptoQuotes } from "@/hooks/useCryptoQuotes";
 import { DRAFT_POOL_SECTORS, filterDraftPoolStocks } from "@/lib/market/draft-pool";
 import type { MarketQuote } from "@/lib/market/types";
+import { EntryErrorNotice } from "@/components/identity/EntryErrorNotice";
 
 /** The 12 WFS lineup slots: every GICS sector plus Crypto. */
 const WFS_SECTORS = [
@@ -379,9 +380,7 @@ export function WfsLineupBuilder({ contestId }: { contestId: string }) {
             </button>
           </>
         )}
-        {submitError && (
-          <p className="text-red-400 text-sm text-center">{submitError}</p>
-        )}
+        {submitError && <EntryErrorNotice error={submitError} />}
       </div>
     </div>
   );

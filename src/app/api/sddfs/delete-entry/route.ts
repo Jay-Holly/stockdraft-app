@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { recordWalletTransaction } from "@/lib/wallet/ledger";
 
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();
@@ -21,10 +22,10 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  // Get entry to verify ownership and get buy-in amount
+  // Get entry to verify ownership
   const { data: entry, error: entryError } = await supabase
     .from("sddfs_entries")
-    .select("id, user_id, buy_in, contest_id")
+    .select("id, user_id, contest_id")
     .eq("id", entryId)
     .maybeSingle();
 
@@ -42,6 +43,14 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
+  // Buy-in lives on the contest, not the entry
+  const { data: contest } = await supabase
+    .from("sddfs_contests")
+    .select("buy_in")
+    .eq("id", entry.contest_id)
+    .maybeSingle();
+  const buyIn = Number(contest?.buy_in ?? 0);
+
   // Delete the entry
   const { error: deleteError } = await supabase
     .from("sddfs_entries")
@@ -56,22 +65,22 @@ export async function DELETE(request: NextRequest) {
   }
 
   // Refund buy-in to wallet
-  const { error: updateError } = await supabase
-    .from("wallets")
-    .update({
-      cash_balance: {
-        increment: entry.buy_in,
-      },
-    })
-    .eq("user_id", user.id);
-
-  if (updateError) {
-    console.error("Failed to refund buy-in:", updateError);
-    return NextResponse.json(
-      { error: "Entry deleted but refund failed" },
-      { status: 500 }
-    );
+  if (buyIn > 0) {
+    try {
+      await recordWalletTransaction({
+        userId: user.id,
+        type: "refund",
+        amount: buyIn,
+        description: "SDDFS entry deleted",
+      });
+    } catch (refundError) {
+      console.error("Failed to refund buy-in:", refundError);
+      return NextResponse.json(
+        { error: "Entry deleted but refund failed" },
+        { status: 500 }
+      );
+    }
   }
 
-  return NextResponse.json({ success: true, refunded: entry.buy_in });
+  return NextResponse.json({ success: true, refunded: buyIn });
 }

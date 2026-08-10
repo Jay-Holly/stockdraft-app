@@ -726,7 +726,7 @@ export function DraftRoom({
         />
       )}
 
-      {readOnly && (
+      {readOnly && !isLiveDraft && (
         <div
           className="draft-pushback-banner"
           style={{

@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { createDayTraderEntry } from "@/lib/day-trader/entry";
+import { checkRealMoneyEntryGate } from "@/lib/identity/require-gate";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    const { user } = await getAuthenticatedUserId();
+    const { supabase, user } = await getAuthenticatedUserId();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const gate = await checkRealMoneyEntryGate(supabase, user.id);
+    if (!gate.allowed) {
+      return NextResponse.json({ error: gate.message }, { status: 403 });
     }
 
     const body = (await request.json()) as { leagueId?: string };

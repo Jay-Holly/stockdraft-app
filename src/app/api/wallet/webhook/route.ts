@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripeClient } from "@/lib/stripe/client";
 import { recordWalletTransaction } from "@/lib/wallet/ledger";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,59 @@ export async function POST(request: Request) {
           description: "Deposit via card",
         });
       }
+    }
+  }
+
+  if (
+    event.type === "identity.verification_session.verified" ||
+    event.type === "identity.verification_session.requires_input"
+  ) {
+    const session = event.data.object as Stripe.Identity.VerificationSession;
+    const userId = session.metadata?.userId;
+
+    if (userId) {
+      const supabase = createServiceClient();
+
+      if (event.type === "identity.verification_session.verified") {
+        const outputs = session.verified_outputs;
+        await supabase.from("profile_identity").upsert(
+          {
+            user_id: userId,
+            identity_status: "verified",
+            date_of_birth: outputs?.dob
+              ? `${outputs.dob.year}-${String(outputs.dob.month).padStart(2, "0")}-${String(
+                  outputs.dob.day
+                ).padStart(2, "0")}`
+              : null,
+            state: outputs?.address?.state ?? null,
+          },
+          { onConflict: "user_id" }
+        );
+      } else {
+        await supabase.from("profile_identity").upsert(
+          { user_id: userId, identity_status: "failed" },
+          { onConflict: "user_id" }
+        );
+      }
+    }
+  }
+
+  if (event.type === "account.updated") {
+    const account = event.data.object as Stripe.Account;
+    const userId = account.metadata?.userId;
+
+    if (userId) {
+      const supabase = createServiceClient();
+      const connectStatus = account.payouts_enabled
+        ? "active"
+        : account.details_submitted
+          ? "onboarding"
+          : "restricted";
+
+      await supabase.from("profile_identity").upsert(
+        { user_id: userId, stripe_connect_account_id: account.id, connect_status: connectStatus },
+        { onConflict: "user_id" }
+      );
     }
   }
 

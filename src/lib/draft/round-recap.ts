@@ -43,10 +43,16 @@ export function buildRoundRecap(
   const teamCount = draftOrder.length;
   if (teamCount === 0) return [];
 
-  const roundStartIndex = (round - 1) * teamCount;
+  // Snake drafts reverse pick order every other round, so a team's slot
+  // position in `draftOrder` doesn't tell you where their turn falls within
+  // a given round — only which overall round is currently active does
+  // (rounds always divide the pick sequence evenly regardless of direction).
+  const currentRound =
+    !options?.draftComplete && options?.currentPickIndex !== undefined
+      ? getCurrentDraftRound(options.currentPickIndex, teamCount)
+      : undefined;
 
-  return draftOrder.map((team, slotIndex) => {
-    const pickIndex = roundStartIndex + slotIndex;
+  return draftOrder.map((team) => {
     const event = feed.find(
       (e) => e.round_number === round && e.user_id === team.userId
     );
@@ -62,10 +68,7 @@ export function buildRoundRecap(
       };
     }
 
-    const pending =
-      !options?.draftComplete &&
-      options?.currentPickIndex !== undefined &&
-      pickIndex >= options.currentPickIndex;
+    const pending = currentRound !== undefined && round <= currentRound;
 
     return {
       teamName: team.teamName,

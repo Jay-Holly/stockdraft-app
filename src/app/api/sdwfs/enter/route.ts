@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
+import { checkRealMoneyEntryGate } from "@/lib/identity/require-gate";
+import { recordWalletTransaction } from "@/lib/wallet/ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,11 @@ export async function POST(request: Request) {
     const { supabase, user } = await getAuthenticatedUserId();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const gate = await checkRealMoneyEntryGate(supabase, user.id);
+    if (!gate.allowed) {
+      return NextResponse.json({ error: gate.message }, { status: 403 });
     }
 
     const body = (await request.json()) as EnterBody;
@@ -34,7 +41,7 @@ export async function POST(request: Request) {
 
     const { data: contest, error: contestError } = await supabase
       .from("sdwfs_contests")
-      .select("id, status")
+      .select("id, status, buy_in")
       .eq("id", contestId)
       .maybeSingle();
 
@@ -50,6 +57,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const buyIn = Number(contest.buy_in);
 
     const { data: entry, error: entryError } = await supabase
       .from("sdwfs_entries")
@@ -69,6 +78,27 @@ export async function POST(request: Request) {
       );
     }
 
+    if (buyIn > 0) {
+      const { error: chargeError } = await supabase.rpc("charge_entry_fee", {
+        p_user_id: user.id,
+        p_amount: buyIn,
+        p_description: "SDWFS entry fee",
+      });
+
+      if (chargeError) {
+        await supabase.from("sdwfs_entries").delete().eq("id", entry.id);
+        return NextResponse.json(
+          {
+            error:
+              chargeError.message?.includes("insufficient_balance")
+                ? "Insufficient wallet balance for this entry fee."
+                : "Could not charge entry fee.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const { error: picksError } = await supabase.from("sdwfs_entry_picks").insert(
       picks.map((pick) => ({
         entry_id: entry.id,
@@ -79,6 +109,14 @@ export async function POST(request: Request) {
 
     if (picksError) {
       await supabase.from("sdwfs_entries").delete().eq("id", entry.id);
+      if (buyIn > 0) {
+        await recordWalletTransaction({
+          userId: user.id,
+          type: "refund",
+          amount: buyIn,
+          description: "SDWFS entry failed - lineup save error",
+        });
+      }
       return NextResponse.json(
         { error: "Could not save your lineup." },
         { status: 400 }

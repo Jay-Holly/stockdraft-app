@@ -127,6 +127,17 @@ export function WalletActions({ balance }: { balance: number }) {
       });
       const data = await response.json();
       if (!response.ok) {
+        if (data.code === "connect_not_active") {
+          const onboardResponse = await fetch("/api/connect/onboard", {
+            method: "POST",
+          });
+          const onboardData = await onboardResponse.json();
+          if (onboardResponse.ok && onboardData.url) {
+            window.location.href = onboardData.url;
+            return null;
+          }
+          return onboardData.error ?? "Could not start payout setup.";
+        }
         return data.error ?? "Could not submit withdrawal request.";
       }
       window.location.reload();
@@ -165,7 +176,7 @@ export function WalletActions({ balance }: { balance: number }) {
       {openModal === "withdraw" && (
         <AmountModal
           title="Withdraw Funds"
-          helperText={`Available balance: $${balance.toFixed(2)}. Withdrawal requests are reviewed and paid out manually.`}
+          helperText={`Available balance: $${balance.toFixed(2)}. If this is your first withdrawal, you'll be sent to Stripe to set up payouts first.`}
           onClose={() => setOpenModal(null)}
           onSubmit={handleWithdraw}
         />
