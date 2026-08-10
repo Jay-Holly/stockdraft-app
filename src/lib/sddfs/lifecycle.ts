@@ -31,7 +31,12 @@ async function lockDueContests(
   }
   if (!dueContests || dueContests.length === 0) return [];
 
-  const results: { contestId: string; picksSnapshotted: number }[] = [];
+  // Gather every pick across every due contest BEFORE quoting. Fetching per
+  // contest meant one near-identical round of lookups per buy-in tier within
+  // the same minute; the later rounds got rate-limited into returning nothing,
+  // silently leaving those picks with no baseline at all. One fetch covers the
+  // whole lock.
+  const picksByContest = new Map<string, { id: string; symbol: string }[]>();
 
   for (const contest of dueContests) {
     const { data: entries } = await supabase
@@ -41,11 +46,7 @@ async function lockDueContests(
 
     const entryIds = (entries ?? []).map((e) => e.id);
     if (entryIds.length === 0) {
-      await supabase
-        .from("sddfs_contests")
-        .update({ status: "locked" })
-        .eq("id", contest.id);
-      results.push({ contestId: contest.id, picksSnapshotted: 0 });
+      picksByContest.set(contest.id, []);
       continue;
     }
 
@@ -54,10 +55,21 @@ async function lockDueContests(
       .select("id, symbol")
       .in("entry_id", entryIds);
 
-    const symbols = [...new Set((picks ?? []).map((p) => p.symbol))];
-    const prices = await fetchLiveSddfsQuotes(symbols);
+    picksByContest.set(contest.id, picks ?? []);
+  }
 
-    for (const pick of picks ?? []) {
+  const allSymbols = [
+    ...new Set([...picksByContest.values()].flat().map((p) => p.symbol)),
+  ];
+  const prices =
+    allSymbols.length > 0 ? await fetchLiveSddfsQuotes(allSymbols) : {};
+
+  const results: { contestId: string; picksSnapshotted: number }[] = [];
+
+  for (const contest of dueContests) {
+    const picks = picksByContest.get(contest.id) ?? [];
+
+    for (const pick of picks) {
       const openPrice = prices[pick.symbol.toUpperCase()];
 
       // Never persist a baseline we don't trust — every later score is
@@ -109,7 +121,13 @@ async function scoreClosedContests(
   }
   if (!lockedContests || lockedContests.length === 0) return [];
 
-  const results: { contestId: string; entriesScored: number }[] = [];
+  // Batched for the same reason as the lock: one quote round covering every
+  // contest being scored, so later tiers can't be rate-limited into picks that
+  // score neutral through no fault of the player.
+  const picksByContest = new Map<
+    string,
+    { id: string; symbol: string; open_price: number | null }[]
+  >();
 
   for (const contest of lockedContests) {
     const { data: entries } = await supabase
@@ -118,34 +136,45 @@ async function scoreClosedContests(
       .eq("contest_id", contest.id);
 
     const entryIds = (entries ?? []).map((e) => e.id);
+    if (entryIds.length === 0) {
+      picksByContest.set(contest.id, []);
+      continue;
+    }
 
-    if (entryIds.length > 0) {
-      const { data: picks } = await supabase
-        .from("sddfs_entry_picks")
-        .select("id, symbol, open_price")
-        .in("entry_id", entryIds);
+    const { data: picks } = await supabase
+      .from("sddfs_entry_picks")
+      .select("id, symbol, open_price")
+      .in("entry_id", entryIds);
 
-      const symbols = [...new Set((picks ?? []).map((p) => p.symbol))];
-      const prices = await fetchLiveSddfsQuotes(symbols);
+    picksByContest.set(contest.id, picks ?? []);
+  }
 
-      for (const pick of picks ?? []) {
-        const closePrice = prices[pick.symbol.toUpperCase()];
-        const pctChange = safePctChange(pick.open_price, closePrice);
+  const allSymbols = [
+    ...new Set([...picksByContest.values()].flat().map((p) => p.symbol)),
+  ];
+  const prices =
+    allSymbols.length > 0 ? await fetchLiveSddfsQuotes(allSymbols) : {};
 
-        if (pctChange === null) {
-          console.error(
-            `[sddfs] unscoreable pick ${pick.id} (${pick.symbol}): open=${pick.open_price} close=${closePrice}; scoring neutral`
-          );
-        }
+  const results: { contestId: string; entriesScored: number }[] = [];
 
-        await supabase
-          .from("sddfs_entry_picks")
-          .update({
-            close_price: isUsableQuote(closePrice) ? closePrice : null,
-            pct_change: pctChange,
-          })
-          .eq("id", pick.id);
+  for (const contest of lockedContests) {
+    for (const pick of picksByContest.get(contest.id) ?? []) {
+      const closePrice = prices[pick.symbol.toUpperCase()];
+      const pctChange = safePctChange(pick.open_price, closePrice);
+
+      if (pctChange === null) {
+        console.error(
+          `[sddfs] unscoreable pick ${pick.id} (${pick.symbol}): open=${pick.open_price} close=${closePrice}; scoring neutral`
+        );
       }
+
+      await supabase
+        .from("sddfs_entry_picks")
+        .update({
+          close_price: isUsableQuote(closePrice) ? closePrice : null,
+          pct_change: pctChange,
+        })
+        .eq("id", pick.id);
     }
 
     const { entriesScored } = await finalizeSddfsContest(supabase, contest.id);
