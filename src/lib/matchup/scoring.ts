@@ -105,11 +105,13 @@ export async function insertScheduledGames(
     games.map(async (game) => {
       const homeName = await getLeagueMemberDisplayName(
         leagueId,
-        game.homeUserId
+        game.homeUserId,
+        supabase
       );
       const awayName = await getLeagueMemberDisplayName(
         leagueId,
-        game.awayUserId
+        game.awayUserId,
+        supabase
       );
       const humanIsHome = ownerUserId && game.homeUserId === ownerUserId;
       const humanIsAway = ownerUserId && game.awayUserId === ownerUserId;
@@ -390,8 +392,8 @@ async function scoreSingleMatchup(
     // a bogus 0-0 tie with no winner instead of retrying later — this is
     // what corrupted the SDAI-00040 Contrarian vs Bench Hoarder week 1 game.
     const [homeState, awayState] = await Promise.all([
-      loadDraftStateDetailed(matchup.home_user_id, { leagueId: matchup.league_id }),
-      loadDraftStateDetailed(matchup.away_user_id, { leagueId: matchup.league_id }),
+      loadDraftStateDetailed(matchup.home_user_id, { leagueId: matchup.league_id }, supabase),
+      loadDraftStateDetailed(matchup.away_user_id, { leagueId: matchup.league_id }, supabase),
     ]);
     if (!homeState.ok || homeState.state.picks.length === 0) {
       return { error: `Could not load roster for home team (${matchup.home_user_id})` };
@@ -571,7 +573,11 @@ async function advanceLeagueCalendar(
 ): Promise<{ seasonComplete?: boolean; nextWeek?: number }> {
   const supabase = supabaseOverride ?? (await createClient());
   const scheduledWeeks = await getScheduledWeekNumbers(leagueId, supabase);
-  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  const { settings } = await loadSeasonCalendarForLeague(
+    leagueId,
+    new Date(),
+    supabase
+  );
 
   const { data: leagueFormat } = await supabase
     .from("leagues")
@@ -771,7 +777,11 @@ async function shouldForceHybridForWeek(
   weekNumber: number,
   supabaseOverride?: SupabaseClient
 ): Promise<boolean> {
-  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  const { settings } = await loadSeasonCalendarForLeague(
+    leagueId,
+    new Date(),
+    supabaseOverride
+  );
   if (!settings.rulesApply || !weekUsesWeekendExtension(settings, weekNumber)) {
     return false;
   }
@@ -823,7 +833,7 @@ export async function finalizeMatchupsForLeagueWeek(
   }
 
   const scoringMode = parseLeagueScoringMode(league.scoring_mode);
-  const playerCount = await getLeaguePlayerCount(leagueId);
+  const playerCount = await getLeaguePlayerCount(leagueId, supabase);
 
   // Multi-asset sports-sim leagues (sdba/sdhl/sdlb) can have several
   // game_date rows sharing one week_number, each with its own finalize_at —
@@ -843,7 +853,7 @@ export async function finalizeMatchupsForLeagueWeek(
     return { finalized: false };
   }
 
-  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  const { settings } = await loadSeasonCalendarForLeague(leagueId, at, supabase);
   const sameDayClose = usesSameDayCloseCapture(settings, weekNumber);
 
   if (sameDayClose) {
@@ -930,7 +940,7 @@ export async function scoreMatchupForLeague(
   }
 
   const scoringMode = parseLeagueScoringMode(league.scoring_mode);
-  const playerCount = await getLeaguePlayerCount(leagueId);
+  const playerCount = await getLeaguePlayerCount(leagueId, supabase);
 
   const { data: humanStandings } = await supabase
     .from("league_standings")
@@ -970,7 +980,11 @@ export async function scoreMatchupForLeague(
   const leagueWriteClient = serviceClient ?? supabase;
 
   const canFinalize = await canFinalizeLeagueWeek(leagueId, currentWeek);
-  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  const { settings } = await loadSeasonCalendarForLeague(
+    leagueId,
+    new Date(),
+    supabase
+  );
 
   if (settings.rulesApply && !canFinalize) {
     return { scored: false };

@@ -9,8 +9,11 @@ import {
 } from "@/lib/roster/weekly";
 import type { TeamStandingSeed } from "@/lib/matchup/schedule";
 
-export async function getLeaguePlayerCount(leagueId: string): Promise<number> {
-  const supabase = await createClient();
+export async function getLeaguePlayerCount(
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
+): Promise<number> {
+  const supabase = supabaseOverride ?? (await createClient());
   const { data } = await supabase
     .from("leagues")
     .select("player_count")
@@ -19,15 +22,16 @@ export async function getLeaguePlayerCount(leagueId: string): Promise<number> {
 
   if (data?.player_count) return normalizePlayerCount(data.player_count);
 
-  const bots = await getLeagueBotMembers(leagueId);
+  const bots = await getLeagueBotMembers(leagueId, supabaseOverride);
   return bots.length + 1;
 }
 
 export async function getLeagueTeamIds(
   leagueId: string,
-  humanUserId: string
+  humanUserId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<string[]> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: members } = await supabase
     .from("league_members")
     .select("user_id")
@@ -38,15 +42,16 @@ export async function getLeagueTeamIds(
     return members.map((member) => member.user_id);
   }
 
-  const bots = await getLeagueBotMembers(leagueId);
+  const bots = await getLeagueBotMembers(leagueId, supabaseOverride);
   return [humanUserId, ...bots.map((bot) => bot.id)];
 }
 
 export async function getLeagueMemberDisplayName(
   leagueId: string,
-  userId: string
+  userId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<string> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data } = await supabase
     .from("league_members")
     .select("display_name")
@@ -56,7 +61,7 @@ export async function getLeagueMemberDisplayName(
 
   if (data?.display_name) return data.display_name;
 
-  const bots = await getLeagueBotMembers(leagueId);
+  const bots = await getLeagueBotMembers(leagueId, supabaseOverride);
   return bots.find((bot) => bot.id === userId)?.displayName ?? "Team";
 }
 

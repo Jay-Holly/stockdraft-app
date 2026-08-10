@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import {
   getSeasonCalendarState,
@@ -16,11 +17,14 @@ export type SeasonCalendarPayload = {
   calendar: SeasonCalendarState;
 };
 
-async function loadLeagueSeasonInputs(leagueId: string): Promise<{
+async function loadLeagueSeasonInputs(
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
+): Promise<{
   meta: LeagueFormatMeta;
   settingsRow: SeasonSettingsRow | null;
 }> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
 
   const [{ data: leagueRow }, settingsResult] = await Promise.all([
     supabase
@@ -54,9 +58,13 @@ async function loadLeagueSeasonInputs(leagueId: string): Promise<{
 
 export async function loadSeasonCalendarForLeague(
   leagueId: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  supabaseOverride?: SupabaseClient
 ): Promise<SeasonCalendarPayload> {
-  const { meta, settingsRow } = await loadLeagueSeasonInputs(leagueId);
+  const { meta, settingsRow } = await loadLeagueSeasonInputs(
+    leagueId,
+    supabaseOverride
+  );
 
   const settings = resolveSeasonSettings(meta, settingsRow);
   const calendar = getSeasonCalendarState(now, settings);

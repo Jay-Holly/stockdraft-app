@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { fetchCryptoPool } from "@/lib/crypto-pool/server";
 import { LEGACY_CRYPTO_SYMBOLS } from "@/lib/market/symbols";
@@ -178,8 +179,15 @@ async function fetchLeagueDraftPicks(
     }
   );
 
-  if (!rpcError && rpcPicks) {
-    return (rpcPicks as DraftPick[]) ?? [];
+  // get_league_draft_picks is security definer and gates on auth.uid()
+  // membership, same as get_league_draft above. A caller with no auth.uid()
+  // (service-role, e.g. a cron job) fails that check and gets back an empty
+  // array rather than SQL NULL — `!rpcError && rpcPicks` alone treats `[]`
+  // as a trustworthy (if empty) result and never reaches the fallback below,
+  // silently scoring every team's roster as empty. Require a non-empty
+  // result before trusting the RPC.
+  if (!rpcError && rpcPicks && (rpcPicks as DraftPick[]).length > 0) {
+    return rpcPicks as DraftPick[];
   }
 
   const { data: picks } = await supabase
@@ -198,9 +206,10 @@ export async function loadDraftState(userId: string): Promise<DraftState | null>
 
 export async function loadDraftStateDetailed(
   userId: string,
-  options?: { leagueId?: string }
+  options?: { leagueId?: string },
+  supabaseOverride?: SupabaseClient
 ): Promise<LoadDraftResult> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -211,7 +220,8 @@ export async function loadDraftStateDetailed(
   const { league, error: leagueError } = await resolveDraftLeague(
     userId,
     profile?.team_name ?? "My Team",
-    options
+    options,
+    supabaseOverride
   );
   if (!league) {
     return {
@@ -373,10 +383,10 @@ export async function loadDraftStateDetailed(
 
   summary = summarizePicks(pickList, draftRules);
   const turn = getTurn(draftRow, pickList, draftRules, sportsLeagueId);
-  const leagueOffBoardSet = await getLeagueOffBoardSymbols(league.id);
+  const leagueOffBoardSet = await getLeagueOffBoardSymbols(league.id, supabase);
   const myStockSymbols = [...getMyStockSymbols(pickList)];
   const myCryptoSymbols = [...getMyCryptoSymbols(pickList)];
-  const teamName = await getLeagueMemberTeamName(league.id, userId);
+  const teamName = await getLeagueMemberTeamName(league.id, userId, supabase);
 
   const rawSafetyPickQueue = normalizeSafetyPickQueue(
     draftRow.safety_pick_queue,

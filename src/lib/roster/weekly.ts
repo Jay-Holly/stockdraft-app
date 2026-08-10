@@ -286,7 +286,11 @@ async function computeScoringWeekInputs(
     weekNumber
   );
 
-  const { settings } = await loadSeasonCalendarForLeague(leagueId);
+  const { settings } = await loadSeasonCalendarForLeague(
+    leagueId,
+    options?.at ?? new Date(),
+    supabase
+  );
   const now = options?.at ?? new Date();
   const useHybrid = await shouldUseHybridScoring(
     supabase,

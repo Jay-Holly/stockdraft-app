@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import {
   getAiLeagueById,
@@ -31,9 +32,10 @@ export async function getLeagueMemberLogoUrl(
 
 export async function getLeagueMemberTeamName(
   leagueId: string,
-  userId: string
+  userId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<string> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data: member } = await supabase
     .from("league_members")
     .select("display_name")
@@ -134,9 +136,10 @@ export async function getOrCreateSoloLeague(
 }
 
 export async function getLeagueOffBoardSymbols(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<Set<string>> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data, error } = await supabase.rpc("get_league_drafted_stock_symbols", {
     p_league_id: leagueId,
   });
@@ -175,9 +178,10 @@ export async function countLeagueRosteredSymbol(
 export async function resolveDraftLeague(
   userId: string,
   teamName: string,
-  options?: { leagueId?: string }
+  options?: { leagueId?: string },
+  supabaseOverride?: SupabaseClient
 ): Promise<{ league: League | null; error?: string }> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
 
   if (options?.leagueId) {
     const { data, error } = await supabase

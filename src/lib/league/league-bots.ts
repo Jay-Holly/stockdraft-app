@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { DRAFT_POOL_SECTORS } from "@/lib/market/draft-pool";
 import type { BotConfig, BotPersonality, BotProfile } from "@/lib/league/bots";
@@ -31,9 +32,10 @@ export function buildBotConfigForPersonality(
 }
 
 export async function getLeagueBotMembers(
-  leagueId: string
+  leagueId: string,
+  supabaseOverride?: SupabaseClient
 ): Promise<LeagueBotMember[]> {
-  const supabase = await createClient();
+  const supabase = supabaseOverride ?? (await createClient());
   const { data, error } = await supabase
     .from("league_members")
     .select("user_id, bot_personality, bot_config, display_name, draft_slot")
