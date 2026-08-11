@@ -7,34 +7,23 @@ import {
   type CryptoQuote,
 } from "@/lib/coingecko/service";
 import { fetchFinnhubQuotes, type FinnhubQuote } from "@/lib/finnhub/service";
-import { mergeQuotesWithFallback } from "@/lib/market/fallback-quotes";
-import { createServiceClient } from "@/lib/supabase/service";
 
 /**
  * SDDFS needs a true intraday snapshot (lock at 9:30 AM ET, close at 4 PM ET)
  * for a small, bounded symbol set (at most a few dozen distinct tickers
- * across the day's contests). Fetching live from Finnhub/CoinGecko covers
- * every pick.
- *
- * `allowStaleFallback` gates the S&P snapshot / last-known-DB-price fallback.
- * It must stay off for the lock and score writes — those set real baselines
- * and payouts, and a stale or leftover DB price silently passing as "live"
- * once corrupted every later read of that symbol (a June price for CNP, an
- * old mock XRP price feeding back in as the new baseline). It's fine for the
- * mid-week leaderboard preview, which is display-only and self-corrects the
- * next time a live quote succeeds.
+ * across the day's contests). Every read here is live-market-hours — a stale
+ * snapshot or leftover DB price is never a safer answer than no price at
+ * all, so a symbol Finnhub/CoinGecko can't quote is simply left out of the
+ * result (the caller treats a missing price as "no usable quote").
  */
 export async function fetchLiveSddfsQuotes(
-  symbols: string[],
-  options?: { allowStaleFallback?: boolean }
+  symbols: string[]
 ): Promise<Record<string, number>> {
-  const allowStaleFallback = options?.allowStaleFallback ?? false;
-
   // Load the crypto pool before classifying symbols — on a cold serverless
   // instance the in-memory pool starts empty (just a 4-coin legacy list), so
   // classifying first misrouted real pool coins like XRP to the stock path,
-  // where Finnhub doesn't know them and the fallback chain served up a
-  // leftover DB price instead.
+  // where Finnhub doesn't know them and used to serve up a leftover DB price
+  // instead.
   await fetchCryptoPool();
 
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
@@ -50,36 +39,11 @@ export async function fetchLiveSddfsQuotes(
       : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
-  const mergedStocks = allowStaleFallback
-    ? mergeQuotesWithFallback(stockSymbols, stockQuotes)
-    : { ...stockQuotes };
-
-  const dbPrices: Record<string, number> = {};
-  if (allowStaleFallback) {
-    const stillMissing = stockSymbols.filter((s) => !mergedStocks[s]);
-    if (stillMissing.length > 0) {
-      const supabase = createServiceClient();
-      const { data } = await supabase
-        .from("sddfs_entry_picks")
-        .select("symbol, close_price, open_price")
-        .in("symbol", stillMissing)
-        .order("updated_at", { ascending: false })
-        .limit(stillMissing.length);
-
-      for (const row of data ?? []) {
-        if (!dbPrices[row.symbol]) {
-          dbPrices[row.symbol] = (row.close_price ?? row.open_price) || 0;
-        }
-      }
-    }
-  }
-
   const prices: Record<string, number> = {};
 
   for (const symbol of stockSymbols) {
-    const quote = mergedStocks[symbol];
-    prices[symbol] =
-      quote?.price ?? dbPrices[symbol] ?? 0;
+    const quote = stockQuotes[symbol];
+    prices[symbol] = quote?.price ?? 0;
   }
 
   for (const symbol of cryptoSymbols) {

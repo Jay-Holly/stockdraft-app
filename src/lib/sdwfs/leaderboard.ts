@@ -134,9 +134,9 @@ export async function getSdwfsContestLeaderboard(
     contest.status === "locked"
       ? [...new Set((picks ?? []).map((p) => p.symbol))]
       : [];
-  const liveQuotes = await fetchLiveSdwfsQuotes(allSymbols, {
-    allowStaleFallback: true,
-  });
+  // A fabricated percentage (from a stale snapshot) is worse than showing
+  // "—" for a pick — no fallback on the live comparison either.
+  const liveQuotes = await fetchLiveSdwfsQuotes(allSymbols);
 
   const scoreByEntry = new Map<string, number>();
   const livePicksByEntry = new Map<string, SdwfsLeaderboardPick[]>();
