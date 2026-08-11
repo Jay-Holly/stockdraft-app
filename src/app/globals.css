@@ -1250,15 +1250,15 @@ body:has(.landing-screen.sides-always) {
 }
 
 .draft-cap-rounds {
-  display: grid;
-  grid-template-columns: repeat(15, minmax(0, 1fr));
+  display: flex;
   gap: 0.25rem;
   margin-top: 0.875rem;
   overflow-x: auto;
 }
 
 .draft-round-slot {
-  min-width: 2.5rem;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
   min-height: 3rem;
   border-radius: 0.375rem;
   border: 1px solid var(--color-dark-border);

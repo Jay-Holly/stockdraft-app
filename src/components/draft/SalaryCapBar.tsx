@@ -60,18 +60,7 @@ export function SalaryCapBar({
       <div key={round} className={slotClass}>
         <span className="draft-round-num">R{round}</span>
         {pick ? (
-          <>
-            <span className="draft-round-ticker">{pick.symbol}</span>
-            {pick.shares > 0 && (
-              <span className="draft-round-shares">
-                {pick.pick_type === "bench"
-                  ? "BN"
-                  : pick.budget_spent > 0
-                    ? `$${Math.round(pick.budget_spent / 1000)}K`
-                    : "BN"}
-              </span>
-            )}
-          </>
+          <span className="draft-round-ticker">{pick.symbol}</span>
         ) : skip ? (
           <span className="draft-round-empty">SKIP</span>
         ) : (
