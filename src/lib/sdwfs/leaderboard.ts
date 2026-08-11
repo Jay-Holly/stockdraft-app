@@ -134,7 +134,9 @@ export async function getSdwfsContestLeaderboard(
     contest.status === "locked"
       ? [...new Set((picks ?? []).map((p) => p.symbol))]
       : [];
-  const liveQuotes = await fetchLiveSdwfsQuotes(allSymbols);
+  const liveQuotes = await fetchLiveSdwfsQuotes(allSymbols, {
+    allowStaleFallback: true,
+  });
 
   const scoreByEntry = new Map<string, number>();
   const livePicksByEntry = new Map<string, SdwfsLeaderboardPick[]>();
