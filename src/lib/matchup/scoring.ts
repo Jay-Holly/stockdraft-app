@@ -51,7 +51,10 @@ import {
   weekUsesWeekendExtension,
 } from "@/lib/season/finalize-times";
 import { baselinesHaveFridayClose } from "@/lib/season/weekend-scoring";
-import { loadWeekBaselineExtendedMap } from "@/lib/roster/weekly";
+import {
+  loadWeekBaselineExtendedMap,
+  weekMatchupLooksUncaptured,
+} from "@/lib/roster/weekly";
 import {
   computeWeeklyScoreForUser,
   getLeagueMemberDisplayName,
@@ -88,6 +91,9 @@ import {
 
 const SCORING_UNAVAILABLE_MESSAGE =
   "Scoring temporarily unavailable — live prices could not be loaded. We'll retry on your next visit.";
+
+const SCORING_CLOSE_NOT_CAPTURED_MESSAGE =
+  "Week close prices haven't refreshed yet — scoring will finalize once they do.";
 
 const SCORING_DEGRADED_MESSAGE =
   "Week scoring used last-known crypto prices because CoinGecko was temporarily unavailable. Scores will refresh on your next visit.";
@@ -400,6 +406,25 @@ async function scoreSingleMatchup(
     }
     if (!awayState.ok || awayState.state.picks.length === 0) {
       return { error: `Could not load roster for away team (${matchup.away_user_id})` };
+    }
+
+    // Same reasoning one step further along: a matchup where BOTH sides'
+    // closes are identical to their opens was never really captured, and
+    // scores 0.00-0.00. Decline and retry rather than finalize another
+    // winner-less tie. One side alone scoring flat is a real result (their
+    // roster genuinely didn't move) and must not be blocked.
+    if (!isSingleGame) {
+      const weekForGuard = options?.weekNumber ?? matchup.week_number;
+      const uncaptured = await weekMatchupLooksUncaptured(
+        supabase,
+        matchup.league_id,
+        weekForGuard,
+        matchup.home_user_id,
+        matchup.away_user_id
+      );
+      if (uncaptured) {
+        return { error: SCORING_CLOSE_NOT_CAPTURED_MESSAGE };
+      }
     }
 
     if (isSingleGame) {

@@ -181,6 +181,68 @@ export async function loadWeekBaselineExtendedMap(
   );
 }
 
+/**
+ * True when BOTH sides of a matchup have every funded position's close
+ * identical to its cent, which means the close was never really captured for
+ * either team — not that the market stood still for one of them.
+ *
+ * How that happens: refresh-stock-prices covers MAX_SYMBOLS_PER_RUN (240) of a
+ * 503-stock pool per run, and Finnhub's free tier caps at 60 calls/minute, so
+ * the live refresh inside captureWeekCloseSnapshots mostly comes back empty. A
+ * failed quote correctly falls back to the cached price — but that is the same
+ * cached price the week's open was taken from. Open and close come out equal,
+ * the week scores 0.00 for both sides, and it finalizes as a winner-less tie.
+ * 20 of 48 games in a fresh 32-team SDFL league landed that way.
+ *
+ * Checking BOTH sides matters: one manager can legitimately score a flat 0.00%
+ * for the week (a roster that genuinely didn't move) while their opponent
+ * scores a real number — that is an ordinary result, not a failed capture, and
+ * an earlier version of this check that looked at either side alone would have
+ * blocked it. A bogus tie only exists when neither side has any real movement
+ * to compare against.
+ *
+ * Real markets do not leave a ten-position roster unchanged to the cent, so
+ * treating this as a failed capture is safe. Callers should decline to
+ * finalize and retry, exactly as they do for a roster that will not load — the
+ * week finalizes normally once prices actually refresh.
+ */
+export async function weekMatchupLooksUncaptured(
+  supabase: SupabaseClient,
+  leagueId: string,
+  weekNumber: number,
+  homeUserId: string,
+  awayUserId: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("roster_week_baselines")
+    .select("user_id, value_at_open, value_at_close")
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber)
+    .in("user_id", [homeUserId, awayUserId]);
+
+  const isSideFrozen = (userId: string): boolean => {
+    const rows = data?.filter((row) => row.user_id === userId) ?? [];
+    if (rows.length === 0) return false;
+
+    // Only positions that actually hold value can evidence a move; empty
+    // slots are legitimately 0 open and 0 close.
+    const funded = rows.filter(
+      (row) => row.value_at_close != null && Number(row.value_at_open) > 0
+    );
+
+    // Too few positions to distinguish a stuck cache from a quiet week.
+    if (funded.length < 3) return false;
+
+    return funded.every(
+      (row) =>
+        Math.abs(Number(row.value_at_open) - Number(row.value_at_close)) <
+        0.01
+    );
+  };
+
+  return isSideFrozen(homeUserId) && isSideFrozen(awayUserId);
+}
+
 async function getWeekFinalizeAtForLeague(
   supabase: SupabaseClient,
   leagueId: string,
