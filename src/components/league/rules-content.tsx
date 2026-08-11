@@ -66,7 +66,7 @@ export function SdplRulesContent() {
           </li>
           <li>
             No injuries. You don&rsquo;t have to worry about your stud player
-            blowing out his damn knee in Week 2 and being lost for the entire
+            blowing out his knee in Week 2 and being lost for the entire
             season. NVDA isn&rsquo;t going on the 10-day DL because it &ldquo;felt
             tightness&rdquo; in warmups.
           </li>
