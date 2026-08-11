@@ -33,6 +33,21 @@ export type FinnhubCompanyProfile = {
 
 const US_MICS = new Set(["XNYS", "XNAS", "ARCX", "BATS", "XASE"]);
 
+/**
+ * Every leaderboard viewer's 30s auto-refresh independently called Finnhub
+ * once per symbol with no sharing between requests — a locked contest with
+ * a dozen viewers meant a dozen full re-fetches of the same symbols every
+ * cycle, well past Finnhub's rate limit. Concurrent requests then got
+ * inconsistent partial failures (different symbols 429'd for different
+ * viewers), which is why two people looking at the same contest at the same
+ * moment could see completely different scores. Sharing one short-lived
+ * cache across all callers cuts real API calls roughly to "once per symbol
+ * per window" instead of "once per symbol per viewer," and — just as
+ * important — makes every concurrent viewer see the same numbers.
+ */
+const STOCK_QUOTE_CACHE_TTL_MS = 30_000;
+const stockQuoteCache = new Map<string, { quote: FinnhubQuote; at: number }>();
+
 function getFinnhubKey(): string | undefined {
   return process.env.NEXT_PUBLIC_FINNHUB_KEY;
 }
@@ -189,10 +204,21 @@ export async function fetchFinnhubQuotes(
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
   const quotes: Record<string, FinnhubQuote> = {};
 
+  const now = Date.now();
+  const stillNeeded: string[] = [];
+  for (const symbol of unique) {
+    const cached = stockQuoteCache.get(symbol);
+    if (cached && now - cached.at < STOCK_QUOTE_CACHE_TTL_MS) {
+      quotes[symbol] = cached.quote;
+    } else {
+      stillNeeded.push(symbol);
+    }
+  }
+
   const batchSize = 8;
 
-  for (let i = 0; i < unique.length; i += batchSize) {
-    const batch = unique.slice(i, i + batchSize);
+  for (let i = 0; i < stillNeeded.length; i += batchSize) {
+    const batch = stillNeeded.slice(i, i + batchSize);
 
     for (const symbol of batch) {
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -225,11 +251,13 @@ export async function fetchFinnhubQuotes(
             continue;
           }
 
-          quotes[symbol] = {
+          const quote = {
             price,
             prevClose,
             changePercent: calcChangePercent(price, prevClose),
           };
+          quotes[symbol] = quote;
+          stockQuoteCache.set(symbol, { quote, at: Date.now() });
           break;
         } catch (err) {
           console.error(`Finnhub quote error for ${symbol}:`, err);
@@ -238,7 +266,7 @@ export async function fetchFinnhubQuotes(
       }
     }
 
-    if (i + batchSize < unique.length) {
+    if (i + batchSize < stillNeeded.length) {
       await sleep(150);
     }
   }
