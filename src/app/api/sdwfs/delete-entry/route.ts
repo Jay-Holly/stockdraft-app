@@ -46,9 +46,17 @@ export async function DELETE(request: NextRequest) {
   // Buy-in lives on the contest, not the entry
   const { data: contest } = await supabase
     .from("sdwfs_contests")
-    .select("buy_in")
+    .select("buy_in, status")
     .eq("id", entry.contest_id)
     .maybeSingle();
+
+  if (contest?.status !== "open") {
+    return NextResponse.json(
+      { error: "This contest is locked — entries can no longer be deleted." },
+      { status: 400 }
+    );
+  }
+
   const buyIn = Number(contest?.buy_in ?? 0);
 
   // Delete the entry

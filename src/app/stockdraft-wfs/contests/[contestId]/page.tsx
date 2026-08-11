@@ -79,7 +79,7 @@ export default async function WfsContestBoardPage({
           />
         </div>
 
-        {!isFinal && (
+        {contest.status === "open" && (
           <div className="bg-gold/10 border border-gold/20 rounded-xl p-4">
             {userEntry ? (
               <DeleteSdwfsEntryButton entryId={userEntry.id} />
