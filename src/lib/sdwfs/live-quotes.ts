@@ -7,6 +7,7 @@ import {
   type CryptoQuote,
 } from "@/lib/coingecko/service";
 import { fetchFinnhubQuotes, type FinnhubQuote } from "@/lib/finnhub/service";
+import { fetchWarmStockPrices } from "@/lib/market/warm-stock-prices";
 
 /**
  * SDWFS needs true snapshots (Monday 9 AM ET open, Friday 4 PM ET close),
@@ -15,6 +16,12 @@ import { fetchFinnhubQuotes, type FinnhubQuote } from "@/lib/finnhub/service";
  * no price at all, so a symbol Finnhub/CoinGecko can't quote is simply left
  * out of the result (the caller treats a missing price as "no usable
  * quote").
+ *
+ * Stocks check the shared stock_prices table first — refreshed continuously
+ * by its own cron — and only ask Finnhub directly for whatever's too stale
+ * to trust. That table is 2 hours behind for crypto, too coarse to ever be
+ * "fresh enough" for a lock/close moment, so crypto always goes straight to
+ * a live CoinGecko read.
  */
 export async function fetchLiveSdwfsQuotes(
   symbols: string[]
@@ -28,20 +35,27 @@ export async function fetchLiveSdwfsQuotes(
   const stockSymbols = unique.filter((s) => !isCryptoSymbol(s));
   const cryptoSymbols = unique.filter((s) => isCryptoSymbol(s));
 
-  const [stockQuotes, cryptoQuotes] = await Promise.all([
+  const [warmStocks, cryptoQuotes] = await Promise.all([
     stockSymbols.length > 0
-      ? fetchFinnhubQuotes(stockSymbols, { cache: "no-store" })
-      : Promise.resolve({} as Record<string, FinnhubQuote>),
+      ? fetchWarmStockPrices(stockSymbols)
+      : Promise.resolve({
+          warm: {} as Record<string, number>,
+          cold: [] as string[],
+        }),
     cryptoSymbols.length > 0
       ? fetchCryptoQuotes()
       : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 
+  const coldQuotes =
+    warmStocks.cold.length > 0
+      ? await fetchFinnhubQuotes(warmStocks.cold, { cache: "no-store" })
+      : ({} as Record<string, FinnhubQuote>);
+
   const prices: Record<string, number> = {};
 
   for (const symbol of stockSymbols) {
-    const quote = stockQuotes[symbol];
-    prices[symbol] = quote?.price ?? 0;
+    prices[symbol] = warmStocks.warm[symbol] ?? coldQuotes[symbol]?.price ?? 0;
   }
 
   for (const symbol of cryptoSymbols) {

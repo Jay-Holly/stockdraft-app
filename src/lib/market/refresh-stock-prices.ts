@@ -23,6 +23,15 @@ const CALLS_PER_MINUTE = 50;
 const DELAY_BETWEEN_CALLS_MS = Math.ceil(60_000 / CALLS_PER_MINUTE);
 /** ~240 symbols at 1.2s each fits Vercel's 300s function limit; full pool refreshes over ~2 runs. */
 const MAX_SYMBOLS_PER_RUN = 240;
+/**
+ * Symbols within a group are fetched concurrently, so a group's wall-clock
+ * cost is roughly one round-trip instead of GROUP_SIZE round-trips — the
+ * 1.2s spacing still applies per group, not per symbol, so the aggregate
+ * rate stays the same. This is what keeps a real run's actual duration
+ * close to the theoretical ~288s instead of drifting past Vercel's 300s
+ * limit on ordinary network latency.
+ */
+const GROUP_SIZE = 5;
 
 function getFinnhubKey(): string | undefined {
   return process.env.NEXT_PUBLIC_FINNHUB_KEY;
@@ -145,41 +154,48 @@ export async function refreshStockPricesFromFinnhub(): Promise<StockPriceRefresh
   const supabase = createServiceClient();
   let updated = 0;
   let failed = 0;
-  const now = new Date().toISOString();
-  const rows: Array<{
-    symbol: string;
-    price: number;
-    change_percent: number;
-    updated_at: string;
-  }> = [];
 
-  for (let i = 0; i < symbols.length; i++) {
-    const symbol = symbols[i]!;
-    const quote = await fetchFinnhubQuote(symbol, token);
+  // Written after every group, not once at the end — a run killed near
+  // Vercel's 300s limit used to lose everything it had already fetched
+  // because the only write was a single upsert after the full loop
+  // finished. Persisting incrementally means a timeout only costs the
+  // in-flight group, not the whole run.
+  for (let i = 0; i < symbols.length; i += GROUP_SIZE) {
+    const group = symbols.slice(i, i + GROUP_SIZE);
+    const now = new Date().toISOString();
 
-    if (quote) {
-      rows.push({
+    const results = await Promise.all(
+      group.map(async (symbol) => ({
+        symbol,
+        quote: await fetchFinnhubQuote(symbol, token),
+      }))
+    );
+
+    const rows = results
+      .filter((r): r is { symbol: string; quote: NonNullable<typeof r.quote> } =>
+        r.quote !== null
+      )
+      .map(({ symbol, quote }) => ({
         symbol,
         price: quote.price,
         change_percent: quote.changePercent,
         updated_at: now,
+      }));
+
+    failed += results.length - rows.length;
+
+    if (rows.length > 0) {
+      const { error } = await supabase.from("stock_prices").upsert(rows, {
+        onConflict: "symbol",
       });
-      updated += 1;
-    } else {
-      failed += 1;
+      if (error) {
+        throw error;
+      }
+      updated += rows.length;
     }
 
-    if (i + 1 < symbols.length) {
-      await sleep(DELAY_BETWEEN_CALLS_MS);
-    }
-  }
-
-  if (rows.length > 0) {
-    const { error } = await supabase.from("stock_prices").upsert(rows, {
-      onConflict: "symbol",
-    });
-    if (error) {
-      throw error;
+    if (i + GROUP_SIZE < symbols.length) {
+      await sleep(DELAY_BETWEEN_CALLS_MS * group.length);
     }
   }
 
