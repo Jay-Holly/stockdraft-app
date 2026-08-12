@@ -67,7 +67,11 @@ export function ContestBigBoard({
         setLoading(false);
       }
     })();
-  }, data.isFinal ? null : 30_000);
+  // Purely atmospheric — nobody can act on this number, lineups are locked.
+  // Day Trader is the one place staleness is actually exploitable, so it
+  // gets priority on the shared Finnhub/CoinGecko budget; this just needs
+  // to feel alive, not be real-time.
+  }, data.isFinal ? null : 60_000);
 
 
   const formatPct = (pct: number | null) => {
