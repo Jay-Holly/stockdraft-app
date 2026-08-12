@@ -62,7 +62,9 @@ async function lockDueContests(
     ...new Set([...picksByContest.values()].flat().map((p) => p.symbol)),
   ];
   const prices =
-    allSymbols.length > 0 ? await fetchLiveSddfsQuotes(allSymbols) : {};
+    allSymbols.length > 0
+      ? await fetchLiveSddfsQuotes(allSymbols, { verifyAgainstSecondSource: true })
+      : {};
 
   const results: { contestId: string; picksSnapshotted: number }[] = [];
 
@@ -153,12 +155,16 @@ async function scoreClosedContests(
     ...new Set([...picksByContest.values()].flat().map((p) => p.symbol)),
   ];
   const prices =
-    allSymbols.length > 0 ? await fetchLiveSddfsQuotes(allSymbols) : {};
+    allSymbols.length > 0
+      ? await fetchLiveSddfsQuotes(allSymbols, { verifyAgainstSecondSource: true })
+      : {};
 
   const results: { contestId: string; entriesScored: number }[] = [];
 
   for (const contest of lockedContests) {
-    for (const pick of picksByContest.get(contest.id) ?? []) {
+    const picks = picksByContest.get(contest.id) ?? [];
+
+    for (const pick of picks) {
       const closePrice = prices[pick.symbol.toUpperCase()];
       const pctChange = safePctChange(pick.open_price, closePrice);
 
@@ -175,6 +181,25 @@ async function scoreClosedContests(
           pct_change: pctChange,
         })
         .eq("id", pick.id);
+    }
+
+    // A pick with a real open but still no close after this run means the
+    // quote fetch failed for it, not that it's genuinely unscoreable —
+    // finalizing anyway pads it to 0% and can hand out rankings and real
+    // payouts that don't reflect what actually happened. Leave the contest
+    // locked so the next run retries; only a pick whose open itself was
+    // never usable is treated as permanently neutral by design.
+    const stillMissingClose = picks.some(
+      (pick) =>
+        isUsableQuote(pick.open_price) &&
+        !isUsableQuote(prices[pick.symbol.toUpperCase()])
+    );
+
+    if (stillMissingClose) {
+      console.error(
+        `[sddfs] contest ${contest.id} has picks still missing a close price; holding off finalize, will retry next run`
+      );
+      continue;
     }
 
     const { entriesScored } = await finalizeSddfsContest(supabase, contest.id);
