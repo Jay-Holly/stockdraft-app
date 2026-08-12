@@ -2,6 +2,9 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import symbolNames from "@/data/symbol-names.json";
+
+const SYMBOL_NAMES: Record<string, string> = symbolNames.names;
 
 interface Pick {
   symbol: string;
@@ -200,13 +203,18 @@ export function PlayerDetailsModal({
               {player.picks.map((pick) => (
                 <div
                   key={pick.symbol}
-                  className={`px-4 py-3 rounded-lg border text-sm ${getPickColor(
+                  className={`px-4 py-3 rounded-lg border text-sm flex items-center justify-between gap-2 ${getPickColor(
                     pick.pctChange
                   )}`}
                 >
-                  <div className="font-bold text-lg">{pick.symbol}</div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-lg">{pick.symbol}</div>
+                    <div className="text-xs text-muted truncate">
+                      {SYMBOL_NAMES[pick.symbol.toUpperCase()] ?? ""}
+                    </div>
+                  </div>
                   <div
-                    className={`text-sm ${
+                    className={`text-xl font-bold flex-shrink-0 ${
                       pick.pctChange == null
                         ? "text-muted"
                         : pick.pctChange >= 0
