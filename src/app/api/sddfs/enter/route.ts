@@ -81,15 +81,16 @@ export async function POST(request: Request) {
       .single();
 
     if (entryError || !entry) {
-      return NextResponse.json(
-        {
-          error:
-            entryError?.code === "23505"
-              ? "You've already entered this contest."
-              : "Could not create entry.",
-        },
-        { status: 400 }
-      );
+      // The count check above is the fast path; a DB trigger holds the real
+      // line, so a contest that filled up between that check and this insert
+      // is refused here rather than overselling.
+      const message = entryError?.message?.includes("contest_full")
+        ? "This contest is full."
+        : entryError?.code === "23505"
+          ? "You've already entered this contest."
+          : "Could not create entry.";
+
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     if (buyIn > 0) {

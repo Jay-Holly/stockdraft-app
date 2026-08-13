@@ -41,6 +41,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/dfs-preflight",
+      "schedule": "15 13 * * 1-5"
+    },
+    {
       "path": "/api/cron/dfs-audit-round1",
       "schedule": "*/2 21 * * 1-5"
     },
