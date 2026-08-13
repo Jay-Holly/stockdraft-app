@@ -96,13 +96,36 @@ function referenceCryptoQuotes(): Record<
   return quotes;
 }
 
-export async function getCryptoQuotesMap(): Promise<
-  Record<string, { price: number; changePercent: number }>
-> {
+/**
+ * Live crypto quotes, strict by default.
+ *
+ * A coin with no usable quote comes back **absent**, not filled in from the
+ * pool's reference price. That substitution is the dangerous kind: the pool's
+ * reference_price_usd is a snapshot from the day the pool was built, and as of
+ * 2026-08-13 more than half the pool sits over 10% away from it (LAB is off by
+ * 99%). Because a reference price is a plausible non-zero number, it sails
+ * through every `price > 0` guard downstream — including the one in
+ * fetchPricesForPicks, whose comment forbids exactly this substitution — and
+ * gets persisted as a weekly baseline. The week then scores against a
+ * months-old price with nothing anywhere to show it happened.
+ *
+ * Callers that merely display a number may pass `allowReferenceFallback` to
+ * get the old behaviour, because a stale figure on screen is recoverable and
+ * an empty slot looks broken. Anything that persists must not: leaving the
+ * symbol absent is what lets the caller skip it.
+ */
+export async function getCryptoQuotesMap(
+  options?: { allowReferenceFallback?: boolean }
+): Promise<Record<string, { price: number; changePercent: number }>> {
   await fetchCryptoPool();
   const symbols = getCachedCryptoPool().map((coin) => coin.symbol);
   const cached = await fetchCachedCryptoQuotes(symbols);
   const quotes: Record<string, { price: number; changePercent: number }> = {};
+  const unpriced: string[] = [];
+
+  const references = options?.allowReferenceFallback
+    ? referenceCryptoQuotes()
+    : null;
 
   for (const symbol of symbols) {
     const quote = cached[symbol];
@@ -113,8 +136,21 @@ export async function getCryptoQuotesMap(): Promise<
       };
       continue;
     }
-    const ref = referenceCryptoQuotes()[symbol];
-    quotes[symbol] = ref ?? { price: 0, changePercent: 0 };
+
+    const ref = references?.[symbol];
+    if (ref) {
+      quotes[symbol] = ref;
+      continue;
+    }
+    unpriced.push(symbol);
+  }
+
+  if (unpriced.length > 0) {
+    console.warn(
+      `[crypto-quotes] no live quote for ${unpriced.join(", ")} — left unpriced${
+        options?.allowReferenceFallback ? " (no reference price either)" : ""
+      }`
+    );
   }
 
   return quotes;
