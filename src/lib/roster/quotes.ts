@@ -17,8 +17,40 @@ export async function getStockQuote(symbol: string): Promise<{
   return quotes.get(symbol.toUpperCase()) ?? { price: 0, changePercent: 0 };
 }
 
+/**
+ * Live stock quotes, strict by default.
+ *
+ * A symbol the warm table cannot answer for comes back **absent**. It used to
+ * come back carrying one of two stand-ins, and both were the same mistake in
+ * different clothing:
+ *
+ *   1. a bundled JSON snapshot of ~400 S&P quotes committed to the repo with
+ *      no capture date — measured 2026-08-13 it drifts 11% on average, with
+ *      MSFT off by 23.6% and TSLA by 17.8%;
+ *   2. failing that, price_at_pick — the literal price on the day the stock
+ *      was drafted, months back.
+ *
+ * fetchPricesForPicks sits directly above this and its comment forbids exactly
+ * that: "never substitute the draft-day price… gets persisted as a baseline,
+ * silently scoring the week against a months-old price." Its `livePrice > 0`
+ * guard could never enforce it, because the substitution happened in here,
+ * below the guard, and produced a plausible non-zero number.
+ *
+ * This is what made scores jump between two reads of the same roster seconds
+ * apart, and what let two people looking at one contest at one moment see
+ * different totals: whether the warm table holds a symbol varies request to
+ * request, so one read got $496.88 for MSFT and the next got $379.40 from the
+ * bundle. Nothing logged it, because as far as every layer above was concerned
+ * the fetch had succeeded.
+ *
+ * Persisting callers must take the strict default — day-trader entry already
+ * refuses to open a position on a missing price, and now that refusal can
+ * actually fire. Display callers may pass `allowStaleFallback` to keep a
+ * figure on screen, and should expect it to be stale.
+ */
 export async function fetchStockQuotes(
-  symbols: string[]
+  symbols: string[],
+  options?: { allowStaleFallback?: boolean }
 ): Promise<Map<string, { price: number; changePercent: number }>> {
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
   const map = new Map<string, { price: number; changePercent: number }>();
@@ -26,9 +58,7 @@ export async function fetchStockQuotes(
   if (unique.length === 0) return map;
 
   const cached = await fetchCachedStockQuotes(unique);
-
-  // Track which symbols still need fallback
-  const stillMissing = [];
+  const stillMissing: string[] = [];
 
   for (const symbol of unique) {
     const quote = cached[symbol];
@@ -39,42 +69,50 @@ export async function fetchStockQuotes(
       });
       continue;
     }
-    const fallback = getFallbackStockQuote(symbol);
-    if (fallback?.price) {
-      map.set(symbol, {
-        price: fallback.price,
-        changePercent: fallback.changePercent,
-      });
-      continue;
-    }
-    stillMissing.push(symbol);
-  }
 
-  // For symbols with no cached or fallback price, use last-known DB price
-  if (stillMissing.length > 0) {
-    const { createServiceClient } = await import("@/lib/supabase/service");
-    const supabase = createServiceClient();
-    const { data } = await supabase
-      .from("draft_picks")
-      .select("symbol, price_at_pick")
-      .in("symbol", stillMissing)
-      .order("created_at", { ascending: false })
-      .limit(stillMissing.length);
-
-    const dbPrices = new Map<string, number>();
-    for (const row of data ?? []) {
-      if (!dbPrices.has(row.symbol.toUpperCase()) && row.price_at_pick) {
-        dbPrices.set(row.symbol.toUpperCase(), row.price_at_pick);
+    if (options?.allowStaleFallback) {
+      const fallback = getFallbackStockQuote(symbol);
+      if (fallback?.price) {
+        map.set(symbol, {
+          price: fallback.price,
+          changePercent: fallback.changePercent,
+        });
+        continue;
       }
     }
 
-    for (const symbol of stillMissing) {
-      const dbPrice = dbPrices.get(symbol) ?? 0;
-      map.set(symbol, {
-        price: dbPrice,
-        changePercent: 0,
-      });
+    stillMissing.push(symbol);
+  }
+
+  if (stillMissing.length === 0) return map;
+
+  if (!options?.allowStaleFallback) {
+    console.warn(
+      `[stock-quotes] no live quote for ${stillMissing.join(", ")} — left unpriced rather than substituted`
+    );
+    return map;
+  }
+
+  // Display-only last resort: the price on the day the stock was drafted.
+  const { createServiceClient } = await import("@/lib/supabase/service");
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("draft_picks")
+    .select("symbol, price_at_pick")
+    .in("symbol", stillMissing)
+    .order("created_at", { ascending: false })
+    .limit(stillMissing.length);
+
+  const dbPrices = new Map<string, number>();
+  for (const row of data ?? []) {
+    if (!dbPrices.has(row.symbol.toUpperCase()) && row.price_at_pick) {
+      dbPrices.set(row.symbol.toUpperCase(), row.price_at_pick);
     }
+  }
+
+  for (const symbol of stillMissing) {
+    const dbPrice = dbPrices.get(symbol);
+    if (dbPrice) map.set(symbol, { price: dbPrice, changePercent: 0 });
   }
 
   return map;

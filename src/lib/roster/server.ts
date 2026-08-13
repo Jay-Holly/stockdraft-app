@@ -175,11 +175,11 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
   const needsCrypto = picks.some((p) => isCryptoSymbol(p.symbol));
 
   const [stockQuotes, cryptoQuotes, companyNames] = await Promise.all([
-    fetchStockQuotes(stockSymbols),
+    // Display only — a stale figure beats an empty slot here, and nothing on
+    // this path is persisted.
+    fetchStockQuotes(stockSymbols, { allowStaleFallback: true }),
     needsCrypto
-      ? // Display only — a stale figure beats an empty slot here, and nothing
-        // on this path is persisted.
-        getCryptoQuotesMap({ allowReferenceFallback: true })
+      ? getCryptoQuotesMap({ allowReferenceFallback: true })
       : Promise.resolve({} as Record<string, CryptoQuote>),
     fetchFinnhubCompanyProfiles(stockSymbols),
   ]);
