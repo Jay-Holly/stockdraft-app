@@ -212,16 +212,36 @@ export async function runAuditRound1(auditDate: string): Promise<RoundResult> {
   const pending = incomplete.filter((s) => !done.has(s));
   const batch = pending.slice(0, SYMBOLS_PER_RUN);
 
-  const recovered =
-    batch.length > 0
-      ? await fetchDailyOpenClose(batch, auditDate)
-      : ({} as Record<string, DailyOpenClose>);
+  const stockBatch = batch.filter(isTwelveDataSupported);
+  const cryptoBatch = batch.filter((s) => !isTwelveDataSupported(s));
+
+  const [stockBars, cryptoSessions] = await Promise.all([
+    stockBatch.length > 0
+      ? fetchDailyOpenClose(stockBatch, auditDate)
+      : Promise.resolve({} as Record<string, DailyOpenClose>),
+    cryptoBatch.length > 0
+      ? fetchCryptoSessionChecks(cryptoBatch, auditDate)
+      : Promise.resolve({} as Record<string, CryptoSessionCheck>),
+  ]);
+
+  const recovered: Record<string, DailyOpenClose> = { ...stockBars };
+
+  // A coin's 16:00 ET close sits exactly on an hourly point, so it comes back
+  // as a real price and is recoverable. Its 09:30 open does not — the hourly
+  // series only brackets that moment. The midpoint of that bracket would look
+  // like a price and would be a guess, and a guessed baseline is what every
+  // later score gets measured against, so the open is deliberately left
+  // unrecoverable rather than approximated.
+  for (const [symbol, session] of Object.entries(cryptoSessions)) {
+    recovered[symbol] = { symbol, open: null, close: session.close };
+  }
 
   const issues: string[] = [];
 
   for (const symbol of batch) {
     const source = recovered[symbol];
     const symbolPicks = picks.filter((p) => p.symbol === symbol);
+    const isCrypto = !isTwelveDataSupported(symbol);
 
     let openStatus = "ok";
     let closeStatus = "ok";
@@ -234,7 +254,11 @@ export async function runAuditRound1(auditDate: string): Promise<RoundResult> {
         openStatus = "backfilled";
       } else {
         openStatus = "missing";
-        issues.push(`${symbol}: open missing and unrecoverable`);
+        issues.push(
+          isCrypto
+            ? `${symbol}: open missing — a coin's 09:30 price cannot be recovered after the fact, only bracketed`
+            : `${symbol}: open missing and unrecoverable`
+        );
       }
     }
     if (needsClose) {
