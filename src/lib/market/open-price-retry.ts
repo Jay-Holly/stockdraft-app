@@ -4,6 +4,7 @@ import { isCryptoSymbol } from "@/lib/draft/engine";
 import { fetchLiveSddfsQuotes } from "@/lib/sddfs/live-quotes";
 import { fetchLiveSdwfsQuotes } from "@/lib/sdwfs/live-quotes";
 import { isUsableQuote } from "@/lib/market/quote-guards";
+import { fetchLiveCryptoPrices } from "@/lib/market/coinpaprika";
 
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
@@ -82,9 +83,34 @@ export async function getOpeningPricesWithRetry(
     if (missing.length === 0) break;
   }
 
+  // Last resort for coins, and only for coins CoinGecko never answered for.
+  // A stock in this state is genuinely better left unset: its true 09:30 price
+  // is still sitting in the minute bars and the backfill sweep will recover it
+  // exactly. A coin has no such second chance — nobody can reconstruct its
+  // 09:30 price after the fact at minute precision — so the choice here is a
+  // price about 90 seconds behind, or a baseline that never arrives and scores
+  // the pick flat for the whole session. The stale price is the better of the
+  // two, and the evening audit still bracket-checks it.
+  const missingCrypto = missing.filter((s) => isCryptoSymbol(s));
+  if (missingCrypto.length > 0) {
+    try {
+      const filled = await fetchLiveCryptoPrices(missingCrypto);
+      for (const [symbol, price] of Object.entries(filled)) {
+        if (isUsableQuote(price)) quotes[symbol.toUpperCase()] = price;
+      }
+      missing = stillMissing();
+    } catch (err) {
+      // The fallback must never be the reason a lock fails.
+      console.error(
+        `[open-price-retry] crypto fallback threw, continuing without it:`,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+
   if (missing.length > 0) {
     console.error(
-      `[open-price-retry] GIVING UP on ${missing.join(", ")} — baselines left unset, backfill sweep will recover them`
+      `[open-price-retry] GIVING UP on ${missing.join(", ")} — baselines left unset, backfill sweep will recover the equities`
     );
   }
 

@@ -39,6 +39,81 @@ export type CryptoSessionCheck = {
   close: number | null;
 };
 
+/**
+ * Live prices for coins CoinGecko could not answer for, by stored coin id.
+ *
+ * This is the last thing tried at a lock or close before a baseline is left
+ * unset, and it only ever sees symbols that already came back empty — a coin
+ * CoinGecko priced is never second-guessed here.
+ *
+ * The prices run about 90 seconds behind. That is worth being clear-eyed
+ * about: a baseline filled from here is a 9:28:30 price wearing a 9:30 label,
+ * and on a fast-moving coin that is a real difference. It is still the better
+ * of the two available outcomes, because the alternative is no baseline at
+ * all, which scores the pick flat for the whole session regardless of what the
+ * coin actually did. The audit sees these the same as any other price and will
+ * bracket-check them that evening.
+ */
+export async function fetchLiveCryptoPrices(
+  symbols: readonly string[]
+): Promise<Record<string, number>> {
+  const prices: Record<string, number> = {};
+  const unique = [...new Set(symbols.map((s) => s.toUpperCase()))];
+  if (unique.length === 0) return prices;
+
+  const supabase = createServiceClient();
+  const { data: pool } = await supabase
+    .from("crypto_pool")
+    .select("symbol, coinpaprika_id")
+    .in("symbol", unique);
+
+  for (const row of pool ?? []) {
+    const symbol = String(row.symbol).toUpperCase();
+    const id = row.coinpaprika_id;
+    if (!id) {
+      console.warn(
+        `[coinpaprika] ${symbol} has no stored coin id — cannot fill it without guessing by ticker`
+      );
+      continue;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetch(
+        `https://api.coinpaprika.com/v1/tickers/${encodeURIComponent(id)}`,
+        { signal: controller.signal, cache: "no-store" }
+      );
+      if (!res.ok) {
+        console.warn(`[coinpaprika] HTTP ${res.status} filling ${symbol}`);
+        continue;
+      }
+
+      const body = (await res.json()) as {
+        quotes?: { USD?: { price?: number } };
+        last_updated?: string;
+      };
+      const price = body.quotes?.USD?.price;
+      if (typeof price !== "number" || !(price > 0)) continue;
+
+      const ageSeconds = body.last_updated
+        ? Math.round((Date.now() - new Date(body.last_updated).getTime()) / 1000)
+        : null;
+
+      prices[symbol] = price;
+      console.log(
+        `[coinpaprika] filled ${symbol} at ${price} (${ageSeconds ?? "?"}s stale) — CoinGecko had nothing`
+      );
+    } catch {
+      // Never let the fallback itself break a lock.
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return prices;
+}
+
 /** Eastern offset from UTC on a given date, as a negative number (-4 / -5). */
 function easternOffsetHours(dateIso: string): number {
   const probe = new Date(`${dateIso}T12:00:00Z`);
