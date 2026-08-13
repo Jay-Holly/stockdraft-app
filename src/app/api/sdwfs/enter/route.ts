@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
     const { data: contest, error: contestError } = await supabase
       .from("sdwfs_contests")
-      .select("id, status, buy_in")
+      .select("id, status, buy_in, max_entrants")
       .eq("id", contestId)
       .maybeSingle();
 
@@ -56,6 +56,20 @@ export async function POST(request: Request) {
         { error: "This contest is locked." },
         { status: 400 }
       );
+    }
+
+    if (contest.max_entrants && contest.max_entrants > 0) {
+      const { count, error: countError } = await supabase
+        .from("sdwfs_entries")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId);
+
+      if (!countError && count !== null && count >= contest.max_entrants) {
+        return NextResponse.json(
+          { error: "This contest is full." },
+          { status: 400 }
+        );
+      }
     }
 
     const buyIn = Number(contest.buy_in);

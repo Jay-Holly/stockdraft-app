@@ -8,10 +8,6 @@ import {
 } from "@/lib/coingecko/service";
 import { fetchFinnhubQuotes, type FinnhubQuote } from "@/lib/finnhub/service";
 import { fetchWarmStockPrices } from "@/lib/market/warm-stock-prices";
-import {
-  verifyStockPrices,
-  verifyCryptoPrices,
-} from "@/lib/market/second-source-check";
 
 /**
  * SDWFS needs true snapshots (Monday 9 AM ET open, Friday 4 PM ET close),
@@ -27,16 +23,19 @@ import {
  * "fresh enough" for a lock/close moment, so crypto always goes straight to
  * a live CoinGecko read.
  *
- * `verifyAgainstSecondSource` cross-checks every price against Yahoo
- * Finance before trusting it — a real ETH close and a real GOOGL open both
- * got through Finnhub/CoinGecko silently wrong on Aug 11, and a single
- * source with no plausibility check can't catch its own bad tick. Only the
- * lock/score paths turn this on; the frequently-polled leaderboard preview
- * doesn't need the extra latency for a number nobody can act on anyway.
+ * Finnhub/CoinGecko are authoritative here: whatever they return is the
+ * price, and no second source gets to overrule it at a lock or close moment.
+ * An earlier version cross-checked against another provider and dropped any
+ * price the two disagreed on, which was worse than useless — the second
+ * source's free tier could only answer for a handful of symbols before rate
+ * limiting, so the check applied arbitrarily, and every rejection destroyed a
+ * usable price and manufactured exactly the missing baseline it was supposed
+ * to protect against. Verification belongs in the nightly audit, where it can
+ * cover every symbol on a budget and flag disagreements without deleting
+ * anything.
  */
 export async function fetchLiveSdwfsQuotes(
-  symbols: string[],
-  options?: { verifyAgainstSecondSource?: boolean }
+  symbols: string[]
 ): Promise<Record<string, number>> {
   // Load the crypto pool before classifying symbols — on a cold serverless
   // instance the in-memory pool starts empty (just a 4-coin legacy list), so
@@ -76,24 +75,8 @@ export async function fetchLiveSdwfsQuotes(
     if (price > 0) cryptoCandidates[symbol] = price;
   }
 
-  if (!options?.verifyAgainstSecondSource) {
-    const prices: Record<string, number> = {};
-    for (const symbol of stockSymbols) prices[symbol] = stockCandidates[symbol] ?? 0;
-    for (const symbol of cryptoSymbols) prices[symbol] = cryptoCandidates[symbol] ?? 0;
-    return prices;
-  }
-
-  const [verifiedStocks, verifiedCrypto] = await Promise.all([
-    Object.keys(stockCandidates).length > 0
-      ? verifyStockPrices(stockCandidates)
-      : Promise.resolve({} as Record<string, number>),
-    Object.keys(cryptoCandidates).length > 0
-      ? verifyCryptoPrices(cryptoCandidates)
-      : Promise.resolve({} as Record<string, number>),
-  ]);
-
   const prices: Record<string, number> = {};
-  for (const symbol of stockSymbols) prices[symbol] = verifiedStocks[symbol] ?? 0;
-  for (const symbol of cryptoSymbols) prices[symbol] = verifiedCrypto[symbol] ?? 0;
+  for (const symbol of stockSymbols) prices[symbol] = stockCandidates[symbol] ?? 0;
+  for (const symbol of cryptoSymbols) prices[symbol] = cryptoCandidates[symbol] ?? 0;
   return prices;
 }

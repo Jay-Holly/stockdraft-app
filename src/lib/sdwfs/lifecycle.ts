@@ -4,10 +4,12 @@ import {
   activeSdwfsContestWeekIso,
   ensureThisWeeksSdwfsContests,
 } from "@/lib/wfs/contests";
-import { fetchLiveSdwfsQuotes } from "@/lib/sdwfs/live-quotes";
 import { createServiceClient } from "@/lib/supabase/service";
 import { finalizeSdwfsContest } from "@/lib/sdwfs/scoring";
 import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
+import { getOpeningPricesWithRetry } from "@/lib/market/open-price-retry";
+import { fillMissingOpens } from "@/lib/dfs/backfill";
+import { isAuditGateEnabled } from "@/lib/dfs/audit-gate";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -63,7 +65,7 @@ async function lockDueContests(
   ];
   const prices =
     allSymbols.length > 0
-      ? await fetchLiveSdwfsQuotes(allSymbols, { verifyAgainstSecondSource: true })
+      ? await getOpeningPricesWithRetry(allSymbols, { isDailyContest: false })
       : {};
 
   const results: { contestId: string; picksSnapshotted: number }[] = [];
@@ -154,7 +156,7 @@ async function scoreClosedContests(
   ];
   const prices =
     allSymbols.length > 0
-      ? await fetchLiveSdwfsQuotes(allSymbols, { verifyAgainstSecondSource: true })
+      ? await getOpeningPricesWithRetry(allSymbols, { isDailyContest: false })
       : {};
 
   const results: { contestId: string; entriesScored: number }[] = [];
@@ -200,7 +202,12 @@ async function scoreClosedContests(
       continue;
     }
 
-    const { entriesScored } = await finalizeSdwfsContest(supabase, contest.id);
+    // With the audit gate on, this scores and ranks the contest but credits
+    // nobody — the release job pays out once both audit rounds pass. With it
+    // off, crediting happens here as it always has.
+    const { entriesScored } = await finalizeSdwfsContest(supabase, contest.id, {
+      creditWallets: !isAuditGateEnabled(),
+    });
     results.push({ contestId: contest.id, entriesScored });
   }
 
@@ -210,14 +217,24 @@ async function scoreClosedContests(
 export async function runSdwfsLifecycle(): Promise<{
   locked: { contestId: string; picksSnapshotted: number }[];
   scored: { contestId: string; entriesScored: number }[];
+  backfilled: { filled: number; stillMissing: number };
 }> {
   const supabase = createServiceClient();
   const locked = await lockDueContests(supabase);
+
+  // Any pick the Monday lock couldn't price gets its real opening price here,
+  // on whichever tick the second source can first report that 09:30 bar.
+  const backfilled = await fillMissingOpens(
+    supabase,
+    "sdwfs",
+    activeSdwfsContestWeekIso()
+  );
+
   const scored = await scoreClosedContests(supabase);
   // Proactively create the next active week's contest rows (a no-op before
   // this week's Friday 4 PM ET close) so next week's contests are already
   // open and enterable right after close, instead of waiting for someone
   // to load the lobby.
   await ensureThisWeeksSdwfsContests(supabase, activeSdwfsContestWeekIso());
-  return { locked, scored };
+  return { locked, scored, backfilled };
 }

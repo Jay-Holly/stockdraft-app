@@ -71,8 +71,11 @@ export function computeSddfsPayouts(
 
 export async function finalizeSddfsContest(
   supabase: ServiceClient,
-  contestId: string
+  contestId: string,
+  options?: { creditWallets?: boolean }
 ): Promise<{ entriesScored: number }> {
+  const creditWallets = options?.creditWallets !== false;
+
   const { data: contest, error: contestError } = await supabase
     .from("sddfs_contests")
     .select("id, buy_in, status")
@@ -162,8 +165,8 @@ export async function finalizeSddfsContest(
       );
     }
 
-    // Credit winner's wallet if they won prize money
-    if (payout.payout > 0) {
+    // Credit winner's wallet if they won prize money (only if creditWallets enabled)
+    if (creditWallets && payout.payout > 0) {
       const { error: walletError } = await supabase
         .from("wallet_transactions")
         .insert({
