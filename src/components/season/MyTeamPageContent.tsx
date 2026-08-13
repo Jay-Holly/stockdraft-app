@@ -761,6 +761,7 @@ function PickGainStats({
   scoringMode: LeagueScoringMode;
 }) {
   const stats = getOrderedPickGainStats(pick, scoringMode);
+  const isBench = pick.pick_type === "bench";
 
   return (
     <div className="space-y-0.5">
@@ -769,7 +770,15 @@ function PickGainStats({
           key={stat.key}
           className={`${
             index === 0 ? "text-sm font-semibold" : "text-[11px] font-medium"
-          } ${stat.value >= 0 ? "text-green-400" : "text-red-400"}`}
+          } ${
+            isBench
+              ? stat.value >= 0
+                ? "text-blue-400"
+                : "text-gray-400"
+              : stat.value >= 0
+                ? "text-green-400"
+                : "text-red-400"
+          }`}
         >
           {formatPickGainStat(stat)}
           <span className="text-muted font-normal"> · {stat.label}</span>
