@@ -5,6 +5,7 @@ import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
 import {
   fetchDailyOpenClose,
   hasTwelveDataKey,
+  isTwelveDataSupported,
   TWELVE_DATA_CREDITS_PER_MINUTE,
 } from "@/lib/market/twelve-data";
 
@@ -70,9 +71,23 @@ export async function fillMissingOpens(
     ...new Set(picks.map((p) => String(p.symbol).toUpperCase())),
   ];
 
+  // Equities only. A crypto ticker on the second source can resolve to a
+  // different asset with the same letters, so a coin missing its open stays
+  // missing here and is recovered by retrying CoinGecko instead.
+  const recoverable = symbols.filter(isTwelveDataSupported);
+  const skipped = symbols.filter((s) => !isTwelveDataSupported(s));
+  if (skipped.length > 0) {
+    console.warn(
+      `[dfs-backfill] ${contestType} ${skipped.join(", ")} still unpriced — crypto is not recoverable from the second source`
+    );
+  }
+  if (recoverable.length === 0) {
+    return { filled: 0, stillMissing: picks.length };
+  }
+
   // One minute's worth of the second source's free-tier budget per sweep;
   // the next lifecycle tick picks up anything left over.
-  const batch = symbols.slice(0, TWELVE_DATA_CREDITS_PER_MINUTE);
+  const batch = recoverable.slice(0, TWELVE_DATA_CREDITS_PER_MINUTE);
   const bars = await fetchDailyOpenClose(batch, contestDate);
 
   let filled = 0;

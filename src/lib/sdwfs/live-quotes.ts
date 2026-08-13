@@ -35,7 +35,8 @@ import { fetchWarmStockPrices } from "@/lib/market/warm-stock-prices";
  * anything.
  */
 export async function fetchLiveSdwfsQuotes(
-  symbols: string[]
+  symbols: string[],
+  options?: { forceCryptoRefresh?: boolean }
 ): Promise<Record<string, number>> {
   // Load the crypto pool before classifying symbols — on a cold serverless
   // instance the in-memory pool starts empty (just a 4-coin legacy list), so
@@ -54,7 +55,7 @@ export async function fetchLiveSdwfsQuotes(
           cold: [] as string[],
         }),
     cryptoSymbols.length > 0
-      ? fetchCryptoQuotes()
+      ? fetchCryptoQuotes({ forceRefresh: options?.forceCryptoRefresh })
       : Promise.resolve({} as Record<string, CryptoQuote>),
   ]);
 

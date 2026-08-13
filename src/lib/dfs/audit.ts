@@ -5,6 +5,7 @@ import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
 import {
   fetchDailyOpenClose,
   hasTwelveDataKey,
+  isTwelveDataSupported,
   TWELVE_DATA_CREDITS_PER_MINUTE,
   type DailyOpenClose,
 } from "@/lib/market/twelve-data";
@@ -434,8 +435,12 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
     const source = verified[symbol];
     const prior = rows.get(symbol);
 
-    // Backfilled values came from this same source in round 1 — re-reading
-    // them is circular, so they are recorded as single-sourced, not confirmed.
+    // A value round 1 recovered came from this same source, so agreement here
+    // proves only that the source is self-consistent — it is recorded as
+    // single-sourced rather than confirmed. It is still compared, though: an
+    // earlier version skipped the comparison entirely, which would have let a
+    // recovered price that disagrees wildly with the primary source pass
+    // unexamined. Reading it and labelling it honestly beats not looking.
     const openBackfilled = prior?.open_status === "backfilled";
     const closeBackfilled = prior?.close_status === "backfilled";
 
@@ -444,13 +449,16 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
     if (!isUsableQuote(storedOpen)) {
       openStatus = "missing";
       issues.push(`${symbol}: no stored open to verify`);
-    } else if (openBackfilled) {
-      openStatus = "unverifiable";
     } else if (!isUsableQuote(source?.open)) {
       openStatus = "unverifiable";
     } else {
       openDiff = diffPct(storedOpen, source.open);
-      openStatus = openDiff <= AUDIT_TOLERANCE_PCT ? "ok" : "divergent";
+      openStatus =
+        openDiff > AUDIT_TOLERANCE_PCT
+          ? "divergent"
+          : openBackfilled
+            ? "unverifiable"
+            : "ok";
       if (openStatus === "divergent") {
         issues.push(
           `${symbol} open: stored=${storedOpen} verified=${source.open} (${openDiff.toFixed(1)}% apart)`
@@ -463,13 +471,16 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
     if (!isUsableQuote(storedClose)) {
       closeStatus = "missing";
       issues.push(`${symbol}: no stored close to verify`);
-    } else if (closeBackfilled) {
-      closeStatus = "unverifiable";
     } else if (!isUsableQuote(source?.close)) {
       closeStatus = "unverifiable";
     } else {
       closeDiff = diffPct(storedClose, source.close);
-      closeStatus = closeDiff <= AUDIT_TOLERANCE_PCT ? "ok" : "divergent";
+      closeStatus =
+        closeDiff > AUDIT_TOLERANCE_PCT
+          ? "divergent"
+          : closeBackfilled
+            ? "unverifiable"
+            : "ok";
       if (closeStatus === "divergent") {
         issues.push(
           `${symbol} close: stored=${storedClose} verified=${source.close} (${closeDiff.toFixed(1)}% apart)`

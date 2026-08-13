@@ -5,67 +5,87 @@ import { fetchLiveSddfsQuotes } from "@/lib/sddfs/live-quotes";
 import { fetchLiveSdwfsQuotes } from "@/lib/sdwfs/live-quotes";
 import { isUsableQuote } from "@/lib/market/quote-guards";
 
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_RETRY_DELAY_MS = 1000;
+
 /**
- * Second chance at the prices a lock or close moment needs.
+ * Second, third and fourth chance at the prices a lock or close moment needs.
  *
- * Finnhub/CoinGecko own these numbers. This only re-asks them for symbols
- * that came back empty — it never second-guesses a price they did return.
+ * Finnhub/CoinGecko own these numbers. This only re-asks them for symbols that
+ * came back empty — it never second-guesses a price they did return, and never
+ * substitutes a different source or a different day.
  *
- * Crypto retries in place: its market is always open, so a miss is a
- * transient fetch failure and asking again a second later usually answers it.
+ * Retries cover stocks as well as crypto. On 2026-08-12 ANET reached the lock
+ * with no open price and then closed cleanly at 4 PM off the very same code
+ * path, which is what a one-off empty response looks like — asking again would
+ * have answered it. An earlier version of this function bailed out unless a
+ * crypto symbol was missing, so a stock in exactly that state got zero retries.
  *
- * A stock that still has no price is left unset rather than substituted. The
- * tempting fallback — yesterday's close — is wrong: it hands everyone holding
- * that symbol the overnight gap as if they'd traded it, unfair and
- * unrecoverable once baked into a baseline. Unset scores the pick neutral for
- * now, and the blank gets filled with that session's real 09:30 price by the
- * backfill sweep (see fillMissingOpens) well before anything pays out. A
- * missing open is a delay, not a hole.
+ * Crypto retries force a cache bypass. The shared CoinGecko result is cached
+ * for 45 seconds, so retries spaced a second or two apart would otherwise all
+ * read back the same cached response — including the same missing coins.
+ *
+ * A symbol still unpriced after all this is left unset rather than substituted.
+ * The tempting fallback — yesterday's close — hands everyone holding that
+ * symbol the overnight gap as if they'd traded it. Unset scores the pick
+ * neutral for now, and the backfill sweep recovers the real 09:30 price from
+ * historical bars before anything pays out.
  */
 export async function getOpeningPricesWithRetry(
   symbols: string[],
   options?: {
-    maxCryptoRetries?: number;
+    maxRetries?: number;
     retryDelayMs?: number;
     isDailyContest?: boolean;
   }
 ): Promise<Record<string, number>> {
-  const maxRetries = options?.maxCryptoRetries ?? 3;
-  const delayMs = options?.retryDelayMs ?? 1000;
+  const maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const delayMs = options?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   const isDailyContest = options?.isDailyContest !== false;
 
   const fetchFn = isDailyContest ? fetchLiveSddfsQuotes : fetchLiveSdwfsQuotes;
 
   const quotes = await fetchFn(symbols);
 
-  const missing = symbols.filter((s) => !isUsableQuote(quotes[s.toUpperCase()]));
+  const stillMissing = () =>
+    symbols.filter((s) => !isUsableQuote(quotes[s.toUpperCase()]));
+
+  let missing = stillMissing();
   if (missing.length === 0) return quotes;
 
-  console.log(
-    `[open-price-retry] ${missing.length} missing: ${missing.join(", ")}`
+  console.error(
+    `[open-price-retry] ${missing.length} of ${symbols.length} symbol(s) unpriced after first pass: ${missing.join(", ")}`
   );
 
-  const crypto = missing.filter((s) => isCryptoSymbol(s));
-  if (crypto.length === 0) return quotes;
-
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    if (attempt > 1) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
-    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
 
-    console.log(
-      `[open-price-retry] crypto retry ${attempt}/${maxRetries} for ${crypto.join(", ")}`
-    );
-    const retryQuotes = await fetchFn(crypto);
+    const needsCryptoRefresh = missing.some((s) => isCryptoSymbol(s));
+    const retryQuotes = await fetchFn(missing, {
+      forceCryptoRefresh: needsCryptoRefresh,
+    });
 
-    for (const symbol of crypto) {
+    let recovered = 0;
+    for (const symbol of missing) {
       const price = retryQuotes[symbol.toUpperCase()];
-      if (isUsableQuote(price) && !isUsableQuote(quotes[symbol.toUpperCase()])) {
+      if (isUsableQuote(price)) {
         quotes[symbol.toUpperCase()] = price;
+        recovered++;
       }
     }
 
-    if (crypto.every((s) => isUsableQuote(quotes[s.toUpperCase()]))) break;
+    missing = stillMissing();
+    console.error(
+      `[open-price-retry] attempt ${attempt}/${maxRetries}: recovered ${recovered}, ${missing.length} still missing${missing.length ? ` (${missing.join(", ")})` : ""}`
+    );
+
+    if (missing.length === 0) break;
+  }
+
+  if (missing.length > 0) {
+    console.error(
+      `[open-price-retry] GIVING UP on ${missing.join(", ")} — baselines left unset, backfill sweep will recover them`
+    );
   }
 
   return quotes;

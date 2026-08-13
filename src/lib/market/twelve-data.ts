@@ -43,13 +43,23 @@ export function hasTwelveDataKey(): boolean {
  * Twelve Data quotes crypto as a pair ("BTC/USD"); equities are the plain
  * ticker. Everything else about the request is identical.
  */
-export function toTwelveDataSymbol(symbol: string): string {
-  const upper = symbol.toUpperCase();
-  return isCryptoSymbol(upper) ? `${upper}/USD` : upper;
+/**
+ * Equities only, deliberately.
+ *
+ * Guessing a crypto pair by appending "/USD" looks harmless and is not. On
+ * 2026-08-12 our pool's RAIN (CoinGecko id `rain`, ~$0.0123) resolved on
+ * Twelve Data's RAIN/USD to a different token entirely at ~$0.0054 — the same
+ * ticker, another asset, no error. Backfilling from that would have written a
+ * baseline 2.3x off and manufactured a +127% return nobody earned. HYPE isn't
+ * carried at all (404). Crypto recovery belongs to CoinGecko, which prices
+ * both coins correctly and is the source the pool's ids are defined against.
+ */
+export function isTwelveDataSupported(symbol: string): boolean {
+  return !isCryptoSymbol(symbol.toUpperCase());
 }
 
 function fromTwelveDataSymbol(tdSymbol: string): string {
-  return tdSymbol.toUpperCase().replace(/\/USD$/, "");
+  return tdSymbol.toUpperCase();
 }
 
 function toNumber(value: unknown): number | null {
@@ -96,17 +106,16 @@ type TimeSeriesBlock = {
 };
 
 /**
- * Pulls the session's real 09:30 open and final close for one trading date.
+ * Pulls an equity's real 09:30 open and final close for one trading date.
  *
- * Equities: the 09:30 ET bar is the session open; the last bar at or before
- * 16:00 ET is the close. Crypto trades 24/7, so "the session" is defined the
- * same way the contests define it — 09:30 to 16:00 ET on the contest date —
- * which keeps a crypto pick measured over the same window as a stock pick in
- * the same lineup.
+ * The 09:30 ET bar is the session open; the last bar at or before 16:00 ET is
+ * the close. This is what makes a missing open recoverable after the fact —
+ * the true opening price is still sitting in the minute bars hours later.
  *
- * Returns one entry per requested symbol; a symbol Twelve Data can't answer
- * for comes back with nulls rather than being dropped, so callers can tell
- * "no data" apart from "not asked."
+ * Crypto symbols are refused outright (see isTwelveDataSupported). Returns one
+ * entry per requested symbol; a symbol Twelve Data can't answer for comes back
+ * with nulls rather than being dropped, so callers can tell "no data" apart
+ * from "not asked."
  */
 export async function fetchDailyOpenClose(
   symbols: readonly string[],
@@ -119,10 +128,19 @@ export async function fetchDailyOpenClose(
   }
   if (unique.length === 0 || !hasTwelveDataKey()) return result;
 
+  const supported = unique.filter(isTwelveDataSupported);
+  const refused = unique.filter((s) => !isTwelveDataSupported(s));
+  if (refused.length > 0) {
+    console.warn(
+      `[twelve-data] not asking about crypto symbol(s): ${refused.join(", ")} — ticker collisions there resolve to the wrong asset`
+    );
+  }
+  if (supported.length === 0) return result;
+
   // One request carries every symbol, but each symbol still costs its own
   // credit — callers are responsible for keeping the batch inside the
   // per-minute budget.
-  const tdSymbols = unique.map(toTwelveDataSymbol).join(",");
+  const tdSymbols = supported.join(",");
   const params = new URLSearchParams({
     symbol: tdSymbols,
     interval: "1min",

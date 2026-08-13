@@ -211,10 +211,19 @@ async function fetchAllCryptoQuotesOnce(
   }
 
   if (hasUsableQuotes(merged)) {
-    for (const symbol of Object.keys(idMap)) {
-      if (!merged[symbol]) {
-        merged[symbol] = { price: 0, changePercent: 0 };
-      }
+    // CoinGecko's bulk endpoint can answer 200 while quietly leaving coins out
+    // of the response. This used to fill those in at price 0 and report the
+    // whole batch as a successful live fetch, which is how HYPE and RAIN
+    // reached a lock with no baseline and nothing in the logs: a zero is
+    // indistinguishable from "no price" downstream, but it arrived labelled
+    // success, so nothing retried it. Leaving a missing coin absent says the
+    // same thing honestly — callers already read an absent symbol as no quote
+    // — and it leaves a trail naming exactly which coins came back short.
+    const absent = Object.keys(idMap).filter((symbol) => !merged[symbol]);
+    if (absent.length > 0) {
+      console.error(
+        `[coingecko] responded 200 but omitted ${absent.length} coin(s): ${absent.join(", ")} — leaving them unquoted rather than zero-filling`
+      );
     }
     return { ok: true, quotes: merged };
   }
@@ -284,15 +293,29 @@ async function refreshCryptoQuotesFromApi(): Promise<CryptoQuotesResult> {
   return rememberResult(resultFromFallback());
 }
 
-export async function fetchCryptoQuotesWithMeta(): Promise<CryptoQuotesResult> {
+export async function fetchCryptoQuotesWithMeta(
+  options?: { forceRefresh?: boolean }
+): Promise<CryptoQuotesResult> {
   const now = Date.now();
 
-  if (cachedLiveQuotes && now - cachedLiveQuotes.at < CRYPTO_LIVE_CACHE_TTL_MS) {
+  // `forceRefresh` exists for one narrow case: a lock or close moment that
+  // came up short and is retrying. Without it a retry inside the cache window
+  // just re-reads the same cached answer — including the same missing coins —
+  // so every attempt returns an identical result and the retry is theatre.
+  if (
+    !options?.forceRefresh &&
+    cachedLiveQuotes &&
+    now - cachedLiveQuotes.at < CRYPTO_LIVE_CACHE_TTL_MS
+  ) {
     return rememberResult({
       quotes: cachedLiveQuotes.quotes,
       source: "live",
       fetchedAt: cachedLiveQuotes.at,
     });
+  }
+
+  if (options?.forceRefresh) {
+    return refreshCryptoQuotesFromApi();
   }
 
   if (!inFlightRefresh) {
@@ -305,8 +328,10 @@ export async function fetchCryptoQuotesWithMeta(): Promise<CryptoQuotesResult> {
 }
 
 /** Never throws — throttled live fetch, then cache, then DB reference / static fallback. */
-export async function fetchCryptoQuotes(): Promise<Record<string, CryptoQuote>> {
-  const { quotes } = await fetchCryptoQuotesWithMeta();
+export async function fetchCryptoQuotes(
+  options?: { forceRefresh?: boolean }
+): Promise<Record<string, CryptoQuote>> {
+  const { quotes } = await fetchCryptoQuotesWithMeta(options);
   return quotes;
 }
 
