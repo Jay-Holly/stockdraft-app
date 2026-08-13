@@ -9,6 +9,10 @@ import {
   TWELVE_DATA_CREDITS_PER_MINUTE,
   type DailyOpenClose,
 } from "@/lib/market/twelve-data";
+import {
+  fetchCryptoSessionChecks,
+  type CryptoSessionCheck,
+} from "@/lib/market/coinpaprika";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -418,10 +422,19 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
   );
   const batch = pending.slice(0, SYMBOLS_PER_RUN);
 
-  const verified =
-    batch.length > 0
-      ? await fetchDailyOpenClose(batch, auditDate)
-      : ({} as Record<string, DailyOpenClose>);
+  // Each asset class gets checked against the source that can actually
+  // identify it: equities by ticker, coins by their stored coin id.
+  const stockBatch = batch.filter(isTwelveDataSupported);
+  const cryptoBatch = batch.filter((s) => !isTwelveDataSupported(s));
+
+  const [verified, cryptoChecks] = await Promise.all([
+    stockBatch.length > 0
+      ? fetchDailyOpenClose(stockBatch, auditDate)
+      : Promise.resolve({} as Record<string, DailyOpenClose>),
+    cryptoBatch.length > 0
+      ? fetchCryptoSessionChecks(cryptoBatch, auditDate)
+      : Promise.resolve({} as Record<string, CryptoSessionCheck>),
+  ]);
 
   const issues: string[] = [];
 
@@ -432,8 +445,23 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
     const storedClose = symbolPicks.find((p) => isUsableQuote(p.closePrice))
       ?.closePrice as number | undefined;
 
-    const source = verified[symbol];
     const prior = rows.get(symbol);
+    const crypto = cryptoChecks[symbol];
+
+    // Coins are hourly-only on the free window, so their open is bracketed by
+    // the prices either side of 09:30 rather than matched to it. Presenting
+    // that bracket as a single "verified price" would overstate what was
+    // checked, so the midpoint is only ever used for the recorded number —
+    // the pass/fail decision below uses the bracket itself.
+    const source: DailyOpenClose | undefined = crypto
+      ? {
+          symbol,
+          open: crypto.openBracket
+            ? (crypto.openBracket[0] + crypto.openBracket[1]) / 2
+            : null,
+          close: crypto.close,
+        }
+      : verified[symbol];
 
     // A value round 1 recovered came from this same source, so agreement here
     // proves only that the source is self-consistent — it is recorded as
@@ -449,6 +477,28 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
     if (!isUsableQuote(storedOpen)) {
       openStatus = "missing";
       issues.push(`${symbol}: no stored open to verify`);
+    } else if (crypto) {
+      // Bracket test: the stored open has to sit between the hour before and
+      // the hour after it, with tolerance either side. Coarser than the equity
+      // check by design — it will not notice a 2% wobble, but a wrong asset or
+      // a corrupted baseline is nowhere near this range.
+      if (!crypto.openBracket) {
+        openStatus = "unverifiable";
+      } else {
+        const [low, high] = crypto.openBracket;
+        const floor = low * (1 - AUDIT_TOLERANCE_PCT / 100);
+        const ceiling = high * (1 + AUDIT_TOLERANCE_PCT / 100);
+        const inside = storedOpen >= floor && storedOpen <= ceiling;
+        openDiff = inside
+          ? 0
+          : diffPct(storedOpen, storedOpen < floor ? low : high);
+        openStatus = inside ? (openBackfilled ? "unverifiable" : "ok") : "divergent";
+        if (!inside) {
+          issues.push(
+            `${symbol} open: stored=${storedOpen} outside the ${low}–${high} hourly bracket`
+          );
+        }
+      }
     } else if (!isUsableQuote(source?.open)) {
       openStatus = "unverifiable";
     } else {
