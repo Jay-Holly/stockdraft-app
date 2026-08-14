@@ -46,16 +46,48 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Everything that needs a current price: the draft pool, plus any symbol a
+ * roster still holds.
+ *
+ * The held set matters because the pool changes. A stock dropped from the pool
+ * while someone still owns it used to stop being refreshed entirely — its row
+ * sat in stock_prices at whatever price it had on the way out, served with
+ * full confidence forever. On 2026-08-13 that was FAC and SPCX, frozen since
+ * 08-06 across four roster positions, with nothing to indicate the number was
+ * eight days old. It costs a handful of extra symbols to close.
+ */
 async function loadDraftPoolSymbols(): Promise<string[]> {
   const supabase = createServiceClient();
-  const { data: poolRows, error: poolError } = await supabase
-    .from("draft_pool")
-    .select("symbol")
-    .order("symbol");
+  const [
+    { data: poolRows, error: poolError },
+    { data: heldRows },
+    { data: coinRows },
+  ] = await Promise.all([
+    supabase.from("draft_pool").select("symbol").order("symbol"),
+    supabase.from("draft_picks").select("symbol").gt("shares", 0),
+    supabase.from("crypto_pool").select("symbol"),
+  ]);
 
   if (poolError || !poolRows?.length) return [];
 
-  const symbols = poolRows.map((row) => row.symbol.toUpperCase());
+  // Held picks include coins, which are priced from crypto_prices on a
+  // different cadence — sending them to Finnhub would just return zeros.
+  const coins = new Set(
+    (coinRows ?? []).map((row) => String(row.symbol).toUpperCase())
+  );
+
+  const symbols = [
+    ...new Set([
+      ...poolRows.map((row) => row.symbol.toUpperCase()),
+      ...(heldRows ?? [])
+        .map((row) => String(row.symbol).toUpperCase())
+        .filter(
+          (symbol) => symbol && symbol !== "__OPEN__" && !coins.has(symbol)
+        ),
+    ]),
+  ];
+
   const { data: priceRows } = await supabase
     .from("stock_prices")
     .select("symbol, updated_at")

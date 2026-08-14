@@ -2,7 +2,6 @@ import {
   fetchCachedCryptoQuotes,
   fetchCachedStockQuotes,
 } from "@/lib/market/cached-prices";
-import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
 import { fetchCryptoPool, getCachedCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoSymbol } from "@/lib/draft/engine";
 
@@ -43,14 +42,19 @@ export async function getStockQuote(symbol: string): Promise<{
  * bundle. Nothing logged it, because as far as every layer above was concerned
  * the fetch had succeeded.
  *
- * Persisting callers must take the strict default — day-trader entry already
- * refuses to open a position on a missing price, and now that refusal can
- * actually fire. Display callers may pass `allowStaleFallback` to keep a
- * figure on screen, and should expect it to be stale.
+ * The stand-ins are gone rather than gated. The refresh cron covers all 503
+ * draft-pool symbols plus everything currently held, so a miss here does not
+ * mean "the table is behind" — it means something is broken, and a stale
+ * number would only hide it. Absent is the honest answer and stays retryable.
+ *
+ * This is the same table the DFS contests read. The difference is what each
+ * does on a miss: a DFS lock needs a to-the-second price and calls Finnhub
+ * directly for cold symbols, while a season-long league scored on weekly
+ * open-to-close is better served by a value that is stable and shared than one
+ * that is seconds fresher. Reading here costs no API calls at all.
  */
 export async function fetchStockQuotes(
-  symbols: string[],
-  options?: { allowStaleFallback?: boolean }
+  symbols: string[]
 ): Promise<Map<string, { price: number; changePercent: number }>> {
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
   const map = new Map<string, { price: number; changePercent: number }>();
@@ -58,7 +62,7 @@ export async function fetchStockQuotes(
   if (unique.length === 0) return map;
 
   const cached = await fetchCachedStockQuotes(unique);
-  const stillMissing: string[] = [];
+  const missing: string[] = [];
 
   for (const symbol of unique) {
     const quote = cached[symbol];
@@ -69,50 +73,13 @@ export async function fetchStockQuotes(
       });
       continue;
     }
-
-    if (options?.allowStaleFallback) {
-      const fallback = getFallbackStockQuote(symbol);
-      if (fallback?.price) {
-        map.set(symbol, {
-          price: fallback.price,
-          changePercent: fallback.changePercent,
-        });
-        continue;
-      }
-    }
-
-    stillMissing.push(symbol);
+    missing.push(symbol);
   }
 
-  if (stillMissing.length === 0) return map;
-
-  if (!options?.allowStaleFallback) {
-    console.warn(
-      `[stock-quotes] no live quote for ${stillMissing.join(", ")} — left unpriced rather than substituted`
+  if (missing.length > 0) {
+    console.error(
+      `[stock-quotes] not in the shared price table: ${missing.join(", ")} — left unpriced rather than substituted`
     );
-    return map;
-  }
-
-  // Display-only last resort: the price on the day the stock was drafted.
-  const { createServiceClient } = await import("@/lib/supabase/service");
-  const supabase = createServiceClient();
-  const { data } = await supabase
-    .from("draft_picks")
-    .select("symbol, price_at_pick")
-    .in("symbol", stillMissing)
-    .order("created_at", { ascending: false })
-    .limit(stillMissing.length);
-
-  const dbPrices = new Map<string, number>();
-  for (const row of data ?? []) {
-    if (!dbPrices.has(row.symbol.toUpperCase()) && row.price_at_pick) {
-      dbPrices.set(row.symbol.toUpperCase(), row.price_at_pick);
-    }
-  }
-
-  for (const symbol of stillMissing) {
-    const dbPrice = dbPrices.get(symbol);
-    if (dbPrice) map.set(symbol, { price: dbPrice, changePercent: 0 });
   }
 
   return map;
