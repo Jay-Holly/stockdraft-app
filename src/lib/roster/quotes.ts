@@ -42,16 +42,24 @@ export async function getStockQuote(symbol: string): Promise<{
  * bundle. Nothing logged it, because as far as every layer above was concerned
  * the fetch had succeeded.
  *
- * The stand-ins are gone rather than gated. The refresh cron covers all 503
- * draft-pool symbols plus everything currently held, so a miss here does not
- * mean "the table is behind" — it means something is broken, and a stale
- * number would only hide it. Absent is the honest answer and stays retryable.
+ * What replaced them is a fallback that returns a *real* price rather than a
+ * remembered one: anything the table cannot answer for is fetched live from
+ * Finnhub and written straight back into the table. So the gap closes for
+ * everyone who asks next, and the cost is one call the first time a symbol is
+ * missing rather than one call per reader.
  *
- * This is the same table the DFS contests read. The difference is what each
- * does on a miss: a DFS lock needs a to-the-second price and calls Finnhub
- * directly for cold symbols, while a season-long league scored on weekly
- * open-to-close is better served by a value that is stable and shared than one
- * that is seconds fresher. Reading here costs no API calls at all.
+ * That distinction is the whole point. A fallback is not the problem — going
+ * without a price is its own kind of failure, and no league should break
+ * because one symbol is late. The problem was only ever *what* the fallback
+ * returned: a frozen snapshot is indistinguishable from a live quote
+ * downstream, so it turned an outage into a wrong number that nothing could
+ * detect. A live fetch has no such flaw, and if it fails too then the symbol
+ * really is unavailable and saying so is the only honest option left.
+ *
+ * This is the same table the DFS contests read, so ordinary traffic costs no
+ * API calls at all. With the refresh cron covering the pool plus everything
+ * held, the live path should almost never fire — which is exactly why it is
+ * affordable to have it there for when it does.
  */
 export async function fetchStockQuotes(
   symbols: string[]
@@ -76,13 +84,103 @@ export async function fetchStockQuotes(
     missing.push(symbol);
   }
 
-  if (missing.length > 0) {
+  if (missing.length === 0) return map;
+
+  const recovered = await backfillMissingStockQuotes(missing);
+  for (const [symbol, quote] of Object.entries(recovered)) {
+    map.set(symbol, quote);
+  }
+
+  const unresolved = missing.filter((symbol) => !map.has(symbol));
+  if (unresolved.length > 0) {
     console.error(
-      `[stock-quotes] not in the shared price table: ${missing.join(", ")} — left unpriced rather than substituted`
+      `[stock-quotes] ${unresolved.join(", ")} missing from the price table and unquotable live — genuinely unavailable`
     );
   }
 
   return map;
+}
+
+/**
+ * Fetches symbols the shared table is missing and puts them back into it.
+ *
+ * Writing back is what keeps this cheap: the first reader to notice a gap
+ * repairs it, so the second reader is served from the table like any other
+ * symbol. Without it, a symbol the refresh cron has lost would cost a Finnhub
+ * call on every roster view for as long as it stayed lost.
+ *
+ * Capped per call. If a large number of symbols are missing at once the cause
+ * is the refresh cron, not these symbols, and firing hundreds of quote
+ * requests from a page render would turn one broken cron into a rate-limit
+ * outage across every product sharing the key.
+ */
+const MAX_LIVE_BACKFILL_SYMBOLS = 12;
+
+async function backfillMissingStockQuotes(
+  symbols: string[]
+): Promise<Record<string, { price: number; changePercent: number }>> {
+  const batch = symbols.slice(0, MAX_LIVE_BACKFILL_SYMBOLS);
+  const out: Record<string, { price: number; changePercent: number }> = {};
+
+  try {
+    const { fetchFinnhubQuotes } = await import("@/lib/finnhub/service");
+    const quotes = await fetchFinnhubQuotes(batch, { cache: "no-store" });
+
+    const rows: Array<{
+      symbol: string;
+      price: number;
+      change_percent: number;
+      updated_at: string;
+    }> = [];
+    const now = new Date().toISOString();
+
+    for (const symbol of batch) {
+      const quote = quotes[symbol];
+      const price = Number(quote?.price ?? 0);
+      if (!(price > 0)) continue;
+
+      const changePercent = Number(quote?.changePercent ?? 0);
+      out[symbol] = { price, changePercent };
+      rows.push({
+        symbol,
+        price,
+        change_percent: changePercent,
+        updated_at: now,
+      });
+    }
+
+    if (rows.length > 0) {
+      const { createServiceClient } = await import("@/lib/supabase/service");
+      const { error } = await createServiceClient()
+        .from("stock_prices")
+        .upsert(rows, { onConflict: "symbol" });
+
+      if (error) {
+        // The price is still good even if we could not cache it; the next
+        // reader just pays for another fetch.
+        console.warn(
+          `[stock-quotes] recovered ${rows.length} price(s) but could not write them back: ${error.message}`
+        );
+      } else {
+        console.warn(
+          `[stock-quotes] filled ${rows.map((r) => r.symbol).join(", ")} from Finnhub and repaired the shared table`
+        );
+      }
+    }
+
+    if (symbols.length > batch.length) {
+      console.error(
+        `[stock-quotes] ${symbols.length} symbols missing from the price table — only recovered ${batch.length}; the refresh cron is likely not running`
+      );
+    }
+  } catch (err) {
+    console.error(
+      "[stock-quotes] live recovery failed:",
+      err instanceof Error ? err.message : err
+    );
+  }
+
+  return out;
 }
 
 function referenceCryptoQuotes(): Record<
@@ -114,23 +212,22 @@ function referenceCryptoQuotes(): Record<
  * gets persisted as a weekly baseline. The week then scores against a
  * months-old price with nothing anywhere to show it happened.
  *
- * Callers that merely display a number may pass `allowReferenceFallback` to
- * get the old behaviour, because a stale figure on screen is recoverable and
- * an empty slot looks broken. Anything that persists must not: leaving the
- * symbol absent is what lets the caller skip it.
+ * A coin the table is missing is fetched live from CoinGecko instead — a real
+ * current price rather than a remembered one. The reference price stays as the
+ * very last resort, used only when the live read fails too, and it says so in
+ * the log so a stale figure on screen can be recognised for what it is. That
+ * ordering is the point: a fallback that returns a real number costs nothing
+ * in trust, while one that returns a remembered number is indistinguishable
+ * from a live quote and quietly becomes a baseline.
  */
-export async function getCryptoQuotesMap(
-  options?: { allowReferenceFallback?: boolean }
-): Promise<Record<string, { price: number; changePercent: number }>> {
+export async function getCryptoQuotesMap(): Promise<
+  Record<string, { price: number; changePercent: number }>
+> {
   await fetchCryptoPool();
   const symbols = getCachedCryptoPool().map((coin) => coin.symbol);
   const cached = await fetchCachedCryptoQuotes(symbols);
   const quotes: Record<string, { price: number; changePercent: number }> = {};
-  const unpriced: string[] = [];
-
-  const references = options?.allowReferenceFallback
-    ? referenceCryptoQuotes()
-    : null;
+  const missing: string[] = [];
 
   for (const symbol of symbols) {
     const quote = cached[symbol];
@@ -141,20 +238,57 @@ export async function getCryptoQuotesMap(
       };
       continue;
     }
-
-    const ref = references?.[symbol];
-    if (ref) {
-      quotes[symbol] = ref;
-      continue;
-    }
-    unpriced.push(symbol);
+    missing.push(symbol);
   }
 
-  if (unpriced.length > 0) {
-    console.warn(
-      `[crypto-quotes] no live quote for ${unpriced.join(", ")} — left unpriced${
-        options?.allowReferenceFallback ? " (no reference price either)" : ""
-      }`
+  if (missing.length === 0) return quotes;
+
+  try {
+    const { fetchCryptoQuotes } = await import("@/lib/coingecko/service");
+    const live = await fetchCryptoQuotes();
+    for (const symbol of missing) {
+      const price = Number(live[symbol]?.price ?? 0);
+      if (price > 0) {
+        quotes[symbol] = {
+          price,
+          changePercent: Number(live[symbol]?.changePercent ?? 0),
+        };
+      }
+    }
+  } catch (err) {
+    console.error(
+      "[crypto-quotes] live recovery failed:",
+      err instanceof Error ? err.message : err
+    );
+  }
+
+  const stillMissing = missing.filter((symbol) => !quotes[symbol]);
+  if (stillMissing.length === 0) return quotes;
+
+  // Last resort. A pool reference price is months old by definition, so it is
+  // only ever better than nothing — never better than a real quote.
+  const references = referenceCryptoQuotes();
+  const usedReference: string[] = [];
+  const unavailable: string[] = [];
+
+  for (const symbol of stillMissing) {
+    const ref = references[symbol];
+    if (ref) {
+      quotes[symbol] = ref;
+      usedReference.push(symbol);
+    } else {
+      unavailable.push(symbol);
+    }
+  }
+
+  if (usedReference.length > 0) {
+    console.error(
+      `[crypto-quotes] ${usedReference.join(", ")} fell back to the pool reference price — STALE, both the table and CoinGecko failed`
+    );
+  }
+  if (unavailable.length > 0) {
+    console.error(
+      `[crypto-quotes] ${unavailable.join(", ")} genuinely unavailable — no table row, no live quote, no reference`
     );
   }
 

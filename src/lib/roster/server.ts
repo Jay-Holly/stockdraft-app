@@ -177,7 +177,7 @@ async function enrichPicks(picks: DraftPick[]): Promise<RosterPickView[]> {
   const [stockQuotes, cryptoQuotes, companyNames] = await Promise.all([
     fetchStockQuotes(stockSymbols),
     needsCrypto
-      ? getCryptoQuotesMap({ allowReferenceFallback: true })
+      ? getCryptoQuotesMap()
       : Promise.resolve({} as Record<string, CryptoQuote>),
     fetchFinnhubCompanyProfiles(stockSymbols),
   ]);
@@ -351,10 +351,7 @@ export async function loadRosterView(
 
   const enriched = await enrichPicks(livePicks);
   const buyerCounts = await fetchBuyerCounts(supabase, leagueId);
-  // Display only.
-  const cryptoQuoteMap = await getCryptoQuotesMap({
-    allowReferenceFallback: true,
-  });
+  const cryptoQuoteMap = await getCryptoQuotesMap();
   const cryptoQuotes: Record<string, { price: number; changePercent: number }> =
     {};
   for (const symbol of Object.keys(cryptoQuoteMap)) {
@@ -806,10 +803,7 @@ export async function loadFreeAgentsPageData(
   freeAgents.sort((a, b) => a.symbol.localeCompare(b.symbol));
 
   const cryptoPool = await fetchCryptoPool();
-  // Free-agent browse list — display only.
-  const cryptoQuotes = await getCryptoQuotesMap({
-    allowReferenceFallback: true,
-  });
+  const cryptoQuotes = await getCryptoQuotesMap();
   const cryptoFreeAgents: FreeAgentCrypto[] = cryptoPool.map((coin) => ({
     symbol: coin.symbol,
     name: coin.name,
