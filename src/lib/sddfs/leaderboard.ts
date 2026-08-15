@@ -4,6 +4,7 @@ import { fetchLiveSddfsQuotes } from "@/lib/sddfs/live-quotes";
 import { computeSddfsPayouts } from "@/lib/sddfs/scoring";
 import { createClient } from "@/lib/supabase/server";
 import { safePctChange } from "@/lib/market/quote-guards";
+import { prizePoolFromEntries } from "@/lib/contest-fee";
 
 export type SddfsLeaderboardPick = {
   sector: string;
@@ -105,7 +106,7 @@ export async function getSddfsContestLeaderboard(
   }
 
   const usernames = await loadUsernames(entries.map((e) => e.user_id));
-  const prizePool = Math.round(contest.buy_in * entries.length * 0.92 * 100) / 100;
+  const prizePool = prizePoolFromEntries(contest.buy_in, entries.length);
 
   if (contest.status === "scored") {
     const rows: SddfsLeaderboardRow[] = entries

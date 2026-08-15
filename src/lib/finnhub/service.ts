@@ -3,6 +3,8 @@ type TradeHandler = (symbol: string, price: number) => void;
 type FinnhubQuoteResponse = {
   c: number;
   pc: number;
+  /** Unix seconds of the last trade — the tell for a symbol that no longer trades. */
+  t?: number;
 };
 
 type FinnhubTradeMessage = {
@@ -193,6 +195,55 @@ export async function fetchFinnhubQuote(symbol: string): Promise<FinnhubQuote | 
   return quotes[symbol.toUpperCase()] ?? null;
 }
 
+/** Beyond a long weekend plus a holiday, a quote is not "today's" by any reading. */
+const MAX_QUOTE_AGE_MS = 5 * 24 * 60 * 60 * 1000;
+
+/**
+ * Catches a symbol Finnhub still answers for but no longer actually trades.
+ *
+ * When a company re-tickers, the old symbol does not start erroring — it keeps
+ * returning a full, plausible quote whose numbers simply stop moving. On
+ * 2026-08-13 EchoStar traded as ECHO while SATS, its former ticker, still
+ * returned a price: identical open and close all session, so a DFS pick on it
+ * scored +0.00% while the stock actually fell 0.89%. Nothing upstream could
+ * tell, because every field looked right.
+ *
+ * The tell is Finnhub's own trade timestamp. A live US equity stamps the last
+ * trade — 20:00 UTC at the close, intraday while open. A dead symbol stamps
+ * midnight UTC, which is not a time any US equity trades, so it is a
+ * date-only placeholder rather than a real print.
+ *
+ * Refusing the quote is the point: the symbol goes unpriced, which is loud,
+ * instead of being scored flat, which is silent. Fixing it properly means
+ * re-mapping the ticker in the pool, and that needs a person.
+ */
+function isDeadTickerQuote(symbol: string, tradeTime: number | undefined): boolean {
+  if (!tradeTime || !Number.isFinite(tradeTime)) return false;
+
+  const stampedAt = new Date(tradeTime * 1000);
+  const isMidnightUtc =
+    stampedAt.getUTCHours() === 0 &&
+    stampedAt.getUTCMinutes() === 0 &&
+    stampedAt.getUTCSeconds() === 0;
+
+  if (isMidnightUtc) {
+    console.error(
+      `[finnhub] ${symbol} quote is stamped midnight UTC (${stampedAt.toISOString()}) — no US equity trades then. Treating it as a dead ticker: the symbol has almost certainly been renamed and needs re-mapping in the pool.`
+    );
+    return true;
+  }
+
+  const age = Date.now() - stampedAt.getTime();
+  if (age > MAX_QUOTE_AGE_MS) {
+    console.error(
+      `[finnhub] ${symbol} last traded ${stampedAt.toISOString()}, ${Math.round(age / 86_400_000)} days ago — refusing a quote this stale rather than scoring against it.`
+    );
+    return true;
+  }
+
+  return false;
+}
+
 export async function fetchFinnhubQuotes(
   symbols: readonly string[],
   options?: { cache?: RequestCache }
@@ -249,6 +300,12 @@ export async function fetchFinnhubQuotes(
           if (price <= 0) {
             await sleep(200);
             continue;
+          }
+
+          if (isDeadTickerQuote(symbol, data.t)) {
+            // Dropped rather than retried: asking again returns the same
+            // frozen number, and the symbol needs a human to re-map it.
+            break;
           }
 
           const quote = {

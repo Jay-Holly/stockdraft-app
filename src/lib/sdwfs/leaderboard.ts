@@ -4,6 +4,7 @@ import { fetchLiveSdwfsQuotes } from "@/lib/sdwfs/live-quotes";
 import { computeSdwfsPayouts } from "@/lib/sdwfs/scoring";
 import { createClient } from "@/lib/supabase/server";
 import { safePctChange } from "@/lib/market/quote-guards";
+import { prizePoolFromEntries } from "@/lib/contest-fee";
 
 export type SdwfsLeaderboardPick = {
   sector: string;
@@ -105,7 +106,7 @@ export async function getSdwfsContestLeaderboard(
   }
 
   const usernames = await loadUsernames(entries.map((e) => e.user_id));
-  const prizePool = Math.round(contest.buy_in * entries.length * 0.92 * 100) / 100;
+  const prizePool = prizePoolFromEntries(contest.buy_in, entries.length);
 
   if (contest.status === "scored") {
     const rows: SdwfsLeaderboardRow[] = entries

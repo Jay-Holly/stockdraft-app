@@ -7,6 +7,7 @@ import {
   type EasternParts,
 } from "@/lib/season/eastern-time";
 import { createServiceClient } from "@/lib/supabase/service";
+import { prizePoolFromEntries } from "@/lib/contest-fee";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -200,5 +201,5 @@ export function formatDfsContestDateLabel(contestDateIso: string): string {
 }
 
 export function prizePoolForContest(contest: DfsContest): number {
-  return Math.round(contest.buyIn * contest.entrants * 0.92 * 100) / 100;
+  return prizePoolFromEntries(contest.buyIn, contest.entrants);
 }

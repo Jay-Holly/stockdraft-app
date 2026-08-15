@@ -366,10 +366,11 @@ export default function GameRulesPage() {
           Google LLC.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Platform Fee: StockDraft keeps 8% of each contest&apos;s prize
-          pool to cover operating costs — servers, market data, and payment
-          processing. That 8% is the only portion of any contest that is
-          ever forwarded to a StockDraft account.
+          Platform Fee: StockDraft keeps 10% of each contest&apos;s prize
+          pool. Roughly 8% of that covers operating costs — servers, market
+          data, and payment processing. Any surplus left after those costs is
+          donated to the American Humane Society. That 10% is the only portion
+          of any contest that is ever forwarded to a StockDraft account.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
           Your Funds: All other funds deposited by users are held in

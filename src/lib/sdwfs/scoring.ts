@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServiceClient } from "@/lib/supabase/service";
+import { prizePoolFromEntries } from "@/lib/contest-fee";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -127,7 +128,7 @@ export async function finalizeSdwfsContest(
     scoreByEntry.set(pick.entry_id, current + (pick.pct_change ?? 0));
   }
 
-  const prizePool = Math.round(contest.buy_in * entries.length * 0.92 * 100) / 100;
+  const prizePool = prizePoolFromEntries(contest.buy_in, entries.length);
 
   const payouts = computeSdwfsPayouts(
     entries.map((e) => ({

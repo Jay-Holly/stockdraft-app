@@ -9,6 +9,7 @@ import {
 } from "@/lib/season/eastern-time";
 import { DFS_TIERS } from "@/lib/dfs/contests";
 import { createServiceClient } from "@/lib/supabase/service";
+import { prizePoolFromEntries } from "@/lib/contest-fee";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -235,5 +236,5 @@ export function formatWfsContestWeekLabel(weekStartDateIso: string): string {
 }
 
 export function prizePoolForContest(contest: WfsContest): number {
-  return Math.round(contest.buyIn * contest.entrants * 0.92 * 100) / 100;
+  return prizePoolFromEntries(contest.buyIn, contest.entrants);
 }
