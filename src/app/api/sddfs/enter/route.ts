@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { checkRealMoneyEntryGate } from "@/lib/identity/require-gate";
 import { recordWalletTransaction } from "@/lib/wallet/ledger";
+import { validateDfsPicks } from "@/lib/dfs/validate-picks";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,11 @@ export async function POST(request: Request) {
         { error: "Lineup must have exactly 12 picks." },
         { status: 400 }
       );
+    }
+
+    const pickValidationError = await validateDfsPicks(supabase, picks);
+    if (pickValidationError) {
+      return NextResponse.json({ error: pickValidationError }, { status: 400 });
     }
 
     const { data: contest, error: contestError } = await supabase
