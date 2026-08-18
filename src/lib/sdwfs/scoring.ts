@@ -121,17 +121,33 @@ export async function finalizeSdwfsContest(
     throw new Error(`Failed to load picks: ${picksError.message}`);
   }
 
+  const pickCountByEntry = new Map<string, number>();
   const scoreByEntry = new Map<string, number>();
-  for (const entry of entries) scoreByEntry.set(entry.id, 0);
+  for (const entry of entries) {
+    pickCountByEntry.set(entry.id, 0);
+    scoreByEntry.set(entry.id, 0);
+  }
   for (const pick of picks ?? []) {
+    pickCountByEntry.set(pick.entry_id, (pickCountByEntry.get(pick.entry_id) ?? 0) + 1);
     const current = scoreByEntry.get(pick.entry_id) ?? 0;
     scoreByEntry.set(pick.entry_id, current + (pick.pct_change ?? 0));
   }
 
-  const prizePool = prizePoolFromEntries(contest.buy_in, entries.length);
+  // An entry with fewer than 12 picks never paid its fee and never had a real
+  // lineup — see the matching comment in sddfs/scoring.ts. Excluded entirely
+  // from ranking, payout, and the prize pool's entrant count.
+  const validEntries = entries.filter((e) => pickCountByEntry.get(e.id) === 12);
+  const invalidEntries = entries.filter((e) => pickCountByEntry.get(e.id) !== 12);
+  if (invalidEntries.length > 0) {
+    console.error(
+      `[sdwfs-scoring] contest ${contestId}: excluding ${invalidEntries.length} entry(ies) with an incomplete lineup from ranking: ${invalidEntries.map((e) => e.id).join(", ")}`
+    );
+  }
+
+  const prizePool = prizePoolFromEntries(contest.buy_in, validEntries.length);
 
   const payouts = computeSdwfsPayouts(
-    entries.map((e) => ({
+    validEntries.map((e) => ({
       entryId: e.id,
       totalScore: scoreByEntry.get(e.id) ?? 0,
     })),

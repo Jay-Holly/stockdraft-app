@@ -121,17 +121,38 @@ export async function finalizeSddfsContest(
     throw new Error(`Failed to load picks: ${picksError.message}`);
   }
 
+  const pickCountByEntry = new Map<string, number>();
   const scoreByEntry = new Map<string, number>();
-  for (const entry of entries) scoreByEntry.set(entry.id, 0);
+  for (const entry of entries) {
+    pickCountByEntry.set(entry.id, 0);
+    scoreByEntry.set(entry.id, 0);
+  }
   for (const pick of picks ?? []) {
+    pickCountByEntry.set(pick.entry_id, (pickCountByEntry.get(pick.entry_id) ?? 0) + 1);
     const current = scoreByEntry.get(pick.entry_id) ?? 0;
     scoreByEntry.set(pick.entry_id, current + (pick.pct_change ?? 0));
   }
 
-  const prizePool = prizePoolFromEntries(contest.buy_in, entries.length);
+  // An entry with fewer than 12 picks never paid its fee and never had a real
+  // lineup — the atomic RPC (migration 088) makes this impossible for new
+  // entries, but this stays as a second line of defense. Seeding every entry
+  // to a score of 0 and only crediting the ones with picks used to mean an
+  // empty entry sat at a flat 0%, which beat every real entry on a red day and
+  // won it real money. Excluded here entirely: no rank, no payout, and the
+  // prize pool itself is sized off paying entrants only, so a phantom entry
+  // can no longer inflate the pool it never contributed to.
+  const validEntries = entries.filter((e) => pickCountByEntry.get(e.id) === 12);
+  const invalidEntries = entries.filter((e) => pickCountByEntry.get(e.id) !== 12);
+  if (invalidEntries.length > 0) {
+    console.error(
+      `[sddfs-scoring] contest ${contestId}: excluding ${invalidEntries.length} entry(ies) with an incomplete lineup from ranking: ${invalidEntries.map((e) => e.id).join(", ")}`
+    );
+  }
+
+  const prizePool = prizePoolFromEntries(contest.buy_in, validEntries.length);
 
   const payouts = computeSddfsPayouts(
-    entries.map((e) => ({
+    validEntries.map((e) => ({
       entryId: e.id,
       totalScore: scoreByEntry.get(e.id) ?? 0,
     })),

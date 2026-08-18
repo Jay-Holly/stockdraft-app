@@ -1,8 +1,25 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { checkRealMoneyEntryGate } from "@/lib/identity/require-gate";
-import { recordWalletTransaction } from "@/lib/wallet/ledger";
 import { validateDfsPicks } from "@/lib/dfs/validate-picks";
+
+/**
+ * Maps a Postgres exception raised inside enter_sddfs_contest to the
+ * user-facing message the old three-step version returned for the same
+ * condition. The RPC is the single source of truth on whether the entry
+ * happened; this only translates its error into English.
+ */
+function messageForEntryError(error: { message?: string; code?: string } | null): string {
+  const msg = error?.message ?? "";
+  if (msg.includes("contest_full")) return "This contest is full.";
+  if (msg.includes("contest_locked")) return "This contest is locked.";
+  if (msg.includes("contest_not_found")) return "Contest not found.";
+  if (msg.includes("insufficient_balance")) {
+    return "Insufficient wallet balance for this entry fee.";
+  }
+  if (error?.code === "23505") return "You've already entered this contest.";
+  return "Could not enter contest.";
+}
 
 export const dynamic = "force-dynamic";
 
@@ -45,106 +62,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: pickValidationError }, { status: 400 });
     }
 
-    const { data: contest, error: contestError } = await supabase
-      .from("sddfs_contests")
-      .select("id, status, buy_in, max_entrants")
-      .eq("id", contestId)
-      .maybeSingle();
-
-    if (contestError || !contest) {
-      return NextResponse.json(
-        { error: "Contest not found." },
-        { status: 404 }
-      );
-    }
-    if (contest.status !== "open") {
-      return NextResponse.json(
-        { error: "This contest is locked." },
-        { status: 400 }
-      );
-    }
-
-    if (contest.max_entrants && contest.max_entrants > 0) {
-      const { count, error: countError } = await supabase
-        .from("sddfs_entries")
-        .select("*", { count: "exact", head: true })
-        .eq("contest_id", contestId);
-
-      if (!countError && count !== null && count >= contest.max_entrants) {
-        return NextResponse.json(
-          { error: "This contest is full." },
-          { status: 400 }
-        );
-      }
-    }
-
-    const buyIn = Number(contest.buy_in);
-
-    const { data: entry, error: entryError } = await supabase
-      .from("sddfs_entries")
-      .insert({ contest_id: contestId, user_id: user.id })
-      .select("id")
-      .single();
-
-    if (entryError || !entry) {
-      // The count check above is the fast path; a DB trigger holds the real
-      // line, so a contest that filled up between that check and this insert
-      // is refused here rather than overselling.
-      const message = entryError?.message?.includes("contest_full")
-        ? "This contest is full."
-        : entryError?.code === "23505"
-          ? "You've already entered this contest."
-          : "Could not create entry.";
-
-      return NextResponse.json({ error: message }, { status: 400 });
-    }
-
-    if (buyIn > 0) {
-      const { error: chargeError } = await supabase.rpc("charge_entry_fee", {
+    // enter_sddfs_contest (migration 088) does the entry, the fee charge and
+    // the 12-pick insert as one database transaction. Three separate writes
+    // used to run here with app-level cleanup if a later step failed — but
+    // that cleanup only runs if the same request survives long enough to
+    // reach it. A request that dies in between (timeout, dropped connection)
+    // left an entry charged nothing and holding no picks, which then went on
+    // to be scored and paid out as if it were real. The RPC makes that
+    // impossible: every write commits together or none of them do.
+    const { data: entryId, error: entryError } = await supabase.rpc(
+      "enter_sddfs_contest",
+      {
+        p_contest_id: contestId,
         p_user_id: user.id,
-        p_amount: buyIn,
-        p_description: "SDDFS entry fee",
-      });
-
-      if (chargeError) {
-        await supabase.from("sddfs_entries").delete().eq("id", entry.id);
-        return NextResponse.json(
-          {
-            error:
-              chargeError.message?.includes("insufficient_balance")
-                ? "Insufficient wallet balance for this entry fee."
-                : "Could not charge entry fee.",
-          },
-          { status: 400 }
-        );
+        p_picks: picks,
       }
-    }
-
-    const { error: picksError } = await supabase.from("sddfs_entry_picks").insert(
-      picks.map((pick) => ({
-        entry_id: entry.id,
-        sector: pick.sector,
-        symbol: pick.symbol,
-      }))
     );
 
-    if (picksError) {
-      await supabase.from("sddfs_entries").delete().eq("id", entry.id);
-      if (buyIn > 0) {
-        await recordWalletTransaction({
-          userId: user.id,
-          type: "refund",
-          amount: buyIn,
-          description: "SDDFS entry failed - lineup save error",
-        });
-      }
+    if (entryError || !entryId) {
       return NextResponse.json(
-        { error: "Could not save your lineup." },
+        { error: messageForEntryError(entryError) },
         { status: 400 }
       );
     }
 
-    return NextResponse.json({ entryId: entry.id });
+    return NextResponse.json({ entryId });
   } catch (error) {
     console.error("SDDFS enter error:", error);
     return NextResponse.json(
