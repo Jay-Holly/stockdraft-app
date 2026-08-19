@@ -24,7 +24,7 @@ export function PageWatermark({
         />
       ) : (
         <span className="text-[26vw] font-black tracking-tight leading-none opacity-[0.03] select-none whitespace-nowrap">
-          StockDraft
+          StockDuel
         </span>
       )}
     </div>

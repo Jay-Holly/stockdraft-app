@@ -66,7 +66,7 @@ function DayTraderRulesCard() {
       </div>
       <div>
         <h2 className="text-sm font-semibold text-white">
-          How this differs from StockDraft Free Sim and Player Leagues
+          How this differs from StockDuel Free Sim and Player Leagues
         </h2>
         <p className="text-sm text-muted mt-2">
           No draft, no waiver wire, no season-long roster — it&apos;s active
@@ -119,13 +119,13 @@ export default async function DayTraderPage() {
           <div className="text-center mb-8">
             <Image
               src="/images/day-trader-logo.png"
-              alt="StockDraft Day Trader"
+              alt="StockDuel Day Trader"
               width={320}
               height={320}
               className="mx-auto"
               priority
             />
-            <h1 className="text-xl font-bold mt-4">StockDraft Day Trader</h1>
+            <h1 className="text-xl font-bold mt-4">StockDuel Day Trader</h1>
             <p className="text-muted text-sm mt-2">
               Weekly contest: copy your 10 starters, trade Mon–Fri, compete on $
               and % gain.
@@ -185,14 +185,14 @@ export default async function DayTraderPage() {
         <div className="text-center">
           <Image
             src="/images/day-trader-logo.png"
-            alt="StockDraft Day Trader"
+            alt="StockDuel Day Trader"
             width={320}
             height={320}
             className="mx-auto"
             priority
           />
           <h1 className="text-xl font-bold mt-4">
-            {contest?.contest_name ?? "StockDraft Day Trader"}
+            {contest?.contest_name ?? "StockDuel Day Trader"}
           </h1>
           {contest ? (
             <p className="text-muted text-sm mt-2">

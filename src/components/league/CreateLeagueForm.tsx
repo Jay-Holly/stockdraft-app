@@ -620,7 +620,7 @@ export function CreateLeagueForm({
           Sports League draft order will follow each format&apos;s prior-season
           standings (NFL, NHL, NBA, MLB) — refreshed automatically the day after each
           championship. Until then, pick order is assigned with a random shuffle at draft
-          start. Only StockDraft franchise identities appear in the app.
+          start. Only StockDuel franchise identities appear in the app.
         </p>
       )}
 

@@ -129,7 +129,7 @@ export default function GameRulesPage() {
 
       <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
         <p className="text-sm font-bold uppercase tracking-widest text-gold">
-          StockDraft — Rules Reference
+          StockDuel — Rules Reference
         </p>
         <h1 className="text-2xl font-bold text-white mt-1 mb-1">How to Play</h1>
         <p className="text-muted text-sm mb-6 italic">
@@ -202,7 +202,7 @@ export default function GameRulesPage() {
           And always bear in mind. Is a league based on making the most
           dollars to win, or is it based on having the highest percentage
           gain to win. A $5 stock or crypto can out gain a $1000 stock
-          percentage wise with ease. That&apos;s what makes StockDraft so
+          percentage wise with ease. That&apos;s what makes StockDuel so
           fun!
         </p>
 
@@ -360,22 +360,22 @@ export default function GameRulesPage() {
           prohibited by law.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          No purchase necessary to enter or win. StockDraft is the sole
+          No purchase necessary to enter or win. StockDuel is the sole
           sponsor of the Day Trader contest and any associated prizes — not
           affiliated with, endorsed by, or administered by Apple Inc. or
           Google LLC.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          Platform Fee: StockDraft keeps 10% of each contest&apos;s prize
+          Platform Fee: StockDuel keeps 10% of each contest&apos;s prize
           pool. Roughly 8% of that covers operating costs — servers, market
           data, and payment processing. Any surplus left after those costs is
           donated to the American Humane Society. That 10% is the only portion
-          of any contest that is ever forwarded to a StockDraft account.
+          of any contest that is ever forwarded to a StockDuel account.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
           Your Funds: All other funds deposited by users are held in
           third-party escrow — safely, and never managed or held directly
-          by StockDraft.
+          by StockDuel.
         </p>
 
         <p className="text-center mt-8">

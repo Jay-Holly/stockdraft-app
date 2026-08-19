@@ -38,25 +38,25 @@ export function SdplRulesContent() {
   return (
     <>
       <p className="font-bold text-lg" style={{ color: "#E8BE4A" }}>
-        SDPL4 / SDPL6 / SDPL8 / SDPL10 / SDPL12 — StockDraft Player
+        SDPL4 / SDPL6 / SDPL8 / SDPL10 / SDPL12 — StockDuel Player
         Leagues
       </p>
 
       <RuleSection title="The Concept">
         <p>
-          StockDraft is fantasy sports for the stock market. You draft real
+          StockDuel is fantasy sports for the stock market. You draft real
           stocks and crypto like players, compete head-to-head against other
           managers every week, and win based on how your portfolio actually
           performs — not predictions, not trivia.
         </p>
         <p>
-          Every StockDraft season runs 13 weeks — 11 weeks of regular season
+          Every StockDuel season runs 13 weeks — 11 weeks of regular season
           play plus a 2-week playoff — mirroring the same 13-week financial
           quarters the real market runs on.
         </p>
         <p>
           Here&rsquo;s what fantasy sports usually throws at you — and what
-          StockDraft strips out:
+          StockDuel strips out:
         </p>
         <ul className="list-disc list-outside ml-5 space-y-1.5">
           <li>
@@ -176,7 +176,7 @@ export function SdplRulesContent() {
 
       <RuleSection title="League Format">
         <p>
-          StockDraft Player Leagues (SDPL) come in five official sizes. The
+          StockDuel Player Leagues (SDPL) come in five official sizes. The
           rules are identical across all sizes — only the number of managers
           differs. (Looking for the free, all-AI practice format? See SDAI
           — it runs on its own accelerated schedule.)
@@ -255,7 +255,7 @@ export function SdplRulesContent() {
 
       <RuleSection title="Who Can Play">
         <p>
-          StockDraft is open to all ages. Whether you&rsquo;re 14 or 114, if you
+          StockDuel is open to all ages. Whether you&rsquo;re 14 or 114, if you
           want to learn how the market works while competing against
           friends, you&rsquo;re in.
         </p>
@@ -269,17 +269,17 @@ export function SdaiRulesContent() {
   return (
     <>
       <p className="font-bold text-lg" style={{ color: "#E8BE4A" }}>
-        SDAI — StockDraft Free AI Leagues
+        SDAI — StockDuel Free AI Leagues
       </p>
 
       <RuleSection title="The Concept">
         <p>
           SDAI is the practice format — a free 4-team league against AI
-          managers, built to get you familiar with how StockDraft works fast.
+          managers, built to get you familiar with how StockDuel works fast.
           You don&rsquo;t need a full 13-week season to learn the platform, so
           SDAI compresses the same 13-week structure into 13 business days —
           only days the stock market is open. One business day in SDAI equals
-          one full week everywhere else in StockDraft: a draft, a matchup, a
+          one full week everywhere else in StockDuel: a draft, a matchup, a
           scoring lock, and a free agency window, all in a single trading
           day.
         </p>
@@ -431,7 +431,7 @@ export function SdaiRulesContent() {
 
       <RuleSection title="Who Can Play">
         <p>
-          StockDraft is open to all ages. Whether you&rsquo;re 14 or 114, if you
+          StockDuel is open to all ages. Whether you&rsquo;re 14 or 114, if you
           want to learn how the market works while competing against
           friends, you&rsquo;re in.
         </p>
@@ -456,7 +456,7 @@ export function SdflRulesContent() {
 
       <RuleSection title="The Concept">
         <p>
-          SDFL runs on the same core StockDraft engine as the Player Leagues
+          SDFL runs on the same core StockDuel engine as the Player Leagues
           (SDPL/SDAI) — $100,000-per-slot salary cap draft, same daily
           lineup lock at market open/close, and free agency that opens
           automatically at Friday 4:00 PM ET (when trading closes for the
@@ -467,7 +467,7 @@ export function SdflRulesContent() {
           bench and 3 IR slots — 13 picks in all. Any pick can be a stock
           or a coin, in any round, starter or bench. The only limits are
           totals: no more than 3 crypto and no more than 10 stocks across
-          the entire roster. See the base StockDraft Player League rules
+          the entire roster. See the base StockDuel Player League rules
           for those shared mechanics — one exception: the crypto surcharge
           system (same-coin pricing markup) does NOT apply here. SDFL
           crypto picks are roster slots, not a flex pool, so there&rsquo;s
@@ -584,7 +584,7 @@ export function SdflRulesContent() {
 
       <RuleSection title="Bot Fill — Beta Only">
         <p>
-          During the StockDraft beta, any open roster slot is filled by an
+          During the StockDuel beta, any open roster slot is filled by an
           AI manager, clearly identified in the standings. Once a real human
           claims a slot, the AI steps aside permanently. At full launch,
           unclaimed slots stay open — real humans only.
@@ -599,7 +599,7 @@ export function SdflRulesContent() {
       </RuleSection>
 
       <RuleSection title="Who Can Play">
-        <p>StockDraft is open to all ages. Invite your friends!</p>
+        <p>StockDuel is open to all ages. Invite your friends!</p>
       </RuleSection>
     </>
   );
@@ -632,7 +632,7 @@ export function SdlbSdhlSdbaRulesContent() {
 
       <RuleSection title="The Concept">
         <p>
-          SDLB / SDHL / SDBA runs on the same core StockDraft engine as the
+          SDLB / SDHL / SDBA runs on the same core StockDuel engine as the
           Player Leagues (SDPL/SDAI) — $100,000-per-slot salary cap
           draft, same daily lineup lock at market open/close. Roster
           structure differs: 10 starters (5 stocks + 5 crypto, fixed split)
@@ -664,7 +664,7 @@ export function SdlbSdhlSdbaRulesContent() {
         <p>
           SDLB / SDHL / SDBA adds a sports-sim layer that&rsquo;s on steroids in
           comparison to the SDFL season. The SDBA and SDHL are two seasons
-          based on an 80+ game schedule. The ultimate StockDraft long play
+          based on an 80+ game schedule. The ultimate StockDuel long play
           contest is the SDLB. A 162 game schedule.
         </p>
         <p>
@@ -776,7 +776,7 @@ export function SdlbSdhlSdbaRulesContent() {
 
       <RuleSection title="Bot Fill — Beta Only">
         <p>
-          During the StockDraft beta, any open roster slot is filled by an
+          During the StockDuel beta, any open roster slot is filled by an
           AI manager, clearly identified in the standings. Once a real human
           claims a slot, the AI steps aside permanently. At full launch,
           unclaimed slots stay open — real humans only.
@@ -791,7 +791,7 @@ export function SdlbSdhlSdbaRulesContent() {
       </RuleSection>
 
       <RuleSection title="Who Can Play">
-        <p>StockDraft is open to all ages. Invite your friends!</p>
+        <p>StockDuel is open to all ages. Invite your friends!</p>
       </RuleSection>
     </>
   );
@@ -823,7 +823,7 @@ export function DayTraderRulesContent() {
       <RuleSection title="Overview">
         <p>
           Day Trader is a free weekly contest open to anyone with a
-          StockDraft team. No new draft required — just pick one of your
+          StockDuel team. No new draft required — just pick one of your
           existing league teams as your entry. And it&rsquo;s not just bragging
           rights — real, sponsor-funded prizes are on the line every week.
         </p>
@@ -866,10 +866,10 @@ export function DayTraderRulesContent() {
 
       <RuleSection title="Sweepstakes Disclaimer">
         <p>
-          No purchase necessary to enter or win. StockDraft is the sole
+          No purchase necessary to enter or win. StockDuel is the sole
           sponsor of the Day Trader contest and any associated prizes.
           Prizes may be funded or provided by third-party sponsors named in
-          that week&rsquo;s contest, but StockDraft is solely responsible for
+          that week&rsquo;s contest, but StockDuel is solely responsible for
           administering the contest, determining winners, and awarding
           prizes.
         </p>
@@ -887,7 +887,7 @@ export function SddfsRulesContent() {
   return (
     <>
       <p className="font-bold text-lg" style={{ color: "#E8BE4A" }}>
-        SDDFS — StockDraft Daily Fantasy Sport
+        SDDFS — StockDuel Daily Fantasy Sport
       </p>
       <p className="italic" style={{ color: "#A29A82" }}>
         Standalone single-day contest, separate from season leagues. Shares
@@ -904,7 +904,7 @@ export function SddfsRulesContent() {
         </p>
         <RuleCallout>
           <p className="font-bold" style={{ color: "#E8BE4A" }}>
-            SDDFS vs. the rest of StockDraft
+            SDDFS vs. the rest of StockDuel
           </p>
           <p className="mt-1.5">
             SDDFS is single-shot: once your lineup locks, there&rsquo;s no bench
@@ -1002,7 +1002,7 @@ export function SddfsRulesContent() {
 
       <RuleSection title="Not Affiliated">
         <p>
-          StockDraft and SDDFS are not affiliated with, endorsed by, or
+          StockDuel and SDDFS are not affiliated with, endorsed by, or
           sponsored by the NYSE, Nasdaq, S&amp;P Dow Jones Indices, or any
           cryptocurrency exchange. Stock and crypto prices are used for
           scoring purposes only.
@@ -1017,7 +1017,7 @@ export function SdwfsRulesContent() {
   return (
     <>
       <p className="font-bold text-lg" style={{ color: "#E8BE4A" }}>
-        SDWFS — StockDraft Weekly Fantasy Sport
+        SDWFS — StockDuel Weekly Fantasy Sport
       </p>
       <p className="italic" style={{ color: "#A29A82" }}>
         Standalone weekly contest, sibling of SDDFS, separate from season
@@ -1033,7 +1033,7 @@ export function SdwfsRulesContent() {
         </p>
         <RuleCallout>
           <p className="font-bold" style={{ color: "#E8BE4A" }}>
-            SDWFS vs. the rest of StockDraft
+            SDWFS vs. the rest of StockDuel
           </p>
           <p className="mt-1.5">
             SDWFS is single-shot: once your lineup locks, there&rsquo;s no bench
@@ -1109,7 +1109,7 @@ export function SdwfsRulesContent() {
 
       <RuleSection title="Not Affiliated">
         <p>
-          StockDraft and SDWFS are not affiliated with, endorsed by, or
+          StockDuel and SDWFS are not affiliated with, endorsed by, or
           sponsored by the NYSE, Nasdaq, S&amp;P Dow Jones Indices, or any
           cryptocurrency exchange. Stock and crypto prices are used for
           scoring purposes only.

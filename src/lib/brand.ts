@@ -10,7 +10,7 @@
  * name deliberately still say "stockdraft". Those are identifiers, not branding:
  * changing them breaks shared links and stored data and no user ever sees them.
  */
-export const APP_NAME = "StockDraft-A-Thon";
+export const APP_NAME = "StockDuel";
 
 export const APP_TAGLINE =
   "The Ultimate Fantasy Sport, All The Time, In Real Time!";

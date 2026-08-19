@@ -19,7 +19,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
 
         <div className="draft-modal-body space-y-4 text-sm text-white/90 leading-relaxed">
           <p className="font-semibold text-gold">
-            Welcome to StockDraft Weekly Fantasy (SDWFS) — the ultimate stock
+            Welcome to StockDuel Weekly Fantasy (SDWFS) — the ultimate stock
             skills game, where the best of the best come to play and win cash
             prizes.
           </p>
@@ -31,7 +31,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
               crypto markets — the same way fantasy football is built on top
               of real NFL games. Your result comes from the sector research
               and lineup strategy you bring to the draft, not from a random
-              draw or a line StockDraft sets against you. We never buy, sell,
+              draw or a line StockDuel sets against you. We never buy, sell,
               or hold any stock, ETF, or coin on your behalf, and nothing
               here is investment advice — your picks are a fantasy scoring
               input, referencing public price data, same as a stock ticker
@@ -76,7 +76,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
               One account, one entry per contest. Play under your own name —
               sharing logins, running duplicate accounts, entering on
               someone else&apos;s behalf, or automating entries with a bot or
-              script gets everything involved forfeited. StockDraft
+              script gets everything involved forfeited. StockDuel
               employees, contractors, and their immediate family aren&apos;t
               eligible to enter for cash. Outside of that: this game is
               built for people who actually know the market, professionals

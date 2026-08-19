@@ -20,7 +20,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
         <div className="draft-modal-body space-y-4 text-sm text-white/90 leading-relaxed">
           <p className="font-semibold text-gold">
             Day Trader is a free weekly contest open to anyone with a
-            StockDraft team. No new draft required — just pick one of your
+            StockDuel team. No new draft required — just pick one of your
             existing league teams as your entry.
           </p>
 
@@ -61,7 +61,7 @@ function RulesModal({ onClose }: { onClose: () => void }) {
             </p>
             <p>
               Prize eligibility depends on the week&apos;s sponsor and prize
-              type. Some prizes (gift cards, merch, StockDraft credits) are
+              type. Some prizes (gift cards, merch, StockDuel credits) are
               open to all ages. Prizes involving financial accounts
               (brokerage credits, cash transfers) require winners to be 18 or
               older — or have a parent or guardian claim on their behalf.
@@ -69,10 +69,10 @@ function RulesModal({ onClose }: { onClose: () => void }) {
           </section>
 
           <p className="text-xs text-muted">
-            No purchase necessary to enter or win. StockDraft is the sole
+            No purchase necessary to enter or win. StockDuel is the sole
             sponsor of the Day Trader contest and any associated prizes.
             Prizes may be funded or provided by third-party sponsors named in
-            that week&apos;s contest, but StockDraft is solely responsible for
+            that week&apos;s contest, but StockDuel is solely responsible for
             administering the contest, determining winners, and awarding
             prizes. This promotion is in no way sponsored, endorsed,
             administered by, or associated with Apple Inc. or Google LLC.

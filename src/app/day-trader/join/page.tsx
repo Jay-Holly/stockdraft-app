@@ -49,7 +49,7 @@ export default async function DayTraderJoinPage() {
           <h1 className="text-xl font-bold mt-4">Day Trader Mode</h1>
           <p className="text-muted text-sm mt-2">
             Enter free, track intraday moves, and sharpen your reads before a
-            full StockDraft season.
+            full StockDuel season.
           </p>
         </div>
 

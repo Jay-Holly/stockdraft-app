@@ -7,7 +7,7 @@
  *
  * PUBLIC DISPLAY RESTRICTION (non-negotiable):
  * - Never show real pro team names, logos, marks, or branding in the user-facing app.
- * - Users only see StockDraft-owned identities (SDFL, SDHL, SDBA, SDLB franchises).
+ * - Users only see StockDuel-owned identities (SDFL, SDHL, SDBA, SDLB franchises).
  * - Referencing NFL / NHL / NBA / MLB in code, comments, and internal sync logic is fine.
  *
  * ANNUAL REFRESH TIMING (design target — day after each league's championship):
@@ -20,7 +20,7 @@
  * 1. `pro_league_standings_snapshots` table keyed by pro_league + season_year
  * 2. Scheduled job checks championship calendar; ingests final standings next day
  * 3. Map real finish rank → fictional SDFL/SDHL/SDBA/SDLB franchise slot
- * 4. Assign StockDraft league_members to pick positions by that rank order
+ * 4. Assign StockDuel league_members to pick positions by that rank order
  *
  * Until then, sports leagues fall back to standard random shuffle at draft start.
  */

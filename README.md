@@ -1,4 +1,4 @@
-# StockDraft
+# StockDuel
 
 Fantasy football for the stock market — Phase 1: auth, profiles, and dashboard.
 

@@ -10,7 +10,7 @@ export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   return (
     <Link href="/" className={`font-black tracking-tight ${sizes[size]}`}>
       <span className="text-gold">Stock</span>
-      <span className="text-white">Draft</span>
+      <span className="text-white">Duel</span>
     </Link>
   );
 }

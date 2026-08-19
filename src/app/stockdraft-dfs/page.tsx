@@ -44,7 +44,7 @@ export default async function StockDraftDfsLobbyPage() {
             priority
           />
           <h1 className="text-xl font-bold mt-4">
-            StockDraft Daily Fantasy Sport
+            StockDuel Daily Fantasy Sport
           </h1>
           <p className="text-muted text-sm mt-2">
             Pick one stock from each sector, build a 12-pick lineup, win a

@@ -37,7 +37,7 @@ export function LeagueRulesModal({
               className="text-[11px] font-bold uppercase tracking-widest"
               style={{ color: "#D4A72C" }}
             >
-              StockDraft — League Rules
+              StockDuel — League Rules
             </p>
             <h3
               id="league-rules-title"

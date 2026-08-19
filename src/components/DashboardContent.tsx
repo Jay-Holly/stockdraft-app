@@ -370,7 +370,7 @@ export function DashboardContent({
           <div className="text-center mb-8">
             <Image
               src="/images/leagues/sdai.png"
-              alt="StockDraft Artificial Intelligence"
+              alt="StockDuel Artificial Intelligence"
               width={220}
               height={220}
               className="mx-auto rounded-2xl"
@@ -461,7 +461,7 @@ export function DashboardContent({
           </div>
           <Image
             src={showBotSelection ? "/images/leagues/sdai.png" : "/images/brand/sdlogo.png"}
-            alt="StockDraft"
+            alt="StockDuel"
             width={140}
             height={210}
             className="h-44 w-auto shrink-0 -my-12 drop-shadow-[0_0_28px_rgba(208,171,72,0.5)]"
@@ -505,7 +505,7 @@ export function DashboardContent({
               height: "14.8%",
             },
             {
-              label: "StockDraft Day Trader",
+              label: "StockDuel Day Trader",
               href: "/day-trader",
               top: "59.4%",
               left: "50.9%",
@@ -513,7 +513,7 @@ export function DashboardContent({
               height: "14.8%",
             },
             {
-              label: "StockDraft Daily Fantasy Sport",
+              label: "StockDuel Daily Fantasy Sport",
               href: "/stockdraft-dfs",
               top: "76.5%",
               left: "4.8%",
@@ -521,7 +521,7 @@ export function DashboardContent({
               height: "14.6%",
             },
             {
-              label: "StockDraft Weekly Fantasy Sport",
+              label: "StockDuel Weekly Fantasy Sport",
               href: "/stockdraft-wfs",
               top: "76.5%",
               left: "50.9%",

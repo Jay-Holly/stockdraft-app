@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         {
           price_data: {
             currency: "usd",
-            product_data: { name: "StockDraft Wallet Deposit" },
+            product_data: { name: "StockDuel Wallet Deposit" },
             unit_amount: Math.round(amountUsd * 100),
           },
           quantity: 1,

@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { APP_TITLE } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "StockDraft — Fantasy Football for the Stock Market",
+  title: APP_TITLE,
   description:
-    "Draft stocks, compete with friends, and climb the leaderboard. Fantasy football meets Wall Street.",
+    "Draft stocks like players. Win your league. Learn the markets. You've never seen a season like this.",
 };
 
 export const viewport: Viewport = {
