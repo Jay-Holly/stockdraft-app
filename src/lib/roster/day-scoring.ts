@@ -153,7 +153,8 @@ export async function captureDayCloseForLeague(
       picks.map((pick) => ({
         pick,
         closePrice: prices.get(pick.symbol.toUpperCase()) ?? null,
-      }))
+      })),
+      gameDate
     );
   }
 }

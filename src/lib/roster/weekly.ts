@@ -37,6 +37,13 @@ export {
   computeWeekGainPercent,
 } from "@/lib/roster/scoring-math";
 import { computeScoringWeekGainPercent, computeWeekDollarGain } from "@/lib/roster/scoring-math";
+import { easternDateIso } from "@/lib/dfs/audit-dates";
+import {
+  fetchDailyOpenClose,
+  hasTwelveDataKey,
+  isTwelveDataSupported,
+  TWELVE_DATA_CREDITS_PER_MINUTE,
+} from "@/lib/market/twelve-data";
 import {
   addBudgetToBaselineValues,
   initialBaselineValues,
@@ -1004,8 +1011,11 @@ export async function captureWeekCloseSnapshots(
     }
   }
 
-  // captureClosingValues writes the open too when a pick has no row yet, so
-  // this is a single read and a single write per manager.
+  // captureClosingValues fetches a real historical open for a pick with no
+  // row yet, rather than reusing this same live quote for both ends — it
+  // needs to know which trading day that open belongs to.
+  const sessionDateIso = easternDateIso();
+
   for (const roster of rosters) {
     await captureClosingValues(
       supabase,
@@ -1018,9 +1028,156 @@ export async function captureWeekCloseSnapshots(
       roster.picks.map((pick) => ({
         pick,
         closePrice: prices.get(pick.symbol.toUpperCase()) ?? null,
-      }))
+      })),
+      sessionDateIso
     );
   }
+}
+
+/**
+ * Retries any pick still missing a real close for this week — either no
+ * baseline row exists at all (the no-real-open case captureClosingValues now
+ * refuses to fabricate) or a row exists with the close never filled in.
+ *
+ * captureWeekCloseSnapshots only runs once a day, from finalize-matchups. A
+ * miss there used to mean waiting for tomorrow's run, and if the week
+ * finalized before that happened, the pick simply stayed uncaptured forever —
+ * honest, since nothing was invented, but still a permanent gap rather than a
+ * recovered number. This is meant to run far more often (every 15 minutes,
+ * matching the DFS backfill it mirrors) so a miss gets another real shot
+ * within the hour instead of within a day, or never.
+ *
+ * Recovery goes straight to Twelve Data rather than retrying Finnhub — if
+ * Finnhub already had it, there would be nothing to backfill. Equities only;
+ * a crypto ticker on the second source can resolve to a different asset with
+ * the same letters (confirmed on this exact platform: RAIN, MNT, U), so a
+ * crypto pick missing its close stays missing here and needs its own live
+ * source, not a guess dressed up as a fill.
+ */
+export async function fillMissingWeekCloses(
+  leagueId: string,
+  weekNumber: number,
+  supabaseOverride?: SupabaseClient
+): Promise<{ filled: number; stillMissing: number }> {
+  if (!hasTwelveDataKey()) return { filled: 0, stillMissing: 0 };
+
+  const supabase = supabaseOverride ?? (await createClient());
+  const { data: drafts } = await supabase
+    .from("drafts")
+    .select("user_id")
+    .eq("league_id", leagueId);
+
+  if (!drafts?.length) return { filled: 0, stillMissing: 0 };
+
+  const rosters = (
+    await Promise.all(
+      drafts.map(async (draft) => {
+        let picks = (
+          await loadUserDraftPicks(supabase, draft.user_id, leagueId)
+        ).filter((pick) => pick.pick_type !== "skip");
+
+        if (picks.length === 0) {
+          const state = await loadDraftStateDetailed(draft.user_id, { leagueId });
+          if (!state.ok) return null;
+          picks = state.state.picks.filter((pick) => pick.pick_type !== "skip");
+        }
+
+        return {
+          userId: draft.user_id,
+          picks: picksEligibleForWeekBaselines(picks),
+        };
+      })
+    )
+  ).filter(
+    (entry): entry is { userId: string; picks: DraftPick[] } => entry !== null
+  );
+
+  const allPicks = rosters.flatMap((roster) => roster.picks);
+  if (allPicks.length === 0) return { filled: 0, stillMissing: 0 };
+
+  const { data: existing } = await supabase
+    .from("roster_week_baselines")
+    .select("pick_id, value_at_close")
+    .eq("league_id", leagueId)
+    .eq("week_number", weekNumber);
+
+  const closeByPick = new Map(
+    (existing ?? []).map((row) => [row.pick_id as string, row.value_at_close])
+  );
+
+  const needsRecovery = allPicks.filter((pick) => {
+    const close = closeByPick.get(pick.id);
+    return !closeByPick.has(pick.id) || close == null;
+  });
+  if (needsRecovery.length === 0) return { filled: 0, stillMissing: 0 };
+
+  const recoverableSymbols = [
+    ...new Set(
+      needsRecovery
+        .filter((p) => p.pick_type === "stock" || p.pick_type === "bench")
+        .map((p) => p.symbol.toUpperCase())
+    ),
+  ].filter(isTwelveDataSupported);
+
+  const skippedCrypto = needsRecovery.filter(
+    (p) => p.pick_type === "crypto" || isCryptoSymbol(p.symbol)
+  ).length;
+  if (skippedCrypto > 0) {
+    console.warn(
+      `[sdfl-backfill] league ${leagueId} wk${weekNumber}: ${skippedCrypto} crypto pick(s) still missing a close — not recoverable from this source`
+    );
+  }
+
+  if (recoverableSymbols.length === 0) {
+    return { filled: 0, stillMissing: needsRecovery.length };
+  }
+
+  // One minute's worth of budget per sweep; the next cron tick picks up the
+  // rest, same pacing as the DFS backfill.
+  const batch = recoverableSymbols.slice(0, TWELVE_DATA_CREDITS_PER_MINUTE);
+  const sessionDateIso = easternDateIso();
+  const bars = await fetchDailyOpenClose(batch, sessionDateIso);
+
+  let filled = 0;
+  const stillMissingSymbols = new Set(
+    needsRecovery.map((p) => p.symbol.toUpperCase())
+  );
+
+  for (const roster of rosters) {
+    const recoveredEntries = roster.picks
+      .filter((pick) => batch.includes(pick.symbol.toUpperCase()))
+      .filter((pick) => needsRecovery.some((n) => n.id === pick.id))
+      .map((pick) => {
+        const close = bars[pick.symbol.toUpperCase()]?.close;
+        return { pick, closePrice: close ?? null };
+      });
+
+    if (recoveredEntries.length === 0) continue;
+
+    await captureClosingValues(
+      supabase,
+      {
+        table: "roster_week_baselines",
+        leagueId,
+        userId: roster.userId,
+        weekNumber,
+      },
+      recoveredEntries,
+      sessionDateIso
+    );
+
+    for (const entry of recoveredEntries) {
+      if (entry.closePrice != null) {
+        filled++;
+        stillMissingSymbols.delete(entry.pick.symbol.toUpperCase());
+        console.log(
+          `[sdfl-backfill] league ${leagueId} wk${weekNumber} ${entry.pick.symbol}: close backfilled to ${entry.closePrice}`
+        );
+      }
+    }
+  }
+
+  return { filled, stillMissing: needsRecovery.length - filled };
 }
 
 async function pruneOrphanCryptoBaselinesForUser(

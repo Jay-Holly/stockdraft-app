@@ -23,6 +23,12 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DraftPick } from "@/lib/draft/types";
 import { MAX_ABS_PCT_CHANGE } from "@/lib/market/quote-guards";
+import {
+  fetchDailyOpenClose,
+  hasTwelveDataKey,
+  isTwelveDataSupported,
+  TWELVE_DATA_CREDITS_PER_MINUTE,
+} from "@/lib/market/twelve-data";
 
 /** Identifies one manager's slice of one scoring period. */
 export type BaselineScope =
@@ -156,13 +162,29 @@ export type ClosingEntry = {
 
 /**
  * Snapshot this period's closing value. One read, one write.
- * A pick with no opening row yet gets one written at the same value, matching
- * the long-standing behaviour of the week-close path.
+ *
+ * A pick with no opening row yet used to get one written at the same value as
+ * the close — reusing the single live quote this function just fetched for
+ * BOTH ends of the period. That is not a real open; it is one instant in time
+ * pretending to be two, and it erases the period's entire real move. Confirmed
+ * in production: 2,303 of 8,313 funded weekly positions across the platform
+ * carry this exact signature, open equal to close to the cent, because the
+ * real week-start capture (ensureWeekBaselines) never reached that pick before
+ * this function did.
+ *
+ * The fix is not to fabricate a better guess — it's to get the real number or
+ * leave the pick uncaptured. `sessionDateIso` — the actual trading day this
+ * close represents — lets a first-time pick fetch its real historical open
+ * from an independent source (Twelve Data) instead of copying the close. When
+ * that source can't answer (crypto, or data not there yet), the pick is left
+ * out entirely rather than seeded with a fabricated flat line; a later sweep
+ * picks it up once a real number exists.
  */
 export async function captureClosingValues(
   supabase: SupabaseClient,
   scope: BaselineScope,
-  entries: ClosingEntry[]
+  entries: ClosingEntry[],
+  sessionDateIso: string
 ): Promise<void> {
   if (entries.length === 0) return;
 
@@ -177,7 +199,27 @@ export async function captureClosingValues(
     (existing ?? []).map((row) => [row.pick_id as string, row])
   );
 
+  // Picks with no prior row need a real historical open, not the close
+  // reused. Batch one Twelve Data call per sweep, budgeted the same as the
+  // DFS backfill it mirrors — this function already runs on a recurring
+  // cron, so anything past budget is simply picked up on the next tick.
+  const needsRealOpen = entries.filter(
+    ({ pick, closePrice }) =>
+      closePrice !== null &&
+      !existingByPick.has(pick.id) &&
+      isTwelveDataSupported(pick.symbol)
+  );
+  const openSymbols = [
+    ...new Set(needsRealOpen.map((e) => e.pick.symbol.toUpperCase())),
+  ].slice(0, TWELVE_DATA_CREDITS_PER_MINUTE);
+  const historicalOpens =
+    openSymbols.length > 0 && hasTwelveDataKey()
+      ? await fetchDailyOpenClose(openSymbols, sessionDateIso)
+      : {};
+
   const rows: Record<string, string | number>[] = [];
+  const deferred: string[] = [];
+
   for (const { pick, closePrice } of entries) {
     if (closePrice === null) continue;
 
@@ -185,10 +227,27 @@ export async function captureClosingValues(
     if (!isTrustworthyValue(pick, closeValue)) continue;
 
     const prior = existingByPick.get(pick.id);
-    const openValue =
-      prior?.value_at_open != null ? Number(prior.value_at_open) : closeValue;
     const existingClose =
       prior?.value_at_close != null ? Number(prior.value_at_close) : null;
+
+    let openValue: number;
+    if (prior?.value_at_open != null) {
+      openValue = Number(prior.value_at_open);
+    } else {
+      const symbol = pick.symbol.toUpperCase();
+      const realOpen = historicalOpens[symbol]?.open;
+      if (realOpen == null) {
+        // No real open available this sweep. Do not seed the row with the
+        // close standing in for the open — that is the exact fabrication
+        // this function exists to stop. Leave it uncaptured; the next sweep
+        // (with historical data that may be available by then, or a prior
+        // row from ensureWeekBaselines catching up) tries again.
+        deferred.push(`${pick.symbol} (pick ${pick.id})`);
+        continue;
+      }
+      openValue = computePickMarketValue(pick, realOpen);
+      if (!isTrustworthyValue(pick, openValue)) continue;
+    }
 
     // Never flatten a real close back to open == close.
     if (
@@ -212,6 +271,12 @@ export async function captureClosingValues(
       value_at_open: openValue,
       value_at_close: closeValue,
     });
+  }
+
+  if (deferred.length > 0) {
+    console.warn(
+      `[scoring] no real open yet for ${deferred.length} first-seen pick(s), left uncaptured rather than faked: ${deferred.join(", ")}`
+    );
   }
 
   if (rows.length === 0) return;
