@@ -73,6 +73,19 @@ async function lockDueContests(
   for (const contest of dueContests) {
     const picks = picksByContest.get(contest.id) ?? [];
 
+    // Group picks by the price being written so the whole contest costs one
+    // UPDATE per distinct price instead of one per pick.
+    //
+    // This loop used to issue a separate UPDATE for every pick, awaited in
+    // sequence. That was fine while a contest meant ~70 picks. It stopped
+    // being fine when contests started spanning the full draft pool: 12 due
+    // contests came to 1,624 picks, and at typical round-trip latency the
+    // write loop alone ran ~8 minutes — measured at 594s end to end, against
+    // a 300s function limit. Production killed the run every time, so no
+    // contest locked, so the backlog grew and the next run was slower still.
+    // Three days of contests sat open because of it.
+    const picksByPrice = new Map<number, string[]>();
+
     for (const pick of picks) {
       const openPrice = prices[pick.symbol.toUpperCase()];
 
@@ -85,10 +98,25 @@ async function lockDueContests(
         continue;
       }
 
-      await supabase
+      const ids = picksByPrice.get(openPrice) ?? [];
+      ids.push(pick.id);
+      picksByPrice.set(openPrice, ids);
+    }
+
+    for (const [openPrice, pickIds] of picksByPrice) {
+      const { error: updateError } = await supabase
         .from("sddfs_entry_picks")
         .update({ open_price: openPrice })
-        .eq("id", pick.id);
+        .in("id", pickIds);
+
+      if (updateError) {
+        // Leave the contest open rather than locking it with only some
+        // baselines written — a partially-priced lock scores those picks
+        // neutral and pays out on it. The next tick retries the whole thing.
+        throw new Error(
+          `Failed to snapshot ${pickIds.length} open price(s) for contest ${contest.id}: ${updateError.message}`
+        );
+      }
     }
 
     await supabase
@@ -166,6 +194,15 @@ async function scoreClosedContests(
   for (const contest of lockedContests) {
     const picks = picksByContest.get(contest.id) ?? [];
 
+    // Batched for the same reason as the lock's write loop: one UPDATE per
+    // distinct (close, pct) pair rather than one per pick. A close price and
+    // its resulting pct_change are identical for every pick holding the same
+    // symbol at the same open, so this collapses to a handful of writes.
+    const picksByResult = new Map<
+      string,
+      { closePrice: number | null; pctChange: number | null; ids: string[] }
+    >();
+
     for (const pick of picks) {
       const closePrice = prices[pick.symbol.toUpperCase()];
       const pctChange = safePctChange(pick.open_price, closePrice);
@@ -176,13 +213,31 @@ async function scoreClosedContests(
         );
       }
 
-      await supabase
+      const resolvedClose = isUsableQuote(closePrice) ? closePrice : null;
+      const key = `${resolvedClose}|${pctChange}`;
+      const bucket = picksByResult.get(key) ?? {
+        closePrice: resolvedClose,
+        pctChange,
+        ids: [],
+      };
+      bucket.ids.push(pick.id);
+      picksByResult.set(key, bucket);
+    }
+
+    for (const { closePrice, pctChange, ids } of picksByResult.values()) {
+      const { error: updateError } = await supabase
         .from("sddfs_entry_picks")
-        .update({
-          close_price: isUsableQuote(closePrice) ? closePrice : null,
-          pct_change: pctChange,
-        })
-        .eq("id", pick.id);
+        .update({ close_price: closePrice, pct_change: pctChange })
+        .in("id", ids);
+
+      if (updateError) {
+        // Same reasoning as the lock: a contest scored from a partial write
+        // hands out rankings and payouts built on missing data. Leave it
+        // locked and let the next run redo the whole contest.
+        throw new Error(
+          `Failed to write ${ids.length} close price(s) for contest ${contest.id}: ${updateError.message}`
+        );
+      }
     }
 
     // A pick with a real open but still no close after this run means the

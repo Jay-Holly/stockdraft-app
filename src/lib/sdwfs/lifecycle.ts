@@ -73,6 +73,12 @@ async function lockDueContests(
   for (const contest of dueContests) {
     const picks = picksByContest.get(contest.id) ?? [];
 
+    // One UPDATE per distinct price instead of one per pick — see the matching
+    // comment in sddfs/lifecycle.ts. The per-pick version ran ~8 minutes on a
+    // 1,600-pick backlog against a 300s function limit, so nothing ever
+    // locked.
+    const picksByPrice = new Map<number, string[]>();
+
     for (const pick of picks) {
       const openPrice = prices[pick.symbol.toUpperCase()];
 
@@ -85,10 +91,22 @@ async function lockDueContests(
         continue;
       }
 
-      await supabase
+      const ids = picksByPrice.get(openPrice) ?? [];
+      ids.push(pick.id);
+      picksByPrice.set(openPrice, ids);
+    }
+
+    for (const [openPrice, pickIds] of picksByPrice) {
+      const { error: updateError } = await supabase
         .from("sdwfs_entry_picks")
         .update({ open_price: openPrice })
-        .eq("id", pick.id);
+        .in("id", pickIds);
+
+      if (updateError) {
+        throw new Error(
+          `Failed to snapshot ${pickIds.length} open price(s) for contest ${contest.id}: ${updateError.message}`
+        );
+      }
     }
 
     await supabase
@@ -164,6 +182,12 @@ async function scoreClosedContests(
   for (const contest of lockedContests) {
     const picks = picksByContest.get(contest.id) ?? [];
 
+    // Batched for the same reason as the lock — see sddfs/lifecycle.ts.
+    const picksByResult = new Map<
+      string,
+      { closePrice: number | null; pctChange: number | null; ids: string[] }
+    >();
+
     for (const pick of picks) {
       const closePrice = prices[pick.symbol.toUpperCase()];
       const pctChange = safePctChange(pick.open_price, closePrice);
@@ -174,13 +198,28 @@ async function scoreClosedContests(
         );
       }
 
-      await supabase
+      const resolvedClose = isUsableQuote(closePrice) ? closePrice : null;
+      const key = `${resolvedClose}|${pctChange}`;
+      const bucket = picksByResult.get(key) ?? {
+        closePrice: resolvedClose,
+        pctChange,
+        ids: [],
+      };
+      bucket.ids.push(pick.id);
+      picksByResult.set(key, bucket);
+    }
+
+    for (const { closePrice, pctChange, ids } of picksByResult.values()) {
+      const { error: updateError } = await supabase
         .from("sdwfs_entry_picks")
-        .update({
-          close_price: isUsableQuote(closePrice) ? closePrice : null,
-          pct_change: pctChange,
-        })
-        .eq("id", pick.id);
+        .update({ close_price: closePrice, pct_change: pctChange })
+        .in("id", ids);
+
+      if (updateError) {
+        throw new Error(
+          `Failed to write ${ids.length} close price(s) for contest ${contest.id}: ${updateError.message}`
+        );
+      }
     }
 
     // A pick with a real open but still no close after this run means the

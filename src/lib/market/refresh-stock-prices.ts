@@ -21,15 +21,31 @@ export type StockPriceRefreshResult = {
 /** Stay under Finnhub free tier (60 calls/min). */
 const CALLS_PER_MINUTE = 50;
 const DELAY_BETWEEN_CALLS_MS = Math.ceil(60_000 / CALLS_PER_MINUTE);
-/** ~240 symbols at 1.2s each fits Vercel's 300s function limit; full pool refreshes over ~2 runs. */
-const MAX_SYMBOLS_PER_RUN = 240;
+/**
+ * Enough headroom to refresh the entire working set in a single run.
+ *
+ * This was 240, sized on the assumption that each symbol costs 1.2s serially
+ * (~288s, right at Vercel's 300s limit). That reading missed GROUP_SIZE:
+ * symbols are fetched five at a time concurrently, so the 1.2s spacing is per
+ * GROUP, not per symbol. The real cost is ~58s for 240 and ~131s for 600 —
+ * both well inside the limit, and the Finnhub call rate is unchanged at
+ * 50/minute either way.
+ *
+ * The old cap meant a 547-symbol pool needed three runs to cover once, so at
+ * a 30-minute cadence most symbols were 60-90 minutes stale at any moment.
+ * That is what starved the lock's warm-price lookup and pushed hundreds of
+ * symbols onto live Finnhub calls at lock time, which is what blew the
+ * lifecycle past its own timeout. Covering the pool in one run is what makes
+ * the warm cache actually usable.
+ */
+const MAX_SYMBOLS_PER_RUN = 600;
 /**
  * Symbols within a group are fetched concurrently, so a group's wall-clock
  * cost is roughly one round-trip instead of GROUP_SIZE round-trips — the
  * 1.2s spacing still applies per group, not per symbol, so the aggregate
- * rate stays the same. This is what keeps a real run's actual duration
- * close to the theoretical ~288s instead of drifting past Vercel's 300s
- * limit on ordinary network latency.
+ * rate stays the same. This is what keeps a real run's actual duration close
+ * to its theoretical cost (~131s for the full 600-symbol cap) instead of
+ * drifting past Vercel's 300s limit on ordinary network latency.
  */
 const GROUP_SIZE = 5;
 
