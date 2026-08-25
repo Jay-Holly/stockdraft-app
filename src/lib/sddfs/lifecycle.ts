@@ -10,6 +10,11 @@ import { finalizeSddfsContest } from "@/lib/sddfs/scoring";
 import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
 import { getOpeningPricesWithRetry } from "@/lib/market/open-price-retry";
 import { fillMissingOpens } from "@/lib/dfs/backfill";
+import {
+  fetchDailyOpenClose,
+  hasTwelveDataKey,
+  isTwelveDataSupported,
+} from "@/lib/market/twelve-data";
 import { isAuditGateEnabled } from "@/lib/dfs/audit-gate";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -144,7 +149,7 @@ async function scoreClosedContests(
 
   const { data: lockedContests, error } = await supabase
     .from("sddfs_contests")
-    .select("id")
+    .select("id, contest_date")
     .eq("status", "locked")
     .lte("contest_date", contestDate);
 
@@ -181,18 +186,79 @@ async function scoreClosedContests(
     picksByContest.set(contest.id, picks ?? []);
   }
 
-  const allSymbols = [
-    ...new Set([...picksByContest.values()].flat().map((p) => p.symbol)),
+  // A contest's close must come from ITS OWN trading day, not from whatever
+  // the market happens to be doing when the scorer finally reaches it.
+  //
+  // This used to take one live quote round and apply it to every locked
+  // contest regardless of date. For a contest scoring at 4 PM on its own day
+  // that is exactly right. For a backlogged one it is badly wrong twice over:
+  // a contest from six days ago would be scored on a six-day move, and worse,
+  // when a lock and a score run in the same pass the open and the close are
+  // read from the same cache at the same instant — identical values, 0.00% on
+  // every pick. That is what happened draining the 08-19 and 08-21 backlog:
+  // 92% and 95% of their picks came out with open exactly equal to close.
+  //
+  // Today's contests still use a live quote, which is the real closing price
+  // at that moment. Anything older is priced from that date's actual close via
+  // the historical source, so a late score reports the day the contest
+  // actually covered.
+  const pricesByContest = new Map<string, Record<string, number>>();
+
+  const symbolsFor = (contestIds: string[]): string[] => [
+    ...new Set(
+      contestIds.flatMap((id) =>
+        (picksByContest.get(id) ?? []).map((p) => p.symbol)
+      )
+    ),
   ];
-  const prices =
-    allSymbols.length > 0
-      ? await getOpeningPricesWithRetry(allSymbols, { isDailyContest: true })
-      : {};
+
+  const todaysContests = lockedContests.filter(
+    (c) => c.contest_date === contestDate
+  );
+  const pastContests = lockedContests.filter(
+    (c) => c.contest_date !== contestDate
+  );
+
+  if (todaysContests.length > 0) {
+    const symbols = symbolsFor(todaysContests.map((c) => c.id));
+    const live =
+      symbols.length > 0
+        ? await getOpeningPricesWithRetry(symbols, { isDailyContest: true })
+        : {};
+    for (const contest of todaysContests) {
+      pricesByContest.set(contest.id, live);
+    }
+  }
+
+  // One historical lookup per distinct past date, shared by every tier that
+  // ran that day.
+  const pastDates = [...new Set(pastContests.map((c) => c.contest_date))];
+  for (const date of pastDates) {
+    const sameDate = pastContests.filter((c) => c.contest_date === date);
+    const symbols = symbolsFor(sameDate.map((c) => c.id));
+    const closes: Record<string, number> = {};
+
+    if (symbols.length > 0 && hasTwelveDataKey()) {
+      // Equities only — a crypto ticker resolves to a different asset on this
+      // source, so a coin with no recoverable close stays unscored rather than
+      // being priced off the wrong instrument.
+      const recoverable = symbols.filter(isTwelveDataSupported);
+      const bars = await fetchDailyOpenClose(recoverable, date);
+      for (const [symbol, bar] of Object.entries(bars)) {
+        if (isUsableQuote(bar?.close)) closes[symbol.toUpperCase()] = bar.close!;
+      }
+    }
+
+    for (const contest of sameDate) {
+      pricesByContest.set(contest.id, closes);
+    }
+  }
 
   const results: { contestId: string; entriesScored: number }[] = [];
 
   for (const contest of lockedContests) {
     const picks = picksByContest.get(contest.id) ?? [];
+    const prices = pricesByContest.get(contest.id) ?? {};
 
     // Batched for the same reason as the lock's write loop: one UPDATE per
     // distinct (close, pct) pair rather than one per pick. A close price and
