@@ -9,6 +9,12 @@ import { finalizeSdwfsContest } from "@/lib/sdwfs/scoring";
 import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
 import { getOpeningPricesWithRetry } from "@/lib/market/open-price-retry";
 import { fillMissingOpens } from "@/lib/dfs/backfill";
+import {
+  fetchDailyOpenClose,
+  hasTwelveDataKey,
+  isTwelveDataSupported,
+} from "@/lib/market/twelve-data";
+import { easternDateIso } from "@/lib/dfs/audit-dates";
 import { isAuditGateEnabled } from "@/lib/dfs/audit-gate";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -122,8 +128,13 @@ async function lockDueContests(
 
 /**
  * Scores any 'locked' contests once past their score_at (Friday 4 PM ET
- * close). Each pick's return is Monday's snapshotted open_price vs a live
- * Friday-close quote — cumulative week return, not day-over-day.
+ * close). Each pick's return is Monday's snapshotted open_price vs that
+ * week's Friday close — cumulative week return, not day-over-day.
+ *
+ * The Friday close is a live quote only when the week is being scored on the
+ * day it actually ended. A week scored later is priced from that Friday's real
+ * session bar, so a delayed run still reports the week it covered rather than
+ * whatever the market has done since.
  */
 async function scoreClosedContests(
   supabase: ServiceClient
@@ -132,7 +143,7 @@ async function scoreClosedContests(
 
   const { data: lockedContests, error } = await supabase
     .from("sdwfs_contests")
-    .select("id")
+    .select("id, score_at")
     .eq("status", "locked")
     .lte("score_at", nowIso);
 
@@ -169,18 +180,75 @@ async function scoreClosedContests(
     picksByContest.set(contest.id, picks ?? []);
   }
 
-  const allSymbols = [
-    ...new Set([...picksByContest.values()].flat().map((p) => p.symbol)),
+  // A week's close belongs to the session it actually ended on — score_at is
+  // that week's Friday 4 PM ET — not to whenever the scorer happens to reach
+  // it. Applying one live quote round to every locked contest regardless of
+  // age measures the wrong span on anything scored late, and when a lock and
+  // a score run in the same pass it reads the open and the close from the
+  // same cache at the same instant, producing 0.00% on every pick. That is
+  // what happened to the SDDFS 08-19 and 08-21 backlog; this is the same fix
+  // applied before it can happen here.
+  const todayIso = easternDateIso();
+  const closeDateFor = (scoreAt: string | null): string =>
+    scoreAt ? easternDateIso(new Date(scoreAt)) : todayIso;
+
+  const pricesByContest = new Map<string, Record<string, number>>();
+
+  const symbolsFor = (contestIds: string[]): string[] => [
+    ...new Set(
+      contestIds.flatMap((id) =>
+        (picksByContest.get(id) ?? []).map((p) => p.symbol)
+      )
+    ),
   ];
-  const prices =
-    allSymbols.length > 0
-      ? await getOpeningPricesWithRetry(allSymbols, { isDailyContest: false })
-      : {};
+
+  const currentWeek = lockedContests.filter(
+    (c) => closeDateFor(c.score_at) === todayIso
+  );
+  const pastWeeks = lockedContests.filter(
+    (c) => closeDateFor(c.score_at) !== todayIso
+  );
+
+  if (currentWeek.length > 0) {
+    const symbols = symbolsFor(currentWeek.map((c) => c.id));
+    const live =
+      symbols.length > 0
+        ? await getOpeningPricesWithRetry(symbols, { isDailyContest: false })
+        : {};
+    for (const contest of currentWeek) {
+      pricesByContest.set(contest.id, live);
+    }
+  }
+
+  // One historical lookup per distinct close date, shared by every tier that
+  // ended that day.
+  const pastDates = [...new Set(pastWeeks.map((c) => closeDateFor(c.score_at)))];
+  for (const date of pastDates) {
+    const sameDate = pastWeeks.filter((c) => closeDateFor(c.score_at) === date);
+    const symbols = symbolsFor(sameDate.map((c) => c.id));
+    const closes: Record<string, number> = {};
+
+    if (symbols.length > 0 && hasTwelveDataKey()) {
+      // Equities only — a crypto ticker resolves to a different asset on this
+      // source, so a coin with no recoverable close stays unscored rather than
+      // being priced off the wrong instrument.
+      const recoverable = symbols.filter(isTwelveDataSupported);
+      const bars = await fetchDailyOpenClose(recoverable, date);
+      for (const [symbol, bar] of Object.entries(bars)) {
+        if (isUsableQuote(bar?.close)) closes[symbol.toUpperCase()] = bar.close!;
+      }
+    }
+
+    for (const contest of sameDate) {
+      pricesByContest.set(contest.id, closes);
+    }
+  }
 
   const results: { contestId: string; entriesScored: number }[] = [];
 
   for (const contest of lockedContests) {
     const picks = picksByContest.get(contest.id) ?? [];
+    const prices = pricesByContest.get(contest.id) ?? {};
 
     // Batched for the same reason as the lock — see sddfs/lifecycle.ts.
     const picksByResult = new Map<
