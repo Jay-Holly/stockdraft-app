@@ -8,6 +8,17 @@ import { WfsShell } from "@/components/dfs/WfsShell";
 import { SdwfsRulesButton } from "@/components/wfs/SdwfsRulesButton";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * Never statically prerendered. it creates that week's contest rows and reads the viewer's own entries from
+ * their auth cookie, so a build-time
+ * prerender is both wrong (it would bake one moment, and one viewer's
+ * state, into a static page) and impossible to do safely — the render
+ * itself touches the database, and a build with no reachable database
+ * fails outright. That is exactly what broke the build: the SDWFS lobby tried to
+ * prerender, its database call failed, and the whole export aborted.
+ */
+export const dynamic = "force-dynamic";
+
 export default async function StockDraftWfsLobbyPage() {
   const allContests = await getWfsContestsForThisWeek();
 

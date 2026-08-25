@@ -22,6 +22,16 @@ import { getMyActiveWfsEntryCount } from "@/lib/wfs/my-teams";
 import type { Profile } from "@/lib/types";
 import { PROFILE_COLUMNS } from "@/lib/profile/columns";
 
+/**
+ * Never statically prerendered. every figure on it is scoped to the signed-in user, so a build-time
+ * prerender is both wrong (it would bake one moment, and one viewer's
+ * state, into a static page) and impossible to do safely — the render
+ * itself touches the database, and a build with no reachable database
+ * fails outright. That is exactly what broke the build: the dashboard tried to
+ * prerender, its database call failed, and the whole export aborted.
+ */
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 

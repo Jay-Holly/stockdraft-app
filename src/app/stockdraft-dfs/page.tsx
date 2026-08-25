@@ -8,6 +8,17 @@ import { DfsShell } from "@/components/dfs/DfsShell";
 import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * Never statically prerendered. getDfsContestsForToday() creates that day's contest rows and the page reads
+ * the viewer's own entries from their auth cookie, so a build-time
+ * prerender is both wrong (it would bake one moment, and one viewer's
+ * state, into a static page) and impossible to do safely — the render
+ * itself touches the database, and a build with no reachable database
+ * fails outright. That is exactly what broke the build: the SDDFS lobby tried to
+ * prerender, its database call failed, and the whole export aborted.
+ */
+export const dynamic = "force-dynamic";
+
 export default async function StockDraftDfsLobbyPage() {
   const allContests = await getDfsContestsForToday();
 
