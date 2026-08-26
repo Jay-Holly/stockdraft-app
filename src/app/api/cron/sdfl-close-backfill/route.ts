@@ -53,12 +53,17 @@ export async function GET(request: NextRequest) {
         leagues.map((l) => l.id)
       );
 
-    // Every manager in a league shares the same current_week; one row per
-    // league is enough.
+    // Every manager in a league shares the same current_week. A close only
+    // exists for a week that has already ended — current_week is still in
+    // progress, so asking Twelve Data about it can never succeed. That was
+    // the actual credit-burn bug: this cron ran every 15 minutes asking for
+    // ~997 closes across 5 leagues that could never be filled, every single
+    // tick, which is what exhausted the 800/day free-tier budget almost
+    // immediately. The most recently COMPLETED week is current_week - 1.
     const weekByLeague = new Map<string, number>();
     for (const row of standings ?? []) {
-      if (!weekByLeague.has(row.league_id)) {
-        weekByLeague.set(row.league_id, row.current_week);
+      if (!weekByLeague.has(row.league_id) && row.current_week > 1) {
+        weekByLeague.set(row.league_id, row.current_week - 1);
       }
     }
 

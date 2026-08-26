@@ -49,30 +49,90 @@ export function DfsLineupBuilder({ contestId }: { contestId: string }) {
   const [lastEntryPicks, setLastEntryPicks] = useState<
     { sector: string; symbol: string }[] | null
   >(null);
+  const [pickListWarning, setPickListWarning] = useState<string | null>(null);
 
+  const validStockSymbols = useMemo(
+    () => new Set(stocks.map((s) => s.symbol.toUpperCase())),
+    [stocks]
+  );
+  const validCryptoSymbols = useMemo(
+    () => new Set(coins.map((c) => c.symbol.toUpperCase())),
+    [coins]
+  );
+
+  /**
+   * Applies a saved sector/symbol list from "Bet Lineup Again" or "Use
+   * Yesterday's Lineup" — the two paths that replay a prior entry's picks.
+   *
+   * A symbol on that list is only as good as it was on the day it was drafted.
+   * On 2026-08-17, EA — pulled from the draft pool three days earlier as a
+   * dead ticker — was replayed straight back into a lineup and submitted,
+   * because this function checked that the *sector* was still valid and never
+   * checked the *symbol*. The lock's dead-ticker guard caught it at pricing
+   * time and left the pick scoreless, which is the right outcome for a price
+   * that can't be trusted — but the entry should never have accepted a symbol
+   * that no longer exists in the pool in the first place.
+   *
+   * Requires the live pool to have already loaded. Called before that finishes,
+   * every symbol would fail validation and the whole lineup would be silently
+   * dropped — which is a different, worse silent failure than the one being
+   * fixed. Both call sites below wait for `poolLoading`/`cryptoLoading` to
+   * clear before calling this.
+   */
   function applyPickList(list: { sector: string; symbol: string }[]) {
+    const dropped: string[] = [];
+
     setPicks((prev) => {
       const next = { ...prev };
       for (const { sector, symbol } of list) {
-        if (DFS_SECTORS.includes(sector as DfsSector)) {
-          next[sector as DfsSector] = {
-            symbol,
-            name: "",
-            price: 0,
-            changePercent: 0,
-          };
+        if (!DFS_SECTORS.includes(sector as DfsSector)) continue;
+
+        const upperSymbol = symbol.toUpperCase();
+        const isValid =
+          sector === "Crypto"
+            ? validCryptoSymbols.has(upperSymbol)
+            : validStockSymbols.has(upperSymbol);
+
+        if (!isValid) {
+          dropped.push(symbol);
+          continue;
         }
+
+        next[sector as DfsSector] = {
+          symbol,
+          name: "",
+          price: 0,
+          changePercent: 0,
+        };
       }
       return next;
     });
-    const nextUnfilled = DFS_SECTORS.find(
-      (s) => !list.some((p) => p.sector === s)
+
+    setPickListWarning(
+      dropped.length > 0
+        ? `${dropped.join(", ")} ${dropped.length === 1 ? "is" : "are"} no longer available and ${dropped.length === 1 ? "wasn't" : "weren't"} carried over. Pick a replacement below.`
+        : null
     );
+
+    const filledSectors = new Set(
+      list
+        .filter((p) => {
+          const upperSymbol = p.symbol.toUpperCase();
+          return p.sector === "Crypto"
+            ? validCryptoSymbols.has(upperSymbol)
+            : validStockSymbols.has(upperSymbol);
+        })
+        .map((p) => p.sector)
+    );
+    const nextUnfilled = DFS_SECTORS.find((s) => !filledSectors.has(s));
     if (nextUnfilled) setActiveSector(nextUnfilled);
   }
 
   // Pick up a lineup carried over from "Bet Lineup Again" on another contest.
+  // Waits for the pool to load — applying against an empty pool would reject
+  // every symbol and silently wipe the carried-over lineup.
   useEffect(() => {
+    if (poolLoading || cryptoLoading) return;
     const raw = sessionStorage.getItem(REUSE_LINEUP_KEY);
     if (!raw) return;
     sessionStorage.removeItem(REUSE_LINEUP_KEY);
@@ -82,7 +142,7 @@ export function DfsLineupBuilder({ contestId }: { contestId: string }) {
     } catch {
       // ignore malformed storage value
     }
-  }, []);
+  }, [poolLoading, cryptoLoading]);
 
   // Look up the most recent past entry so "Use Yesterday's Lineup" can offer it.
   useEffect(() => {
@@ -142,6 +202,7 @@ export function DfsLineupBuilder({ contestId }: { contestId: string }) {
   });
 
   function selectPick(sector: DfsSector, quote: MarketQuote, name: string) {
+    setPickListWarning(null);
     setPicks((prev) => {
       const next = {
         ...prev,
@@ -364,11 +425,17 @@ export function DfsLineupBuilder({ contestId }: { contestId: string }) {
             {filledCount === 0 && lastEntryPicks && (
               <button
                 type="button"
+                disabled={poolLoading || cryptoLoading}
                 onClick={() => applyPickList(lastEntryPicks)}
-                className="w-full rounded-xl border border-white/20 text-sm font-medium py-2.5 hover:border-white/40"
+                className="w-full rounded-xl border border-white/20 text-sm font-medium py-2.5 hover:border-white/40 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Use Yesterday&apos;s Lineup
               </button>
+            )}
+            {pickListWarning && (
+              <p className="text-sm text-amber-400" role="alert">
+                {pickListWarning}
+              </p>
             )}
             <button
               type="button"

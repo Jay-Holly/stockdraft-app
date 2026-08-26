@@ -33,6 +33,21 @@ export const AUDIT_TOLERANCE_PCT = 3;
  */
 export const SYMBOLS_PER_RUN = TWELVE_DATA_CREDITS_PER_MINUTE;
 
+/** PostgREST's own response ceiling; paging has to step in units it allows. */
+const PICK_PAGE_SIZE = 1000;
+
+/**
+ * Whether a recorded status means "ask again next run".
+ *
+ * `missing` is a lookup that failed and could succeed later — a timeout, a
+ * poisoned batch, a spent credit budget that resets. `unrecoverable` is a
+ * price no source can produce no matter how many times it is asked. Everything
+ * else is a resolved value. Only the first is worth another credit.
+ */
+function isRetryableStatus(status: unknown): boolean {
+  return status === "missing";
+}
+
 export type AuditPick = {
   pickId: string;
   symbol: string;
@@ -42,10 +57,26 @@ export type AuditPick = {
   contestId: string;
 };
 
+/**
+ * `skipped` exists to stop a round that examined nothing from claiming it
+ * verified everything.
+ *
+ * A round that finds no picks for its date used to report `passed` — the same
+ * word it uses after confirming every price of a full trading day. Those are
+ * opposite facts. Worse, "no picks found" is what a date mismatch looks like
+ * from the inside: the query is well-formed, it simply asks about a day that
+ * has no contests, and the round then certifies a day it never looked at.
+ *
+ * Fund release requires `passed` on both rounds, so a `skipped` round holds
+ * the money exactly as a failure would — which is the right posture for a
+ * round whose real message is "I have nothing to say about this date."
+ */
+export type RoundStatus = "running" | "passed" | "failed" | "skipped";
+
 export type RoundResult = {
   round: 1 | 2;
   auditDate: string;
-  status: "running" | "passed" | "failed";
+  status: RoundStatus;
   symbolsTotal: number;
   symbolsChecked: number;
   issues: string[];
@@ -106,20 +137,43 @@ export async function collectAuditPicks(
       const entryIds = (entries ?? []).map((e) => e.id);
       if (entryIds.length === 0) continue;
 
-      const { data: rows } = await supabase
-        .from(source.pickTable)
-        .select("id, symbol, open_price, close_price")
-        .in("entry_id", entryIds);
+      /**
+       * Paged, because PostgREST caps a response at 1000 rows and says nothing
+       * about it.
+       *
+       * At 12 picks an entry that ceiling arrives at 84 entrants — the
+       * 2026-08-19 $2 contest had 86, so 1032 picks existed and the audit saw
+       * 1000. The missing 32 could not be verified, could not be recovered,
+       * and could not fail the round: they were simply absent from every list
+       * this function returns, so the round passed judgement on a partial
+       * contest while reporting full coverage.
+       */
+      for (let from = 0; ; from += PICK_PAGE_SIZE) {
+        const { data: rows, error } = await supabase
+          .from(source.pickTable)
+          .select("id, symbol, open_price, close_price")
+          .in("entry_id", entryIds)
+          .order("id", { ascending: true })
+          .range(from, from + PICK_PAGE_SIZE - 1);
 
-      for (const row of rows ?? []) {
-        picks.push({
-          pickId: row.id,
-          symbol: String(row.symbol).toUpperCase(),
-          openPrice: row.open_price,
-          closePrice: row.close_price,
-          contestType: source.type,
-          contestId,
-        });
+        if (error) {
+          throw new Error(
+            `collectAuditPicks: ${source.pickTable} page at ${from} failed — ${error.message}`
+          );
+        }
+
+        for (const row of rows ?? []) {
+          picks.push({
+            pickId: row.id,
+            symbol: String(row.symbol).toUpperCase(),
+            openPrice: row.open_price,
+            closePrice: row.close_price,
+            contestType: source.type,
+            contestId,
+          });
+        }
+
+        if (!rows || rows.length < PICK_PAGE_SIZE) break;
       }
     }
   }
@@ -129,6 +183,63 @@ export async function collectAuditPicks(
 
 function diffPct(a: number, b: number): number {
   return (Math.abs(a - b) / b) * 100;
+}
+
+/**
+ * Writes a recovered open/close onto every pick that was short one.
+ *
+ * A stored value always wins — this only ever fills a blank, never overwrites
+ * a price the live capture already got. Both rounds use it: round 1 to recover
+ * what the 4 PM capture missed, round 2 to fill anything still blank when the
+ * independent source is queried an hour later.
+ */
+async function applyRecoveredPrices(
+  supabase: ServiceClient,
+  symbolPicks: AuditPick[],
+  source: DailyOpenClose | undefined,
+  round: 1 | 2
+): Promise<number> {
+  let filled = 0;
+
+  for (const pick of symbolPicks) {
+    const open = isUsableQuote(pick.openPrice)
+      ? pick.openPrice
+      : isUsableQuote(source?.open)
+        ? source.open
+        : null;
+    const close = isUsableQuote(pick.closePrice)
+      ? pick.closePrice
+      : isUsableQuote(source?.close)
+        ? source.close
+        : null;
+
+    if (open === pick.openPrice && close === pick.closePrice) continue;
+
+    const table =
+      pick.contestType === "sddfs" ? "sddfs_entry_picks" : "sdwfs_entry_picks";
+
+    await supabase
+      .from(table)
+      .update({
+        open_price: open,
+        close_price: close,
+        pct_change: safePctChange(open, close),
+      })
+      .eq("id", pick.pickId);
+
+    // Keep the caller's in-memory copy in step with the row just written, so
+    // anything deriving a "stored" value after this sees the recovered price
+    // rather than the blank that has already been filled.
+    pick.openPrice = open;
+    pick.closePrice = close;
+
+    filled++;
+    console.log(
+      `[dfs-audit:${round}] ${pick.symbol} pick ${pick.pickId} backfilled open=${open} close=${close}`
+    );
+  }
+
+  return filled;
 }
 
 async function upsertRun(
@@ -181,11 +292,13 @@ export async function runAuditRound1(auditDate: string): Promise<RoundResult> {
   if (picks.length === 0) {
     const result: RoundResult = {
       ...base,
-      status: "passed",
+      status: "skipped",
       symbolsTotal: 0,
       symbolsChecked: 0,
       issues: [],
-      message: "No contests to audit for this date.",
+      message:
+        "No locked or scored contests found for this date — nothing audited. " +
+        "If contests did run, this is a date mismatch, not a clean bill of health.",
     };
     await upsertRun(supabase, result);
     return result;
@@ -202,12 +315,39 @@ export async function runAuditRound1(auditDate: string): Promise<RoundResult> {
     )
   );
 
-  // Resume where earlier runs stopped rather than re-spending credits.
+  /**
+   * Resume where earlier runs stopped — but only past symbols that actually
+   * resolved.
+   *
+   * This used to skip anything with a row in `dfs_price_audits`, and a row is
+   * written whether the lookup succeeded or failed. So "we asked and got
+   * nothing" was recorded identically to "we asked and got the price," and the
+   * symbol was never asked about again.
+   *
+   * The cron fires every two minutes for an hour precisely so a transient miss
+   * gets another try. Marking failures complete cancelled all of it: one bad
+   * response at 21:03 removed that symbol from the remaining 29 attempts. On
+   * 2026-08-21 eleven picks across seven ordinary large caps — AT&T, Medtronic,
+   * Ulta — stayed null through the entire window for this reason, and the four
+   * contests holding them are still frozen.
+   *
+   * `unrecoverable` is the one failure that does stay done: a coin's 09:30 open
+   * cannot be reconstructed after the fact by any source, so retrying it is
+   * spend with no possible outcome. It still fails the round below — the money
+   * stays held — it just stops re-asking a question with no answer.
+   */
   const { data: alreadyChecked } = await supabase
     .from("dfs_price_audits")
-    .select("symbol")
+    .select("symbol, open_status, close_status")
     .eq("audit_date", auditDate);
-  const done = new Set((alreadyChecked ?? []).map((r) => r.symbol));
+
+  const done = new Set(
+    (alreadyChecked ?? [])
+      .filter(
+        (r) => !isRetryableStatus(r.open_status) && !isRetryableStatus(r.close_status)
+      )
+      .map((r) => r.symbol as string)
+  );
 
   const pending = incomplete.filter((s) => !done.has(s));
   const batch = pending.slice(0, SYMBOLS_PER_RUN);
@@ -252,13 +392,16 @@ export async function runAuditRound1(auditDate: string): Promise<RoundResult> {
     if (needsOpen) {
       if (isUsableQuote(source?.open)) {
         openStatus = "backfilled";
+      } else if (isCrypto) {
+        // Not a failed lookup — a question with no answer. Recorded as final
+        // so later runs stop spending on it; it still fails the round below.
+        openStatus = "unrecoverable";
+        issues.push(
+          `${symbol}: open missing — a coin's 09:30 price cannot be recovered after the fact, only bracketed`
+        );
       } else {
         openStatus = "missing";
-        issues.push(
-          isCrypto
-            ? `${symbol}: open missing — a coin's 09:30 price cannot be recovered after the fact, only bracketed`
-            : `${symbol}: open missing and unrecoverable`
-        );
+        issues.push(`${symbol}: open missing — will retry next run`);
       }
     }
     if (needsClose) {
@@ -266,43 +409,11 @@ export async function runAuditRound1(auditDate: string): Promise<RoundResult> {
         closeStatus = "backfilled";
       } else {
         closeStatus = "missing";
-        issues.push(`${symbol}: close missing and unrecoverable`);
+        issues.push(`${symbol}: close missing — will retry next run`);
       }
     }
 
-    // Write the recovered values back onto every pick that was short one.
-    for (const pick of symbolPicks) {
-      const open = isUsableQuote(pick.openPrice)
-        ? pick.openPrice
-        : isUsableQuote(source?.open)
-          ? source.open
-          : null;
-      const close = isUsableQuote(pick.closePrice)
-        ? pick.closePrice
-        : isUsableQuote(source?.close)
-          ? source.close
-          : null;
-
-      const changedOpen = open !== pick.openPrice;
-      const changedClose = close !== pick.closePrice;
-      if (!changedOpen && !changedClose) continue;
-
-      const table =
-        pick.contestType === "sddfs" ? "sddfs_entry_picks" : "sdwfs_entry_picks";
-
-      await supabase
-        .from(table)
-        .update({
-          open_price: open,
-          close_price: close,
-          pct_change: safePctChange(open, close),
-        })
-        .eq("id", pick.pickId);
-
-      console.log(
-        `[dfs-audit:1] ${symbol} pick ${pick.pickId} backfilled open=${open} close=${close}`
-      );
-    }
+    await applyRecoveredPrices(supabase, symbolPicks, source, 1);
 
     await supabase.from("dfs_price_audits").upsert(
       {
@@ -402,14 +513,25 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
     .eq("round", 1)
     .maybeSingle();
 
-  if (round1?.status !== "passed") {
+  /**
+   * Round 2 used to refuse to run unless round 1 had passed — which withheld
+   * the second attempt in exactly the case that needed it. On 2026-08-21 round
+   * 1 failed with eleven unrecovered closes and round 2 responded by checking
+   * zero symbols, so the only source that could still answer was never asked.
+   *
+   * A failed round 1 is now the reason to run, not the reason to stop: this
+   * round both verifies what exists and fills what is still blank. The one
+   * state still worth waiting on is `running`, where round 1 is mid-sweep and
+   * its own next invocation is a better place to continue.
+   */
+  if (round1?.status === "running") {
     const result: RoundResult = {
       ...base,
-      status: "failed",
+      status: "skipped",
       symbolsTotal: 0,
       symbolsChecked: 0,
-      issues: [`Round 1 status is "${round1?.status ?? "not run"}"`],
-      message: "Round 2 needs a passing round 1 first.",
+      issues: ["Round 1 is still sweeping — deferring to its next run."],
+      message: "Round 1 in progress; round 2 will pick this date up after it settles.",
     };
     await upsertRun(supabase, result);
     return result;
@@ -419,11 +541,13 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
   if (picks.length === 0) {
     const result: RoundResult = {
       ...base,
-      status: "passed",
+      status: "skipped",
       symbolsTotal: 0,
       symbolsChecked: 0,
       issues: [],
-      message: "No contests to audit for this date.",
+      message:
+        "No locked or scored contests found for this date — nothing audited. " +
+        "If contests did run, this is a date mismatch, not a clean bill of health.",
     };
     await upsertRun(supabase, result);
     return result;
@@ -464,11 +588,6 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
 
   for (const symbol of batch) {
     const symbolPicks = picks.filter((p) => p.symbol === symbol);
-    const storedOpen = symbolPicks.find((p) => isUsableQuote(p.openPrice))
-      ?.openPrice as number | undefined;
-    const storedClose = symbolPicks.find((p) => isUsableQuote(p.closePrice))
-      ?.closePrice as number | undefined;
-
     const prior = rows.get(symbol);
     const crypto = cryptoChecks[symbol];
 
@@ -486,6 +605,30 @@ export async function runAuditRound2(auditDate: string): Promise<RoundResult> {
           close: crypto.close,
         }
       : verified[symbol];
+
+    /**
+     * Fill before verifying.
+     *
+     * This round runs an hour after round 1, against a budget that has had an
+     * hour to recover, so it is a genuine second attempt at anything still
+     * blank — not merely a re-read of what round 1 managed. A price it fills
+     * here is single-sourced and gets labelled that way below; a blank left
+     * unfilled fails the round and holds the money, exactly as before.
+     *
+     * A coin's open is excluded on purpose: `source.open` for crypto is the
+     * midpoint of the hourly bracket either side of 09:30, which is an
+     * estimate. Writing it would put a guessed baseline under every later
+     * score, which is the one outcome worse than leaving the pick unpriced.
+     */
+    const recoverySource: DailyOpenClose | undefined = source
+      ? { ...source, open: crypto ? null : source.open }
+      : undefined;
+    await applyRecoveredPrices(supabase, symbolPicks, recoverySource, 2);
+
+    const storedOpen = symbolPicks.find((p) => isUsableQuote(p.openPrice))
+      ?.openPrice as number | undefined;
+    const storedClose = symbolPicks.find((p) => isUsableQuote(p.closePrice))
+      ?.closePrice as number | undefined;
 
     // A value round 1 recovered came from this same source, so agreement here
     // proves only that the source is self-consistent — it is recorded as

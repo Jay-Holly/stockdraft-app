@@ -130,11 +130,37 @@ export async function getSdwfsContestLeaderboard(
     return { prizePool, isFinal: true, rows };
   }
 
-  // Open or locked: project live standings.
-  const allSymbols =
-    contest.status === "locked"
-      ? [...new Set((picks ?? []).map((p) => p.symbol))]
-      : [];
+  // An open contest has no open_price on any pick yet — the lock hasn't
+  // happened, so every entry is a hard, un-scoreable 0%. Running the payout
+  // split on that computes a genuine result from garbage: every entry ties
+  // at 0%, so every one of them "won" an equal slice of the whole pool and
+  // the board showed real dollar amounts next to a contest that hadn't
+  // locked and had nothing to pay out. The bug isn't the split math —
+  // computeSdwfsPayouts divides a tie correctly. The bug was calling it at
+  // all before there was anything real to divide. Open contests get no rank
+  // and no payout, full stop. (Same fix as sddfs/leaderboard.ts.)
+  if (contest.status === "open") {
+    const rows: SdwfsLeaderboardRow[] = entries.map((entry, i) => ({
+      rank: i + 1,
+      entryId: entry.id,
+      userId: entry.user_id,
+      username: usernames.get(entry.user_id) ?? "Unknown",
+      totalScore: 0,
+      payout: 0,
+      isLive: false,
+      isMe: entry.user_id === viewerUserId,
+      picks: (picksByEntry.get(entry.id) ?? []).map((p) => ({
+        sector: p.sector,
+        symbol: p.symbol,
+        pctChange: null,
+      })),
+    }));
+    return { prizePool, isFinal: false, rows };
+  }
+
+  // Locked: every pick has a real open_price, so a live re-price against the
+  // current quote is a genuine in-progress standing.
+  const allSymbols = [...new Set((picks ?? []).map((p) => p.symbol))];
   // A fabricated percentage (from a stale snapshot) is worse than showing
   // "—" for a pick — no fallback on the live comparison either.
   const liveQuotes = await fetchLiveSdwfsQuotes(allSymbols);
@@ -177,7 +203,7 @@ export async function getSdwfsContestLeaderboard(
         username: usernames.get(entry.user_id) ?? "Unknown",
         totalScore: scoreByEntry.get(entry.id) ?? 0,
         payout: payout?.payout ?? 0,
-        isLive: contest.status === "locked",
+        isLive: true,
         isMe: entry.user_id === viewerUserId,
         picks: livePicksByEntry.get(entry.id) ?? [],
       };

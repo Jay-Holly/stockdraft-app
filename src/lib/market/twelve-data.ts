@@ -67,9 +67,29 @@ function toNumber(value: unknown): number | null {
   return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : null;
 }
 
-async function twelveDataFetch(path: string): Promise<unknown | null> {
+/**
+ * Why this reports *how* it failed rather than just returning null.
+ *
+ * A batch request that comes back empty has two very different causes, and
+ * the caller has to tell them apart. One bad ticker in the batch is worth
+ * retrying the other symbols individually; a spent credit budget is not —
+ * retrying that just burns the retry on a request that cannot succeed, and
+ * (worse) makes the next legitimate caller wait behind it.
+ *
+ * Twelve Data signals an exhausted budget two different ways: HTTP 429, and —
+ * more often on the free tier — HTTP 200 carrying `{"code": 429, "status":
+ * "error"}` in the body. Reading only the status line misses the second kind
+ * and makes a quota failure look like a data failure.
+ */
+type TwelveDataResult =
+  | { ok: true; data: unknown }
+  | { ok: false; rateLimited: boolean; reason: string };
+
+async function twelveDataFetch(path: string): Promise<TwelveDataResult> {
   const apiKey = process.env.TWELVE_DATA_API_KEY?.trim();
-  if (!apiKey) return null;
+  if (!apiKey) {
+    return { ok: false, rateLimited: false, reason: "no api key" };
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -80,17 +100,57 @@ async function twelveDataFetch(path: string): Promise<unknown | null> {
       signal: controller.signal,
       cache: "no-store",
     });
+
     if (!res.ok) {
       console.error(`[twelve-data] HTTP ${res.status} for ${path}`);
-      return null;
+      return {
+        ok: false,
+        rateLimited: res.status === 429,
+        reason: `HTTP ${res.status}`,
+      };
     }
-    return await res.json();
+
+    const data = await res.json();
+
+    // A 200 that is actually an error. Only treat it as one when there are no
+    // `values` anywhere in the payload — a multi-symbol response legitimately
+    // mixes good blocks with per-symbol error blocks, and throwing the whole
+    // response away over one bad ticker is the poisoning this guards against.
+    const code = (data as { code?: number })?.code;
+    const status = (data as { status?: string })?.status;
+    if (status === "error" && !hasAnyValues(data)) {
+      const limited = code === 429;
+      console.error(
+        `[twelve-data] body error code=${code} for ${path}: ${
+          (data as { message?: string })?.message ?? "(no message)"
+        }`
+      );
+      return {
+        ok: false,
+        rateLimited: limited,
+        reason: limited ? "credits exhausted" : `body code ${code}`,
+      };
+    }
+
+    return { ok: true, data };
   } catch (err) {
     console.error(`[twelve-data] request failed for ${path}:`, err);
-    return null;
+    return { ok: false, rateLimited: false, reason: String(err) };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** True if the payload carries at least one series, at either nesting level. */
+function hasAnyValues(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  if (Array.isArray((payload as TimeSeriesBlock).values)) return true;
+  return Object.values(payload as Record<string, unknown>).some(
+    (block) =>
+      block &&
+      typeof block === "object" &&
+      Array.isArray((block as TimeSeriesBlock).values)
+  );
 }
 
 type TimeSeriesValue = {
@@ -151,14 +211,84 @@ export async function fetchDailyOpenClose(
     order: "ASC",
   });
 
-  const payload = await twelveDataFetch(`/time_series?${params.toString()}`);
-  if (!payload || typeof payload !== "object") return result;
+  const batched = await twelveDataFetch(`/time_series?${params.toString()}`);
 
-  // A single-symbol request returns the block directly; a multi-symbol
-  // request returns a map keyed by the Twelve Data symbol.
+  if (batched.ok) {
+    absorbBlocks(batched.data, tdSymbols, result);
+  } else if (batched.rateLimited) {
+    // Nothing to salvage and nothing to retry: the budget is spent, so every
+    // symbol here comes back null and the caller leaves them pending rather
+    // than recording them as checked-and-missing.
+    console.error(
+      `[twelve-data] ${supported.length} symbol(s) unresolved for ${dateIso} — ${batched.reason}`
+    );
+    return result;
+  }
+
+  /**
+   * One unanswerable ticker used to cost the other seven their prices.
+   *
+   * A multi-symbol request is all-or-nothing at the transport level: a symbol
+   * Twelve Data cannot parse takes down the whole response, and every symbol
+   * in that batch came back null despite being perfectly ordinary. Downstream
+   * that reads as "eight symbols unrecoverable," the audit records all eight
+   * as missing, and the contests they belong to freeze.
+   *
+   * Retrying the stragglers one at a time costs the same credit per symbol it
+   * would have cost inside the batch — the batch is a round-trip optimisation,
+   * not a billing one — so the only thing spent here is time. Skipped when the
+   * budget is exhausted, since a retry then cannot succeed.
+   */
+  const stragglers = supported.filter((s) => !isUsableBar(result[s]));
+  if (stragglers.length > 0) {
+    for (const symbol of stragglers) {
+      const single = new URLSearchParams({
+        symbol,
+        interval: "1min",
+        start_date: `${dateIso} 09:30:00`,
+        end_date: `${dateIso} 16:00:00`,
+        timezone: "America/New_York",
+        outputsize: "400",
+        order: "ASC",
+      });
+
+      const one = await twelveDataFetch(`/time_series?${single.toString()}`);
+      if (!one.ok) {
+        if (one.rateLimited) {
+          console.error(
+            `[twelve-data] stopping per-symbol retries for ${dateIso} — ${one.reason}`
+          );
+          break;
+        }
+        continue;
+      }
+      absorbBlocks(one.data, symbol, result);
+    }
+  }
+
+  return result;
+}
+
+/** A bar is only useful once it carries at least one real price. */
+function isUsableBar(bar: DailyOpenClose | undefined): boolean {
+  return Boolean(bar && (bar.open !== null || bar.close !== null));
+}
+
+/**
+ * Folds a time_series payload into `result`, for either response shape: a
+ * single-symbol request returns the block directly, a multi-symbol request
+ * returns a map keyed by the Twelve Data symbol.
+ */
+function absorbBlocks(
+  payload: unknown,
+  requestedKey: string,
+  result: Record<string, DailyOpenClose>
+): void {
+  if (!payload || typeof payload !== "object") return;
+
   const blocks: Array<[string, TimeSeriesBlock]> =
     "values" in (payload as TimeSeriesBlock)
-      ? [[tdSymbols, payload as TimeSeriesBlock]]
+      ? [[requestedKey, payload as TimeSeriesBlock]]
       : Object.entries(payload as Record<string, TimeSeriesBlock>);
 
   for (const [key, block] of blocks) {
@@ -175,6 +305,4 @@ export async function fetchDailyOpenClose(
       close: toNumber(values[values.length - 1].close),
     };
   }
-
-  return result;
 }
