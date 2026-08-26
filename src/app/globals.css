@@ -672,11 +672,11 @@ body:has(.landing-screen) {
 }
 
 .stock-ticker-change--up {
-  color: rgba(74, 222, 128, 0.6);
+  color: rgba(74, 222, 128, 0.95);
 }
 
 .stock-ticker-change--down {
-  color: rgba(248, 113, 113, 0.6);
+  color: rgba(248, 113, 113, 0.95);
 }
 
 /* Desktop: fixed narrow side columns. */
@@ -787,12 +787,26 @@ body:has(.landing-screen) {
    Wins over the max-width:767px horizontal-ticker rules above via higher
    selector specificity, regardless of viewport width. */
 .landing-screen.sides-always {
-  --landing-ticker-width: 34px;
+  --landing-ticker-width: 18px;
   height: auto;
+  /* No min-height here on purpose: the frame (including its black
+     background and the ticker strips, which are sized off this box) used
+     to be forced to fill the whole device height even when the actual
+     content was shorter, leaving a dead black band below "How to Play" on
+     most phones. The frame is now exactly as tall as its content. */
+  /* Fills the viewport so the black backdrop runs edge to edge; without
+     this the frame ends at its content and the page's navy background
+     shows through underneath as a mismatched band. The ticker frame stays
+     content-sized inside it, and the whole block is centred. */
   min-height: 100dvh;
   max-height: none;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-block: 2dvh;
 }
 
 body:has(.landing-screen.sides-always) {
@@ -959,9 +973,9 @@ body:has(.landing-screen.sides-always) {
 
 .orbit-strip-item .stock-ticker-symbol {
   font-size: 6.5px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.85);
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -4167,8 +4181,13 @@ body:has(.landing-screen.sides-always) {
   background-color: #000;
 }
 
+/* Scale the whole composition to whichever dimension runs out first,
+   instead of a fixed 30rem cap that left most of a tall window empty.
+   1.68 is the measured content-height : panel-width ratio; the 6rem
+   allowance covers the ticker frame, which overhangs the panel by 30px
+   on every side, plus the screen's own padding. */
 .landing-screen.sides-always .landing-hero-panel {
-  max-width: 30rem;
+  max-width: min(calc(100vw - 5rem), calc((100dvh - 6rem) / 1.68));
 }
 
 .landing-hero-content {
@@ -4178,6 +4197,11 @@ body:has(.landing-screen.sides-always) {
   gap: 0;
   width: 100%;
   text-align: center;
+  /* Clears the bottom ticker strip, which sits only ~4px below this box's
+     own bottom edge (it's part of an overlay inset -30px from the frame,
+     with the strip itself 26px tall) — without this, whatever the last
+     piece of content is collides with the ticker running behind it. */
+  padding-bottom: 1.75rem;
 }
 
 .landing-headline {
@@ -4204,18 +4228,34 @@ body:has(.landing-screen.sides-always) {
   border: 0;
 }
 
-.landing-headline-image {
+/* "Real Markets" — sized to render at the same on-screen scale it had when
+   both lines were one flattened image (56% of a 1100px canvas), so splitting
+   the file didn't change how this line looks. */
+.landing-headline-main-image {
   display: block;
-  width: 56%;
+  width: 54%;
+  height: auto;
+  margin: 0.15rem auto 0;
+}
+
+/* "Where Fantasy Sports Meet" — bigger and wider than the line below it. */
+.landing-headline-kicker-image {
+  display: block;
+  width: 62%;
   height: auto;
   margin: 0 auto;
 }
 
+/* container-type lets the tagline size itself off THIS box's actual
+   rendered width via cqw, instead of vw (viewport width) — vw was wrong
+   here because this box caps at 30rem while the viewport keeps growing,
+   so vw-based text kept scaling past what the box could hold and wrapped. */
 .landing-shield-stage {
+  container-type: inline-size;
   position: relative;
   z-index: 1;
   width: 100%;
-  margin-top: -3%;
+  margin-top: 0.3%;
 }
 
 .landing-shield {
@@ -4244,7 +4284,7 @@ body:has(.landing-screen.sides-always) {
   flex-direction: column;
   gap: 0.1rem;
   margin: 0;
-  font-size: clamp(0.85rem, 2.7vw, 1.15rem);
+  font-size: clamp(0.5rem, 2.2cqw, 0.85rem);
   line-height: 1.3;
   font-weight: 700;
   color: #fff;

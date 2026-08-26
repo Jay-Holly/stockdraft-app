@@ -1,16 +1,30 @@
+import Image from "next/image";
 import Link from "next/link";
 
+const SHIELD = {
+  src: "/images/brand/stockduel-shield-badge.webp",
+  width: 333,
+  height: 500,
+} as const;
+
 export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const sizes = {
-    sm: "text-lg",
-    md: "text-2xl",
-    lg: "text-4xl",
+  const heights = {
+    sm: 32,
+    md: 44,
+    lg: 64,
   };
 
+  const h = heights[size];
   return (
-    <Link href="/" className={`font-black tracking-tight ${sizes[size]}`}>
-      <span className="text-gold">Stock</span>
-      <span className="text-white">Duel</span>
+    <Link href="/" className="inline-flex items-center">
+      <Image
+        src={SHIELD.src}
+        alt="StockDuel"
+        width={SHIELD.width}
+        height={SHIELD.height}
+        priority
+        style={{ height: h, width: "auto" }}
+      />
     </Link>
   );
 }

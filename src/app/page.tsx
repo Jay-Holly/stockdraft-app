@@ -3,18 +3,26 @@ import Link from "next/link";
 import { PerimeterTicker } from "@/components/PerimeterTicker";
 import { APP_TAGLINE } from "@/lib/brand";
 
-// Two pieces of artwork — the headline lettering and the shield — with the
-// tagline and buttons as real markup on top. The buttons are genuine links
-// rather than invisible hotspots floated over a picture, so they stay put when
-// the art changes and are proper tap targets on a phone.
+// Three pieces of artwork — the headline's two lines and the shield — with
+// the tagline and buttons as real markup on top. The buttons are genuine
+// links rather than invisible hotspots floated over a picture, so they stay
+// put when the art changes and are proper tap targets on a phone.
 //
 // The headline is an image because its gold-gradient lettering can't be
-// reproduced in CSS; the real words are still in the h1 for screen readers and
-// search engines, just visually hidden behind it.
-const HEADLINE = {
-  src: "/images/brand/stockduel-headline.webp",
-  width: 1100,
-  height: 336,
+// reproduced in CSS; the real words are still in the h1 for screen readers
+// and search engines, just visually hidden behind it. It's split into two
+// files, cropped from the same source, so the top line can be sized
+// independently of "Real Markets" without touching that line's pixels.
+const HEADLINE_KICKER = {
+  src: "/images/brand/stockduel-headline-kicker.webp",
+  width: 888,
+  height: 155,
+} as const;
+
+const HEADLINE_MAIN = {
+  src: "/images/brand/stockduel-headline-main.webp",
+  width: 1068,
+  height: 138,
 } as const;
 
 const HERO = {
@@ -37,13 +45,22 @@ export default function HomePage() {
                   Where Fantasy Sports Meet Real Markets
                 </span>
                 <Image
-                  src={HEADLINE.src}
+                  src={HEADLINE_KICKER.src}
                   alt=""
-                  width={HEADLINE.width}
-                  height={HEADLINE.height}
+                  width={HEADLINE_KICKER.width}
+                  height={HEADLINE_KICKER.height}
                   priority
-                  className="landing-headline-image"
-                  sizes="(max-width: 767px) 96vw, 30rem"
+                  className="landing-headline-kicker-image"
+                  sizes="(max-width: 767px) 96vw, min(90vw, 900px)"
+                />
+                <Image
+                  src={HEADLINE_MAIN.src}
+                  alt=""
+                  width={HEADLINE_MAIN.width}
+                  height={HEADLINE_MAIN.height}
+                  priority
+                  className="landing-headline-main-image"
+                  sizes="(max-width: 767px) 96vw, min(90vw, 900px)"
                 />
               </h1>
 
@@ -55,7 +72,7 @@ export default function HomePage() {
                   height={HERO.height}
                   priority
                   className="landing-shield"
-                  sizes="(max-width: 767px) 96vw, 30rem"
+                  sizes="(max-width: 767px) 96vw, min(90vw, 900px)"
                 />
 
                 {/* Positioned over the art's own floor area, which starts
