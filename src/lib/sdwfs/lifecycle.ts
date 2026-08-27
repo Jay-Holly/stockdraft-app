@@ -20,6 +20,25 @@ import { isAuditGateEnabled } from "@/lib/dfs/audit-gate";
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 /**
+ * PostgREST builds an `.in()` filter straight into the request URL, so one
+ * UPDATE covering 1,000 ids (~37,000 characters of UUIDs) hits a gateway
+ * URL-length limit and comes back a flat 400 Bad Request — confirmed
+ * 2026-08-26 on the SDDFS equivalent of this write loop, where the QA
+ * coverage accounts spread picks widely enough that 1,000 of them landed on
+ * one distinct price. Chunking keeps every request a safe size regardless of
+ * how many picks collapse onto the same value.
+ */
+const UPDATE_CHUNK_SIZE = 200;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
  * Locks any 'open' contests past lock_at (Monday 9 AM ET) and snapshots
  * each pick's open price using a live Monday-morning quote.
  */
@@ -103,15 +122,17 @@ async function lockDueContests(
     }
 
     for (const [openPrice, pickIds] of picksByPrice) {
-      const { error: updateError } = await supabase
-        .from("sdwfs_entry_picks")
-        .update({ open_price: openPrice })
-        .in("id", pickIds);
+      for (const idsChunk of chunk(pickIds, UPDATE_CHUNK_SIZE)) {
+        const { error: updateError } = await supabase
+          .from("sdwfs_entry_picks")
+          .update({ open_price: openPrice })
+          .in("id", idsChunk);
 
-      if (updateError) {
-        throw new Error(
-          `Failed to snapshot ${pickIds.length} open price(s) for contest ${contest.id}: ${updateError.message}`
-        );
+        if (updateError) {
+          throw new Error(
+            `Failed to snapshot ${idsChunk.length} of ${pickIds.length} open price(s) for contest ${contest.id}: ${updateError.message}`
+          );
+        }
       }
     }
 
@@ -157,7 +178,12 @@ async function scoreClosedContests(
   // score neutral through no fault of the player.
   const picksByContest = new Map<
     string,
-    { id: string; symbol: string; open_price: number | null }[]
+    {
+      id: string;
+      symbol: string;
+      open_price: number | null;
+      close_price: number | null;
+    }[]
   >();
 
   for (const contest of lockedContests) {
@@ -174,7 +200,7 @@ async function scoreClosedContests(
 
     const { data: picks } = await supabase
       .from("sdwfs_entry_picks")
-      .select("id, symbol, open_price")
+      .select("id, symbol, open_price, close_price")
       .in("entry_id", entryIds);
 
     picksByContest.set(contest.id, picks ?? []);
@@ -257,16 +283,23 @@ async function scoreClosedContests(
     >();
 
     for (const pick of picks) {
+      // Never touch a pick that already has a real close from an earlier
+      // tick — see the matching fix in sddfs/lifecycle.ts. Doing this
+      // unconditionally meant a retry that couldn't re-resolve a symbol
+      // overwrote a prior tick's good close_price with null.
+      if (isUsableQuote(pick.close_price)) continue;
+
       const closePrice = prices[pick.symbol.toUpperCase()];
       const pctChange = safePctChange(pick.open_price, closePrice);
 
-      if (pctChange === null) {
+      if (!isUsableQuote(closePrice)) {
         console.error(
-          `[sdwfs] unscoreable pick ${pick.id} (${pick.symbol}): open=${pick.open_price} close=${closePrice}; scoring neutral`
+          `[sdwfs] no usable close for ${pick.symbol} (pick ${pick.id}) this run; leaving as-is for the next retry`
         );
+        continue;
       }
 
-      const resolvedClose = isUsableQuote(closePrice) ? closePrice : null;
+      const resolvedClose = closePrice;
       const key = `${resolvedClose}|${pctChange}`;
       const bucket = picksByResult.get(key) ?? {
         closePrice: resolvedClose,
@@ -278,15 +311,17 @@ async function scoreClosedContests(
     }
 
     for (const { closePrice, pctChange, ids } of picksByResult.values()) {
-      const { error: updateError } = await supabase
-        .from("sdwfs_entry_picks")
-        .update({ close_price: closePrice, pct_change: pctChange })
-        .in("id", ids);
+      for (const idsChunk of chunk(ids, UPDATE_CHUNK_SIZE)) {
+        const { error: updateError } = await supabase
+          .from("sdwfs_entry_picks")
+          .update({ close_price: closePrice, pct_change: pctChange })
+          .in("id", idsChunk);
 
-      if (updateError) {
-        throw new Error(
-          `Failed to write ${ids.length} close price(s) for contest ${contest.id}: ${updateError.message}`
-        );
+        if (updateError) {
+          throw new Error(
+            `Failed to write ${idsChunk.length} of ${ids.length} close price(s) for contest ${contest.id}: ${updateError.message}`
+          );
+        }
       }
     }
 
@@ -299,6 +334,7 @@ async function scoreClosedContests(
     const stillMissingClose = picks.some(
       (pick) =>
         isUsableQuote(pick.open_price) &&
+        !isUsableQuote(pick.close_price) &&
         !isUsableQuote(prices[pick.symbol.toUpperCase()])
     );
 

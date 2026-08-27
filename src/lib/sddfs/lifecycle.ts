@@ -21,6 +21,25 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 
 const MARKET_CLOSE_HOUR_ET = 16;
 
+/**
+ * PostgREST builds an `.in()` filter straight into the request URL, so one
+ * UPDATE covering 1,000 ids (~37,000 characters of UUIDs) hits a gateway
+ * URL-length limit and comes back a flat 400 Bad Request — confirmed
+ * 2026-08-26 against today's $2 contest, where the QA coverage accounts
+ * spread picks widely enough that exactly 1,000 of them landed on one
+ * distinct close price/pct_change pair. Chunking keeps every request a safe
+ * size regardless of how many picks collapse onto the same value.
+ */
+const UPDATE_CHUNK_SIZE = 200;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 /** Locks any 'open' contests past lock_at and snapshots each pick's open price. */
 async function lockDueContests(
   supabase: ServiceClient
@@ -109,18 +128,20 @@ async function lockDueContests(
     }
 
     for (const [openPrice, pickIds] of picksByPrice) {
-      const { error: updateError } = await supabase
-        .from("sddfs_entry_picks")
-        .update({ open_price: openPrice })
-        .in("id", pickIds);
+      for (const idsChunk of chunk(pickIds, UPDATE_CHUNK_SIZE)) {
+        const { error: updateError } = await supabase
+          .from("sddfs_entry_picks")
+          .update({ open_price: openPrice })
+          .in("id", idsChunk);
 
-      if (updateError) {
-        // Leave the contest open rather than locking it with only some
-        // baselines written — a partially-priced lock scores those picks
-        // neutral and pays out on it. The next tick retries the whole thing.
-        throw new Error(
-          `Failed to snapshot ${pickIds.length} open price(s) for contest ${contest.id}: ${updateError.message}`
-        );
+        if (updateError) {
+          // Leave the contest open rather than locking it with only some
+          // baselines written — a partially-priced lock scores those picks
+          // neutral and pays out on it. The next tick retries the whole thing.
+          throw new Error(
+            `Failed to snapshot ${idsChunk.length} of ${pickIds.length} open price(s) for contest ${contest.id}: ${updateError.message}`
+          );
+        }
       }
     }
 
@@ -163,7 +184,12 @@ async function scoreClosedContests(
   // score neutral through no fault of the player.
   const picksByContest = new Map<
     string,
-    { id: string; symbol: string; open_price: number | null }[]
+    {
+      id: string;
+      symbol: string;
+      open_price: number | null;
+      close_price: number | null;
+    }[]
   >();
 
   for (const contest of lockedContests) {
@@ -180,7 +206,7 @@ async function scoreClosedContests(
 
     const { data: picks } = await supabase
       .from("sddfs_entry_picks")
-      .select("id, symbol, open_price")
+      .select("id, symbol, open_price, close_price")
       .in("entry_id", entryIds);
 
     picksByContest.set(contest.id, picks ?? []);
@@ -270,16 +296,27 @@ async function scoreClosedContests(
     >();
 
     for (const pick of picks) {
+      // A retry that can't re-resolve a symbol must never touch a pick that
+      // already has a real close from an earlier tick — this ran unconditionally
+      // before, so any symbol still cold on a later retry got its close_price
+      // overwritten with null, destroying progress a prior tick had already
+      // made. Confirmed on the $2 contest on 2026-08-26: a second scoring
+      // attempt made the gap worse (609 → 816 missing), not better, purely
+      // from this clobbering. Skipping an already-closed pick makes every
+      // retry additive instead of destructive.
+      if (isUsableQuote(pick.close_price)) continue;
+
       const closePrice = prices[pick.symbol.toUpperCase()];
       const pctChange = safePctChange(pick.open_price, closePrice);
 
-      if (pctChange === null) {
+      if (!isUsableQuote(closePrice)) {
         console.error(
-          `[sddfs] unscoreable pick ${pick.id} (${pick.symbol}): open=${pick.open_price} close=${closePrice}; scoring neutral`
+          `[sddfs] no usable close for ${pick.symbol} (pick ${pick.id}) this run; leaving as-is for the next retry`
         );
+        continue;
       }
 
-      const resolvedClose = isUsableQuote(closePrice) ? closePrice : null;
+      const resolvedClose = closePrice;
       const key = `${resolvedClose}|${pctChange}`;
       const bucket = picksByResult.get(key) ?? {
         closePrice: resolvedClose,
@@ -291,18 +328,20 @@ async function scoreClosedContests(
     }
 
     for (const { closePrice, pctChange, ids } of picksByResult.values()) {
-      const { error: updateError } = await supabase
-        .from("sddfs_entry_picks")
-        .update({ close_price: closePrice, pct_change: pctChange })
-        .in("id", ids);
+      for (const idsChunk of chunk(ids, UPDATE_CHUNK_SIZE)) {
+        const { error: updateError } = await supabase
+          .from("sddfs_entry_picks")
+          .update({ close_price: closePrice, pct_change: pctChange })
+          .in("id", idsChunk);
 
-      if (updateError) {
-        // Same reasoning as the lock: a contest scored from a partial write
-        // hands out rankings and payouts built on missing data. Leave it
-        // locked and let the next run redo the whole contest.
-        throw new Error(
-          `Failed to write ${ids.length} close price(s) for contest ${contest.id}: ${updateError.message}`
-        );
+        if (updateError) {
+          // Same reasoning as the lock: a contest scored from a partial write
+          // hands out rankings and payouts built on missing data. Leave it
+          // locked and let the next run redo the whole contest.
+          throw new Error(
+            `Failed to write ${idsChunk.length} of ${ids.length} close price(s) for contest ${contest.id}: ${updateError.message}`
+          );
+        }
       }
     }
 
@@ -315,6 +354,7 @@ async function scoreClosedContests(
     const stillMissingClose = picks.some(
       (pick) =>
         isUsableQuote(pick.open_price) &&
+        !isUsableQuote(pick.close_price) &&
         !isUsableQuote(prices[pick.symbol.toUpperCase()])
     );
 

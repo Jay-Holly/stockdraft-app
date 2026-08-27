@@ -65,3 +65,45 @@ export async function fetchWarmStockPrices(
   const cold = unique.filter((symbol) => !(symbol in warm));
   return { warm, cold };
 }
+
+/**
+ * Writes a lock/close moment's live Finnhub recovery back into stock_prices,
+ * the same table refresh-stock-prices.ts maintains.
+ *
+ * Without this, a symbol resolved the hard way (a cold Finnhub call at lock
+ * or score time) only ever lived in fetchFinnhubQuotes' in-memory cache —
+ * gone the moment the serverless instance recycles, and never visible to a
+ * different invocation anyway. On 2026-08-26, after the day's regular refresh
+ * cron had stopped running (market closed, no runs scheduled again until
+ * tomorrow), a contest stuck retrying a large cold list had no way to make
+ * any of its recovered prices stick between 15-minute ticks — every tick
+ * re-asked Finnhub for the same symbols from scratch. Persisting here means
+ * each tick's progress is real progress: whatever it manages to resolve is
+ * warm for every subsequent tick (and every other contest/product reading
+ * the same table) until WARM_THRESHOLD_MS actually elapses.
+ */
+export async function persistColdQuotesToStockPrices(
+  quotes: Record<string, { price: number; changePercent: number }>
+): Promise<void> {
+  const rows = Object.entries(quotes)
+    .filter(([, quote]) => quote.price > 0)
+    .map(([symbol, quote]) => ({
+      symbol: symbol.toUpperCase(),
+      price: quote.price,
+      change_percent: quote.changePercent,
+      updated_at: new Date().toISOString(),
+    }));
+
+  if (rows.length === 0) return;
+
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("stock_prices")
+    .upsert(rows, { onConflict: "symbol" });
+
+  if (error) {
+    // Never let a caching side-effect break the price the caller already
+    // has in hand — the quote itself is still good even if it doesn't stick.
+    console.error(`[warm-stock-prices] failed to persist ${rows.length} recovered quote(s):`, error.message);
+  }
+}

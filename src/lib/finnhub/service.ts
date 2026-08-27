@@ -244,6 +244,94 @@ function isDeadTickerQuote(symbol: string, tradeTime: number | undefined): boole
   return false;
 }
 
+/**
+ * Stay under Finnhub's free-tier 60 calls/minute ceiling, shared with
+ * refresh-stock-prices.ts's own pacing constant of the same value.
+ */
+const CALLS_PER_MINUTE = 50;
+const GROUP_SIZE = 5;
+/**
+ * Concurrency inside a group only overlaps round-trip latency; the delay
+ * after each group is what actually enforces the rate, same as
+ * refresh-stock-prices.ts. GROUP_SIZE doesn't change the enforced rate, only
+ * how much latency a group hides.
+ */
+const DELAY_BETWEEN_GROUPS_MS = Math.ceil(
+  (60_000 / CALLS_PER_MINUTE) * GROUP_SIZE
+);
+
+async function fetchOneFinnhubQuote(
+  symbol: string,
+  token: string,
+  fetchCache: RequestCache
+): Promise<FinnhubQuote | null> {
+  try {
+    const response = await fetchWithTimeout(
+      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${token}`,
+      { cache: fetchCache, timeoutMs: 5000 }
+    );
+
+    if (response.status === 429) {
+      console.error(`Finnhub quote rate limited for ${symbol}`);
+      return null;
+    }
+    if (!response.ok) {
+      console.error(`Finnhub quote failed for ${symbol}: HTTP ${response.status}`);
+      return null;
+    }
+
+    const data = (await response.json()) as FinnhubQuoteResponse;
+    const price = data.c ?? 0;
+    const prevClose = data.pc ?? price;
+    if (price <= 0) return null;
+
+    if (isDeadTickerQuote(symbol, data.t)) return null;
+
+    return { price, prevClose, changePercent: calcChangePercent(price, prevClose) };
+  } catch (err) {
+    console.error(`Finnhub quote error for ${symbol}:`, err);
+    return null;
+  }
+}
+
+/**
+ * Hard ceiling on how long one fetchFinnhubQuotes call is allowed to run.
+ *
+ * Even with correct pacing, Finnhub's free-tier 60/min ceiling is a real
+ * external floor: 500 cold symbols take ~500/60 ≈ 8+ minutes no matter how
+ * cleanly the calls are spaced, and the SDDFS lock/score path only has a
+ * 300s budget total. Confirmed directly: even after fixing the pacing below,
+ * a run against 2026-08-26's real cold list took ~584s end to end and still
+ * would have blown the budget. Software can't make Finnhub answer faster, so
+ * this stops trying once the deadline is close and returns whatever it has —
+ * the caller (getOpeningPricesWithRetry) already treats a missing symbol as
+ * "leave the baseline unset," and the existing backfill sweep
+ * (fillMissingOpens) recovers it afterward from Twelve Data. That is the
+ * same "don't invent it, recover it later" contract this whole pricing
+ * pipeline already runs on — this just makes sure the lock/score request
+ * itself always returns instead of dying mid-fetch with zero progress.
+ */
+const MAX_QUOTE_FETCH_MS = 90_000;
+
+/**
+ * Fetches quotes as concurrent, rate-paced groups instead of one call per
+ * symbol with a token-bucket-free 150ms pause between batches of 8.
+ *
+ * That old pacing didn't actually respect Finnhub's 60/min ceiling — it was
+ * fast enough to blow through it on any cold list bigger than a couple dozen
+ * symbols, which triggered mass 429s, and each 429 then retried up to 3x
+ * *inside* this function, on top of the caller (getOpeningPricesWithRetry)
+ * retrying again on top of that. On 2026-08-26 a 544-symbol SDDFS lock (the
+ * QA coverage accounts broadened the pool footprint from the "a few dozen"
+ * this path was designed around to the full ~500-symbol pool) took over
+ * 300,021ms and never returned — Vercel's 300s maxDuration killed it before
+ * a single contest could lock, every 15-minute tick, all day.
+ *
+ * This does one paced pass (each symbol asked once, at ~50/min) rather than
+ * a retry storm, and stops at MAX_QUOTE_FETCH_MS regardless of how much of
+ * the list remains — see that constant for why an unbounded pass still isn't
+ * safe on its own.
+ */
 export async function fetchFinnhubQuotes(
   symbols: readonly string[],
   options?: { cache?: RequestCache }
@@ -266,65 +354,33 @@ export async function fetchFinnhubQuotes(
     }
   }
 
-  const batchSize = 8;
+  const deadline = Date.now() + MAX_QUOTE_FETCH_MS;
 
-  for (let i = 0; i < stillNeeded.length; i += batchSize) {
-    const batch = stillNeeded.slice(i, i + batchSize);
-
-    for (const symbol of batch) {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const response = await fetchWithTimeout(
-            `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${token}`,
-            { cache: fetchCache, timeoutMs: 5000 }
-          );
-
-          if (response.status === 429) {
-            console.error(`Finnhub quote rate limited for ${symbol}`);
-            await sleep(500);
-            continue;
-          }
-
-          if (!response.ok) {
-            console.error(
-              `Finnhub quote failed for ${symbol}: HTTP ${response.status}`
-            );
-            await sleep(200);
-            continue;
-          }
-
-          const data = (await response.json()) as FinnhubQuoteResponse;
-          const price = data.c ?? 0;
-          const prevClose = data.pc ?? price;
-
-          if (price <= 0) {
-            await sleep(200);
-            continue;
-          }
-
-          if (isDeadTickerQuote(symbol, data.t)) {
-            // Dropped rather than retried: asking again returns the same
-            // frozen number, and the symbol needs a human to re-map it.
-            break;
-          }
-
-          const quote = {
-            price,
-            prevClose,
-            changePercent: calcChangePercent(price, prevClose),
-          };
-          quotes[symbol] = quote;
-          stockQuoteCache.set(symbol, { quote, at: Date.now() });
-          break;
-        } catch (err) {
-          console.error(`Finnhub quote error for ${symbol}:`, err);
-          await sleep(200);
-        }
-      }
+  for (let i = 0; i < stillNeeded.length; i += GROUP_SIZE) {
+    if (Date.now() > deadline) {
+      const remaining = stillNeeded.length - i;
+      console.error(
+        `[finnhub] quote fetch deadline reached — ${remaining} symbol(s) left unasked, leaving baselines unset for the backfill sweep to recover`
+      );
+      break;
     }
 
-    if (i + batchSize < stillNeeded.length) {
-      await sleep(150);
+    const group = stillNeeded.slice(i, i + GROUP_SIZE);
+
+    const results = await Promise.all(
+      group.map((symbol) => fetchOneFinnhubQuote(symbol, token, fetchCache))
+    );
+
+    group.forEach((symbol, idx) => {
+      const quote = results[idx];
+      if (quote) {
+        quotes[symbol] = quote;
+        stockQuoteCache.set(symbol, { quote, at: Date.now() });
+      }
+    });
+
+    if (i + GROUP_SIZE < stillNeeded.length) {
+      await sleep(DELAY_BETWEEN_GROUPS_MS);
     }
   }
 

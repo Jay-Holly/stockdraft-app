@@ -7,7 +7,10 @@ import {
   type CryptoQuote,
 } from "@/lib/coingecko/service";
 import { fetchFinnhubQuotes, type FinnhubQuote } from "@/lib/finnhub/service";
-import { fetchWarmStockPrices } from "@/lib/market/warm-stock-prices";
+import {
+  fetchWarmStockPrices,
+  persistColdQuotesToStockPrices,
+} from "@/lib/market/warm-stock-prices";
 
 /**
  * SDDFS needs a true intraday snapshot (lock at 9:30 AM ET, close at 4 PM ET)
@@ -65,6 +68,13 @@ export async function fetchLiveSddfsQuotes(
     warmStocks.cold.length > 0
       ? await fetchFinnhubQuotes(warmStocks.cold, { cache: "no-store" })
       : ({} as Record<string, FinnhubQuote>);
+
+  // Make whatever this call recovered stick for the next tick and every
+  // other reader of stock_prices, instead of it living only in this one
+  // invocation's memory — see persistColdQuotesToStockPrices for why.
+  if (Object.keys(coldQuotes).length > 0) {
+    await persistColdQuotesToStockPrices(coldQuotes);
+  }
 
   const stockCandidates: Record<string, number> = {};
   for (const symbol of stockSymbols) {

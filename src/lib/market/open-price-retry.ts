@@ -8,6 +8,19 @@ import { fetchLiveCryptoPrices } from "@/lib/market/coinpaprika";
 
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
+/**
+ * Total wall-clock budget across the first pass and every retry combined.
+ *
+ * fetchFinnhubQuotes already caps itself at 90s per call (see
+ * MAX_QUOTE_FETCH_MS in finnhub/service.ts), but this function can call it up
+ * to four times (first pass + 3 retries) — four uncapped 90s calls could
+ * still add up to 360s, over the lock/score path's 300s budget on its own.
+ * This stops issuing further retries once the overall budget is spent and
+ * returns whatever has been resolved, same contract as a single missing
+ * symbol: left unset, recovered later by the backfill sweep, never
+ * fabricated.
+ */
+const MAX_TOTAL_BUDGET_MS = 150_000;
 
 /**
  * Second, third and fourth chance at the prices a lock or close moment needs.
@@ -45,6 +58,7 @@ export async function getOpeningPricesWithRetry(
   const isDailyContest = options?.isDailyContest !== false;
 
   const fetchFn = isDailyContest ? fetchLiveSddfsQuotes : fetchLiveSdwfsQuotes;
+  const startedAt = Date.now();
 
   const quotes = await fetchFn(symbols);
 
@@ -59,6 +73,12 @@ export async function getOpeningPricesWithRetry(
   );
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (Date.now() - startedAt > MAX_TOTAL_BUDGET_MS) {
+      console.error(
+        `[open-price-retry] total budget spent — stopping after ${attempt - 1}/${maxRetries} retries with ${missing.length} still missing; backfill sweep will recover the equities`
+      );
+      break;
+    }
     await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
 
     const needsCryptoRefresh = missing.some((s) => isCryptoSymbol(s));
