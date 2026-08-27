@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isCryptoSymbol } from "@/lib/draft/engine";
+import { isPricingFrozen } from "@/lib/market/pricing-freeze";
 
 /**
  * Twelve Data is the independent second source behind every DFS price.
@@ -86,6 +87,10 @@ type TwelveDataResult =
   | { ok: false; rateLimited: boolean; reason: string };
 
 async function twelveDataFetch(path: string): Promise<TwelveDataResult> {
+  if (isPricingFrozen()) {
+    return { ok: false, rateLimited: false, reason: "pricing frozen for the day" };
+  }
+
   const apiKey = process.env.TWELVE_DATA_API_KEY?.trim();
   if (!apiKey) {
     return { ok: false, rateLimited: false, reason: "no api key" };

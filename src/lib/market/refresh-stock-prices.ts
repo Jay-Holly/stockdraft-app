@@ -2,6 +2,7 @@ import "server-only";
 
 import { fetchWithTimeout } from "@/lib/finnhub/service";
 import { isUsMarketRefreshAllowed } from "@/lib/market/hours";
+import { isPricingFrozen } from "@/lib/market/pricing-freeze";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type FinnhubQuoteResponse = {
@@ -129,6 +130,8 @@ export async function fetchFinnhubQuote(
   symbol: string,
   token: string
 ): Promise<{ price: number; changePercent: number } | null> {
+  if (isPricingFrozen()) return null;
+
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const response = await fetchWithTimeout(
@@ -163,6 +166,17 @@ export async function fetchFinnhubQuote(
 
 export async function refreshStockPricesFromFinnhub(): Promise<StockPriceRefreshResult> {
   const started = Date.now();
+
+  if (isPricingFrozen()) {
+    return {
+      skipped: true,
+      reason: "pricing frozen for the day",
+      symbolCount: 0,
+      updated: 0,
+      failed: 0,
+      durationMs: Date.now() - started,
+    };
+  }
 
   if (!isUsMarketRefreshAllowed()) {
     return {

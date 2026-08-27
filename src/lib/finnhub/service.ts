@@ -1,3 +1,5 @@
+import { isPricingFrozen } from "@/lib/market/pricing-freeze";
+
 type TradeHandler = (symbol: string, price: number) => void;
 
 type FinnhubQuoteResponse = {
@@ -336,6 +338,8 @@ export async function fetchFinnhubQuotes(
   symbols: readonly string[],
   options?: { cache?: RequestCache }
 ): Promise<Record<string, FinnhubQuote>> {
+  if (isPricingFrozen()) return {};
+
   const token = getFinnhubKey();
   if (!token || symbols.length === 0) return {};
 

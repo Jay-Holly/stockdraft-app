@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { fillMissingWeekCloses } from "@/lib/roster/weekly";
+import { isPricingFrozen } from "@/lib/market/pricing-freeze";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,6 +31,12 @@ const MAX_LEAGUES_PER_RUN = 15;
 export async function GET(request: NextRequest) {
   if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Direct instruction, 2026-08-27: no Twelve Data calls for the rest of the
+  // day — see pricing-freeze.ts.
+  if (isPricingFrozen()) {
+    return NextResponse.json({ ok: true, skipped: "pricing frozen for the day" });
   }
 
   try {
