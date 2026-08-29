@@ -1,40 +1,39 @@
 import "server-only";
 
-import { createServiceClient } from "@/lib/supabase/service";
+/**
+ * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
+ * src/lib/day-trader/ for the full explanation: 31 files were deleted at
+ * the start of the scoring-rebuild branch (2026-08-27), and this dev server
+ * points at the live production database, not a sandbox.
+ *
+ * Every export below is synchronous even where the real function will be
+ * async, on purpose: a sync throw propagates correctly whether or not a
+ * caller awaits it; an async stub that a caller doesn't await would hand
+ * back a Promise object instead of throwing, which is a worse, quieter
+ * failure than the one this file exists to prevent.
+ *
+ * Two behaviors, chosen per export, never guessed at random:
+ *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
+ *     an outcome throws immediately. Faking that value is how a $0.15 open
+ *     scored a stock at +57,320% the first time. A loud error beats a quiet
+ *     wrong number.
+ *   - A function whose job is a plain READ (a quote, a list, a lookup) that
+ *     found nothing returns an honestly empty result — the same shape a real
+ *     "no rows" answer would have. That is not a fabrication; it is what an
+ *     empty result actually looks like.
+ *
+ * Rebuild this against the real logic (and the new pricing module) before
+ * relying on it for anything that touches money or a real score.
+ */
 
-export type StockPriceUpsertRow = {
-  symbol: string;
-  price: number;
-  changePercent: number;
-};
-
-/** Best-effort write of live quotes into stock_prices (service role). */
-export async function upsertStockPriceCache(
-  rows: StockPriceUpsertRow[]
-): Promise<void> {
-  if (rows.length === 0) return;
-
-  try {
-    const supabase = createServiceClient();
-    const now = new Date().toISOString();
-
-    const { error } = await supabase.from("stock_prices").upsert(
-      rows.map((row) => ({
-        symbol: row.symbol.toUpperCase(),
-        price: row.price,
-        change_percent: row.changePercent,
-        updated_at: now,
-      })),
-      { onConflict: "symbol" }
-    );
-
-    if (error) {
-      console.error("upsertStockPriceCache failed:", error.message);
-    }
-  } catch (err) {
-    console.warn(
-      "upsertStockPriceCache skipped:",
-      err instanceof Error ? err.message : err
-    );
-  }
+function notImplemented(name) {
+  return new Error(
+    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
+    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
+  );
 }
+
+export function upsertStockPriceCache(...args) {
+  throw notImplemented("upsertStockPriceCache");
+}
+

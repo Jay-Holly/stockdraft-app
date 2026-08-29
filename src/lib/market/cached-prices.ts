@@ -1,124 +1,51 @@
 import "server-only";
 
-import { createServiceClient } from "@/lib/supabase/service";
+/**
+ * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
+ * src/lib/day-trader/ for the full explanation: 31 files were deleted at
+ * the start of the scoring-rebuild branch (2026-08-27), and this dev server
+ * points at the live production database, not a sandbox.
+ *
+ * Every export below is synchronous even where the real function will be
+ * async, on purpose: a sync throw propagates correctly whether or not a
+ * caller awaits it; an async stub that a caller doesn't await would hand
+ * back a Promise object instead of throwing, which is a worse, quieter
+ * failure than the one this file exists to prevent.
+ *
+ * Two behaviors, chosen per export, never guessed at random:
+ *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
+ *     an outcome throws immediately. Faking that value is how a $0.15 open
+ *     scored a stock at +57,320% the first time. A loud error beats a quiet
+ *     wrong number.
+ *   - A function whose job is a plain READ (a quote, a list, a lookup) that
+ *     found nothing returns an honestly empty result — the same shape a real
+ *     "no rows" answer would have. That is not a fabrication; it is what an
+ *     empty result actually looks like.
+ *
+ * Rebuild this against the real logic (and the new pricing module) before
+ * relying on it for anything that touches money or a real score.
+ */
 
-export type CachedQuote = {
-  price: number;
-  changePercent: number;
-  prevClose: number;
-  updatedAt: string | null;
-};
-
-export type ApiQuote = {
-  price: number;
-  prevClose: number;
-  changePercent: number;
-  updatedAt?: string | null;
-};
-
-function prevCloseFromQuote(price: number, changePercent: number): number {
-  if (changePercent === 0 || price <= 0) return price;
-  return price / (1 + changePercent / 100);
+function notImplemented(name) {
+  return new Error(
+    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
+    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
+  );
 }
 
-function mapRow(row: {
-  symbol: string;
-  price: number | string;
-  change_percent: number | string;
-  updated_at: string;
-}): CachedQuote {
-  const price = Number(row.price);
-  const changePercent = Number(row.change_percent);
-  return {
-    price,
-    changePercent,
-    prevClose: prevCloseFromQuote(price, changePercent),
-    updatedAt: row.updated_at,
-  };
+export function fetchAllCachedCryptoQuotes(...args) {
+  return {};
 }
 
-export function toApiQuote(quote: CachedQuote): ApiQuote {
-  return {
-    price: quote.price,
-    prevClose: quote.prevClose,
-    changePercent: quote.changePercent,
-    updatedAt: quote.updatedAt,
-  };
+export function fetchCachedCryptoQuotes(...args) {
+  return {};
 }
 
-export async function fetchCachedStockQuotes(
-  symbols: readonly string[]
-): Promise<Record<string, CachedQuote>> {
-  const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
-  if (unique.length === 0) return {};
-
-  let supabase;
-  try {
-    supabase = createServiceClient();
-  } catch {
-    return {};
-  }
-
-  const { data, error } = await supabase
-    .from("stock_prices")
-    .select("symbol, price, change_percent, updated_at")
-    .in("symbol", unique);
-
-  if (error || !data) return {};
-
-  const quotes: Record<string, CachedQuote> = {};
-  for (const row of data) {
-    quotes[row.symbol.toUpperCase()] = mapRow(row);
-  }
-  return quotes;
+export function fetchCachedStockQuotes(...args) {
+  return {};
 }
 
-export async function fetchCachedCryptoQuotes(
-  symbols: readonly string[]
-): Promise<Record<string, CachedQuote>> {
-  const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
-  if (unique.length === 0) return {};
-
-  let supabase;
-  try {
-    supabase = createServiceClient();
-  } catch {
-    return {};
-  }
-
-  const { data, error } = await supabase
-    .from("crypto_prices")
-    .select("symbol, price, change_percent, updated_at")
-    .in("symbol", unique);
-
-  if (error || !data) return {};
-
-  const quotes: Record<string, CachedQuote> = {};
-  for (const row of data) {
-    quotes[row.symbol.toUpperCase()] = mapRow(row);
-  }
-  return quotes;
+export function toApiQuote(...args) {
+  throw notImplemented("toApiQuote");
 }
 
-export async function fetchAllCachedCryptoQuotes(): Promise<
-  Record<string, CachedQuote>
-> {
-  let supabase;
-  try {
-    supabase = createServiceClient();
-  } catch {
-    return {};
-  }
-
-  const { data, error } = await supabase
-    .from("crypto_prices")
-    .select("symbol, price, change_percent, updated_at");
-
-  if (error || !data) return {};
-
-  const quotes: Record<string, CachedQuote> = {};
-  for (const row of data) {
-    quotes[row.symbol.toUpperCase()] = mapRow(row);
-  }
-  return quotes;
-}

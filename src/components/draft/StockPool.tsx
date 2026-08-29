@@ -467,147 +467,35 @@ export function StockPool({
     setSearchQuery(value);
   }
 
+  // Off-index stock search (anything outside the S&P 500) is turned off for
+  // the Pittsburgh beta — deliberately, not broken. The feature needs a live
+  // scan of which off-pool symbols are currently rostered before the price
+  // logger can cover them, which doesn't exist yet, and it depends on a
+  // paid data source Jay hasn't set up yet either. Searching within the
+  // existing S&P 500 pool list (`localFilter`, above) is untouched — this
+  // only disables reaching out for symbols beyond it. Re-enable by restoring
+  // the fetch to /api/market/search once both of those are ready.
   useEffect(() => {
     const q = searchQuery.trim();
+    setSearchResults([]);
+    setSearchLoading(false);
+
     if (q.length < 2) {
-      setSearchResults([]);
       setSearchFeedback(null);
-      setSearchLoading(false);
       return;
     }
 
-    const controller = new AbortController();
-    let requestId = 0;
-
-    const timer = window.setTimeout(() => {
-      const currentRequest = ++requestId;
-      setSearchLoading(true);
+    if (poolSymbolSet.has(q.toUpperCase())) {
       setSearchFeedback(null);
+      return;
+    }
 
-      const timeoutId = window.setTimeout(() => controller.abort(), 10000);
-
-      void (async () => {
-        try {
-          const res = await fetch(
-            `/api/market/search?q=${encodeURIComponent(q)}`,
-            { signal: controller.signal, cache: "no-store" }
-          );
-          const data = (await res.json()) as {
-            results?: SearchResult[];
-            error?: string;
-          };
-
-          if (currentRequest !== requestId || controller.signal.aborted) {
-            return;
-          }
-
-          const allResults = data.results ?? [];
-          const outsidePool = allResults.filter(
-            (item) => !poolSymbolSet.has(item.symbol)
-          );
-
-          if (!res.ok) {
-            setSearchResults([]);
-            setSearchFeedback(
-              describeSearchEmptyReason({
-                query: q,
-                httpOk: false,
-                allResults: [],
-                outsidePool: [],
-                poolSymbolSet,
-                showDraftedStocks,
-                myDrafted,
-                leagueOffBoard,
-              })
-            );
-            return;
-          }
-
-          if (data.error && allResults.length === 0) {
-            setSearchResults([]);
-            setSearchFeedback(
-              describeSearchEmptyReason({
-                query: q,
-                httpOk: true,
-                apiError: data.error,
-                allResults,
-                outsidePool,
-                poolSymbolSet,
-                showDraftedStocks,
-                myDrafted,
-                leagueOffBoard,
-              })
-            );
-            return;
-          }
-
-          setSearchResults(outsidePool);
-
-          const visibleCount = filterUndraftedSearchResults(
-            outsidePool,
-            showDraftedStocks,
-            myDrafted,
-            leagueOffBoard
-          ).length;
-
-          if (visibleCount === 0) {
-            setSearchFeedback(
-              describeSearchEmptyReason({
-                query: q,
-                httpOk: true,
-                apiError: data.error,
-                allResults,
-                outsidePool,
-                poolSymbolSet,
-                showDraftedStocks,
-                myDrafted,
-                leagueOffBoard,
-              })
-            );
-          } else {
-            setSearchFeedback(null);
-          }
-        } catch (err) {
-          if (controller.signal.aborted || currentRequest !== requestId) {
-            return;
-          }
-          setSearchResults([]);
-          const aborted =
-            err instanceof Error && err.name === "AbortError";
-          setSearchFeedback(
-            describeSearchEmptyReason({
-              query: q,
-              httpOk: false,
-              allResults: [],
-              outsidePool: [],
-              poolSymbolSet,
-              showDraftedStocks,
-              myDrafted,
-              leagueOffBoard,
-              aborted,
-              fetchFailed: !aborted,
-            })
-          );
-        } finally {
-          window.clearTimeout(timeoutId);
-          if (currentRequest === requestId) {
-            setSearchLoading(false);
-          }
-        }
-      })();
-    }, 350);
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [
-    searchQuery,
-    poolSymbolSet,
-    showDraftedStocks,
-    myDrafted,
-    leagueOffBoard,
-  ]);
+    setSearchFeedback({
+      message:
+        "Searching beyond the S&P 500 is turned off for now — only the pool below is draftable.",
+      tone: "info",
+    });
+  }, [searchQuery, poolSymbolSet]);
 
   useEffect(() => {
     const q = searchQuery.trim();

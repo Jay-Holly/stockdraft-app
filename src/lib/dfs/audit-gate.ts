@@ -1,25 +1,39 @@
 import "server-only";
 
 /**
- * Whether a scored contest has to wait for the nightly audit before its
- * winners are actually credited.
+ * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
+ * src/lib/day-trader/ for the full explanation: 31 files were deleted at
+ * the start of the scoring-rebuild branch (2026-08-27), and this dev server
+ * points at the live production database, not a sandbox.
  *
- * Off by default, and deliberately its own switch rather than something that
- * turns itself on when an API key appears. Flipping this changes when real
- * money moves, so it should be a decision someone made, not a side effect of
- * configuring a data source.
+ * Every export below is synchronous even where the real function will be
+ * async, on purpose: a sync throw propagates correctly whether or not a
+ * caller awaits it; an async stub that a caller doesn't await would hand
+ * back a Promise object instead of throwing, which is a worse, quieter
+ * failure than the one this file exists to prevent.
  *
- * OFF (default) — contests credit winners at 4 PM, exactly as before. The
- *   audit still runs and still reports; it just isn't standing in front of
- *   the money.
- * ON — the 4 PM run scores, ranks and publishes standings but credits nobody.
- *   The release job pays out only after both audit rounds pass for that date.
+ * Two behaviors, chosen per export, never guessed at random:
+ *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
+ *     an outcome throws immediately. Faking that value is how a $0.15 open
+ *     scored a stock at +57,320% the first time. A loud error beats a quiet
+ *     wrong number.
+ *   - A function whose job is a plain READ (a quote, a list, a lookup) that
+ *     found nothing returns an honestly empty result — the same shape a real
+ *     "no rows" answer would have. That is not a fabrication; it is what an
+ *     empty result actually looks like.
  *
- * Before turning this on, both must be true or nothing will ever pay out:
- *   1. migration 085 applied (the audit and fund-release tables exist)
- *   2. TWELVE_DATA_API_KEY set (the audit has an independent source to check
- *      against — without one, every round fails closed by design)
+ * Rebuild this against the real logic (and the new pricing module) before
+ * relying on it for anything that touches money or a real score.
  */
-export function isAuditGateEnabled(): boolean {
-  return process.env.DFS_AUDIT_GATE?.trim().toLowerCase() === "on";
+
+function notImplemented(name) {
+  return new Error(
+    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
+    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
+  );
 }
+
+export function isAuditGateEnabled(...args) {
+  throw notImplemented("isAuditGateEnabled");
+}
+

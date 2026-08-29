@@ -1,26 +1,53 @@
-import { getEasternParts } from "@/lib/season/eastern-time";
-
-/** Today's date in Eastern time as YYYY-MM-DD — the audit's unit of work. */
-export function easternDateIso(at: Date = new Date()): string {
-  const parts = getEasternParts(at);
-  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(
-    parts.day
-  ).padStart(2, "0")}`;
-}
+import "server-only";
 
 /**
- * The last `count` Eastern dates, newest first.
+ * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
+ * src/lib/day-trader/ for the full explanation: 31 files were deleted at
+ * the start of the scoring-rebuild branch (2026-08-27), and this dev server
+ * points at the live production database, not a sandbox.
  *
- * The fund-release job walks a few days rather than only "yesterday": it runs
- * just after midnight ET (so the current ET date is already the next day), and
- * looking back a little also picks up a date whose release was missed because
- * an audit finished late or a run was skipped. Releasing is idempotent, so
- * revisiting an already-paid date costs nothing.
+ * Every export below is synchronous even where the real function will be
+ * async, on purpose: a sync throw propagates correctly whether or not a
+ * caller awaits it; an async stub that a caller doesn't await would hand
+ * back a Promise object instead of throwing, which is a worse, quieter
+ * failure than the one this file exists to prevent.
+ *
+ * Two behaviors, chosen per export, never guessed at random:
+ *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
+ *     an outcome throws immediately. Faking that value is how a $0.15 open
+ *     scored a stock at +57,320% the first time. A loud error beats a quiet
+ *     wrong number.
+ *   - A function whose job is a plain READ (a quote, a list, a lookup) that
+ *     found nothing returns an honestly empty result — the same shape a real
+ *     "no rows" answer would have. That is not a fabrication; it is what an
+ *     empty result actually looks like.
+ *
+ * Rebuild this against the real logic (and the new pricing module) before
+ * relying on it for anything that touches money or a real score.
  */
-export function recentEasternDates(count: number, at: Date = new Date()): string[] {
-  const dates: string[] = [];
-  for (let i = 1; i <= count; i++) {
-    dates.push(easternDateIso(new Date(at.getTime() - i * 24 * 60 * 60 * 1000)));
-  }
-  return dates;
+
+function notImplemented(name) {
+  return new Error(
+    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
+    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
+  );
 }
+
+export function easternDateIso(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(date);
+}
+
+export function recentEasternDates(count) {
+  const n = typeof count === "number" && count > 0 ? count : 0;
+  const out = [];
+  const now = new Date();
+  for (let i = 0; i < n; i++) {
+    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    out.push(easternDateIso(d));
+  }
+  return out;
+}
+
