@@ -8,12 +8,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { finalizeSdwfsContest } from "@/lib/sdwfs/scoring";
 import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
 import { getOpeningPricesWithRetry } from "@/lib/market/open-price-retry";
+import { fetchContestAnchors } from "@/lib/pricing/contest-quotes";
 import { fillMissingOpens } from "@/lib/dfs/backfill";
-import {
-  fetchDailyOpenClose,
-  hasTwelveDataKey,
-  isTwelveDataSupported,
-} from "@/lib/market/twelve-data";
 import { easternDateIso } from "@/lib/dfs/audit-dates";
 import { isAuditGateEnabled } from "@/lib/dfs/audit-gate";
 
@@ -254,14 +250,18 @@ async function scoreClosedContests(
     const symbols = symbolsFor(sameDate.map((c) => c.id));
     const closes: Record<string, number> = {};
 
-    if (symbols.length > 0 && hasTwelveDataKey()) {
-      // Equities only — a crypto ticker resolves to a different asset on this
-      // source, so a coin with no recoverable close stays unscored rather than
-      // being priced off the wrong instrument.
-      const recoverable = symbols.filter(isTwelveDataSupported);
-      const bars = await fetchDailyOpenClose(recoverable, date);
-      for (const [symbol, bar] of Object.entries(bars)) {
-        if (isUsableQuote(bar?.close)) closes[symbol.toUpperCase()] = bar.close!;
+    if (symbols.length > 0) {
+      // The close anchor the logger recorded for that session — the same
+      // number every other contest on that date is scored against.
+      //
+      // This used to call Twelve Data directly to recover a missing close,
+      // equities only (a crypto ticker resolves to a different asset there).
+      // That asset-class hazard is gone: the log is keyed by symbol and holds
+      // stocks and coins alike. A symbol with no close anchor stays unscored
+      // rather than being priced off anything else.
+      const anchors = await fetchContestAnchors(symbols, date, "close", "sdwfs-recovery");
+      for (const [symbol, close] of Object.entries(anchors)) {
+        if (isUsableQuote(close)) closes[symbol.toUpperCase()] = close;
       }
     }
 

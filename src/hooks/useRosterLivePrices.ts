@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getFinnhubService } from "@/lib/finnhub/service";
 import { getMarketSession } from "@/lib/market/hours";
 import type { MarketQuote, MarketSession } from "@/lib/market/types";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
@@ -123,32 +122,12 @@ export function useRosterLivePrices() {
     return () => window.clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const service = getFinnhubService();
-
-    if (session !== "live" || rosteredSymbols.length === 0) {
-      service.setSubscriptions([]);
-      service.disconnect();
-      return;
-    }
-
-    service.setSubscriptions(rosteredSymbols);
-    service.connect();
-
-    const unsubscribe = service.onTrade((symbol, price) => {
-      const prevClose = prevCloseRef.current[symbol] ?? price;
-      setQuotes((current) => ({
-        ...current,
-        [symbol]: buildStockQuote(symbol, price, prevClose),
-      }));
-    });
-
-    return () => {
-      unsubscribe();
-      service.setSubscriptions([]);
-      service.disconnect();
-    };
-  }, [session, rosteredSymbols]);
+  // A Finnhub WebSocket used to stream trades straight into this component
+  // during market hours — meaning every open browser tab held its own
+  // connection to a price provider, authenticated with a key that shipped to
+  // the client. It is gone. Prices come from the price log via
+  // /api/market/rostered, refreshed on the interval above, like everything
+  // else in the app. The logger is the only thing that talks to a provider.
 
   useVisibilityAwareInterval(
     () => void refreshQuotes(rosteredSymbols),

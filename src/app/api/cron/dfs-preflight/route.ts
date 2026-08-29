@@ -2,13 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { warmCryptoPoolCache } from "@/lib/coingecko/service";
-import { fetchFinnhubQuotes } from "@/lib/finnhub/service";
-import { fetchCryptoQuotes } from "@/lib/coingecko/service";
-import { hasTwelveDataKey } from "@/lib/market/twelve-data";
+import { getLatestPrices } from "@/lib/pricing/read";
 import { activeSddfsContestDateIso } from "@/lib/dfs/contests";
 
 export const dynamic = "force-dynamic";
+
+/** A price older than this is not a credible basis for a 9:30 lock. */
+const FRESH_WITHIN_MINUTES = 90;
 
 /**
  * Runs at 9:15 ET, fifteen minutes ahead of the lock, and captures nothing.
@@ -18,21 +18,19 @@ export const dynamic = "force-dynamic";
  * 9:15-to-9:30 opening gap they never traded. What can move earlier is
  * everything around it.
  *
- * Two jobs:
+ * What this checks changed with the price log. It used to probe the providers
+ * directly — a CoinGecko refresh, a Finnhub quote for AAPL — because each
+ * contest fetched its own prices at lock time and provider health was the
+ * thing that decided whether the lock would work. Contests no longer call
+ * providers at all: they read the log. So the question worth asking fifteen
+ * minutes early is not "is Finnhub up?" but "does the log actually hold a
+ * recent price for every symbol in today's lineups?"
  *
- *  1. Warm what can be warmed. The crypto pool lives in module memory and
- *     starts empty on a cold serverless instance — that emptiness is what once
- *     misrouted real pool coins to the stock path. Loading it here gives the
- *     lock a decent chance of landing on an instance that already knows the
- *     pool. Only a chance: Vercel gives no guarantee the 9:30 invocation
- *     reuses this instance, so this is best-effort and never something the
- *     lock is allowed to depend on.
+ * That is a strictly better question. It covers the exact symbols at risk
+ * rather than one well-known probe ticker, it catches a healthy provider whose
+ * sweep never ran, and it costs zero provider calls.
  *
- *  2. Find out now whether the sources are answering. If Finnhub or CoinGecko
- *     is failing at 9:15, that is worth knowing while there is still time to
- *     react, instead of discovering it from a contest full of empty baselines.
- *     A red preflight does not block the lock — the lock is still the best
- *     shot at a real 9:30 price — it just means nobody is surprised.
+ * A red preflight does not block the lock — it just means nobody is surprised.
  */
 export async function GET(request: NextRequest) {
   if (!verifyCronAuth(request)) {
@@ -77,47 +75,66 @@ export async function GET(request: NextRequest) {
   checks.contestsAwaitingLock = contestIds.length;
   checks.distinctSymbols = symbols.length;
 
-  // Warm the in-memory crypto pool.
-  try {
-    const poolSymbols = await warmCryptoPoolCache();
-    checks.cryptoPool = { ok: poolSymbols.length > 0, coins: poolSymbols.length };
-  } catch (err) {
-    checks.cryptoPool = {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+  // Does the log hold a recent price for every symbol in today's lineups?
+  let coverageOk = true;
+
+  if (symbols.length === 0) {
+    checks.coverage = { ok: true, note: "no lineups to price" };
+  } else {
+    try {
+      const lookup = await getLatestPrices(symbols);
+      const cutoff = Date.now() - FRESH_WITHIN_MINUTES * 60_000;
+
+      const missing = [...lookup.misses.keys()];
+      const stale = [...lookup.hits.values()]
+        .filter((hit) => hit.capturedAt.getTime() < cutoff)
+        .map((hit) => hit.symbol);
+
+      coverageOk = missing.length === 0 && stale.length === 0;
+      checks.coverage = {
+        ok: coverageOk,
+        priced: lookup.hits.size,
+        missing: missing.slice(0, 20),
+        missingCount: missing.length,
+        stale: stale.slice(0, 20),
+        staleCount: stale.length,
+        freshWithinMinutes: FRESH_WITHIN_MINUTES,
+      };
+    } catch (err) {
+      coverageOk = false;
+      checks.coverage = {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 
-  // Is CoinGecko answering, and does it cover every coin in today's lineups?
+  // Did a sweep actually run today, and how did it end? A sweep that never
+  // started is invisible in per-symbol coverage until the prices go stale.
   try {
-    const quotes = await fetchCryptoQuotes({ forceRefresh: true });
-    const priced = Object.values(quotes).filter((q) => q.price > 0).length;
-    checks.coingecko = { ok: priced > 0, priced };
+    const { data: sweeps } = await supabase
+      .from("price_sweep")
+      .select("id, kind, status, started_at, finished_at, symbols_ok, symbols_failed")
+      .order("started_at", { ascending: false })
+      .limit(1);
+
+    const last = sweeps?.[0] ?? null;
+    checks.lastSweep = last
+      ? {
+          id: last.id,
+          kind: last.kind,
+          status: last.status,
+          startedAt: last.started_at,
+          finishedAt: last.finished_at,
+          ok: last.symbols_ok,
+          failed: last.symbols_failed,
+        }
+      : { none: true };
   } catch (err) {
-    checks.coingecko = {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    checks.lastSweep = { error: err instanceof Error ? err.message : String(err) };
   }
 
-  // Is Finnhub answering? One well-known ticker is enough to tell up from
-  // down without spending the lock's rate budget fifteen minutes early.
-  try {
-    const probe = await fetchFinnhubQuotes(["AAPL"], { cache: "no-store" });
-    checks.finnhub = { ok: (probe.AAPL?.price ?? 0) > 0 };
-  } catch (err) {
-    checks.finnhub = {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-
-  checks.twelveDataKey = hasTwelveDataKey();
-
-  const healthy =
-    (checks.cryptoPool as { ok?: boolean })?.ok === true &&
-    (checks.coingecko as { ok?: boolean })?.ok === true &&
-    (checks.finnhub as { ok?: boolean })?.ok === true;
+  const healthy = coverageOk;
 
   if (!healthy) {
     console.error(

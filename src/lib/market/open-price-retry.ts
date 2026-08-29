@@ -1,39 +1,36 @@
+import "server-only";
+
+import { getNyDateString } from "@/lib/market/hours";
+import { fetchContestAnchors } from "@/lib/pricing/contest-quotes";
+
 /**
- * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
- * src/lib/day-trader/ for the full explanation: 31 files were deleted at
- * the start of the scoring-rebuild branch (2026-08-27), and this dev server
- * points at the live production database, not a sandbox.
+ * Opening prices for a contest lock — read from the price log.
  *
- * Every export below is synchronous even where the real function will be
- * async, on purpose: a sync throw propagates correctly whether or not a
- * caller awaits it; an async stub that a caller doesn't await would hand
- * back a Promise object instead of throwing, which is a worse, quieter
- * failure than the one this file exists to prevent.
+ * The name still says "with retry" because every caller does, but there is
+ * nothing left to retry against. The old version called a provider, and when
+ * the provider was slow or rate-limited at 9:30 it called again, and again,
+ * inside the lock itself — which is how a lock could take minutes and still
+ * end up with a mix of 9:30 and 9:34 prices in the same contest.
  *
- * Two behaviors, chosen per export, never guessed at random:
- *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
- *     an outcome throws immediately. Faking that value is how a $0.15 open
- *     scored a stock at +57,320% the first time. A loud error beats a quiet
- *     wrong number.
- *   - A function whose job is a plain READ (a quote, a list, a lookup) that
- *     found nothing returns an honestly empty result — the same shape a real
- *     "no rows" answer would have. That is not a fabrication; it is what an
- *     empty result actually looks like.
+ * The logger captures the open for the entire pool in one sweep and writes it
+ * down. This reads that anchor. Every pick in every contest that locks on a
+ * given day is therefore priced from the same observation, which is the
+ * property that actually matters for fairness and which no amount of retrying
+ * could give.
  *
- * Rebuild this against the real logic (and the new pricing module) before
- * relying on it for anything that touches money or a real score.
+ * If the open anchor is not in the log yet, this returns no price for that
+ * symbol. It does NOT substitute the latest sample: a sample taken at 9:31 is
+ * not the open, and a baseline is the one number a whole contest's scoring is
+ * measured against. An absent baseline holds the contest; a plausible wrong
+ * one silently misprices every entry in it.
  */
+export async function getOpeningPricesWithRetry(
+  symbols: string[],
+  _options?: { isDailyContest?: boolean }
+): Promise<Record<string, number>> {
+  const unique = [...new Set((symbols ?? []).map((s) => String(s).toUpperCase()).filter(Boolean))];
+  if (unique.length === 0) return {};
 
-function notImplemented(name: string): Error {
-  return new Error(
-    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
-    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
-  );
+  const sessionDate = getNyDateString();
+  return fetchContestAnchors(unique, sessionDate, "open", "contest-lock");
 }
-
-export function getOpeningPricesWithRetry(
-  ...args: unknown[]
-): Record<string, number> {
-  throw notImplemented("getOpeningPricesWithRetry");
-}
-
