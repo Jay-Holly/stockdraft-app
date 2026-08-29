@@ -8,6 +8,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/service";
 import { finalizeSddfsContest } from "@/lib/sddfs/scoring";
 import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
+import { planContestLock } from "@/lib/dfs/lock-plan";
 import { getOpeningPricesWithRetry } from "@/lib/market/open-price-retry";
 import { fetchContestAnchors } from "@/lib/pricing/contest-quotes";
 import { fillMissingOpens } from "@/lib/dfs/backfill";
@@ -39,7 +40,10 @@ function chunk<T>(items: T[], size: number): T[][] {
 /** Locks any 'open' contests past lock_at and snapshots each pick's open price. */
 async function lockDueContests(
   supabase: ServiceClient
-): Promise<{ contestId: string; picksSnapshotted: number }[]> {
+): Promise<{
+  locked: { contestId: string; picksSnapshotted: number }[];
+  held: { contestId: string; missingSymbols: string[] }[];
+}> {
   const nowIso = new Date().toISOString();
 
   const { data: dueContests, error } = await supabase
@@ -51,7 +55,7 @@ async function lockDueContests(
   if (error) {
     throw new Error(`Failed to load due contests: ${error.message}`);
   }
-  if (!dueContests || dueContests.length === 0) return [];
+  if (!dueContests || dueContests.length === 0) return { locked: [], held: [] };
 
   // Gather every pick across every due contest BEFORE quoting. Fetching per
   // contest meant one near-identical round of lookups per buy-in tier within
@@ -89,6 +93,7 @@ async function lockDueContests(
       : {};
 
   const results: { contestId: string; picksSnapshotted: number }[] = [];
+  const held: { contestId: string; missingSymbols: string[] }[] = [];
 
   for (const contest of dueContests) {
     const picks = picksByContest.get(contest.id) ?? [];
@@ -104,24 +109,21 @@ async function lockDueContests(
     // a 300s function limit. Production killed the run every time, so no
     // contest locked, so the backlog grew and the next run was slower still.
     // Three days of contests sat open because of it.
-    const picksByPrice = new Map<number, string[]>();
+    const plan = planContestLock(picks, prices);
 
-    for (const pick of picks) {
-      const openPrice = prices[pick.symbol.toUpperCase()];
-
-      // Never persist a baseline we don't trust — every later score is
-      // measured against it. Leaving it null scores the pick neutral.
-      if (!isUsableQuote(openPrice)) {
-        console.error(
-          `[sddfs] no usable open quote for ${pick.symbol} (pick ${pick.id}); leaving baseline unset`
-        );
-        continue;
-      }
-
-      const ids = picksByPrice.get(openPrice) ?? [];
-      ids.push(pick.id);
-      picksByPrice.set(openPrice, ids);
+    // See planContestLock: a contest locks only when every pick has a real
+    // opening price. Anything less stays open and retries on the next tick.
+    if (plan.decision === "hold") {
+      console.error(
+        `[sddfs] HOLDING contest ${contest.id}: no usable open price for ` +
+          `${plan.missingSymbols.length} symbol(s) — ${plan.missingSymbols.join(", ")}. ` +
+          `Contest stays open and will retry; it will NOT lock on partial baselines.`
+      );
+      held.push({ contestId: contest.id, missingSymbols: plan.missingSymbols });
+      continue;
     }
+
+    const { picksByPrice } = plan;
 
     for (const [openPrice, pickIds] of picksByPrice) {
       for (const idsChunk of chunk(pickIds, UPDATE_CHUNK_SIZE)) {
@@ -149,7 +151,7 @@ async function lockDueContests(
     results.push({ contestId: contest.id, picksSnapshotted: picks?.length ?? 0 });
   }
 
-  return results;
+  return { locked: results, held };
 }
 
 /** Scores any 'locked' contests once the market has closed for their date. */
@@ -379,11 +381,12 @@ async function scoreClosedContests(
 
 export async function runSddfsLifecycle(): Promise<{
   locked: { contestId: string; picksSnapshotted: number }[];
+  held: { contestId: string; missingSymbols: string[] }[];
   scored: { contestId: string; entriesScored: number }[];
   backfilled: { filled: number; stillMissing: number };
 }> {
   const supabase = createServiceClient();
-  const locked = await lockDueContests(supabase);
+  const { locked, held } = await lockDueContests(supabase);
 
   // Any pick the 9:30 lock couldn't price gets its real opening price here,
   // on whichever tick the second source can first report that session's 09:30
@@ -400,5 +403,5 @@ export async function runSddfsLifecycle(): Promise<{
   // enterable right after close, instead of waiting for someone to load
   // the lobby.
   await ensureTodaysSddfsContests(supabase, activeSddfsContestDateIso());
-  return { locked, scored, backfilled };
+  return { locked, held, scored, backfilled };
 }
