@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * PLACEHOLDER for the quote-fetching piece only — see leaderboard.ts for the
  * same situation and why it exists (31 files deleted at the start of the

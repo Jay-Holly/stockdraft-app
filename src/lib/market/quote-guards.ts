@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
  * src/lib/day-trader/ for the full explanation: 31 files were deleted at
@@ -26,18 +24,18 @@ import "server-only";
  * relying on it for anything that touches money or a real score.
  */
 
-function notImplemented(name) {
+function notImplemented(name: string): Error {
   return new Error(
     `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
     `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
   );
 }
 
-export function isUsableQuote(...args) {
+export function isUsableQuote(quote: number | null | undefined): boolean {
   return false;
 }
 
-export function safePctChange(from, to) {
+export function safePctChange(from: number | null, to: number | null): number {
   if (typeof from !== "number" || !(from > 0) || typeof to !== "number" || !Number.isFinite(to)) return 0;
   return ((to - from) / from) * 100;
 }

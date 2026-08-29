@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
  * src/lib/day-trader/ for the full explanation: 31 files were deleted at
@@ -26,22 +24,44 @@ import "server-only";
  * relying on it for anything that touches money or a real score.
  */
 
-function notImplemented(name) {
+function notImplemented(name: string): Error {
   return new Error(
     `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
     `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
   );
 }
 
-export function computePickSeasonMetrics(...args) {
+export type PickSeasonMetrics = {
+  seasonDollarGain: number;
+  seasonGainPercent: number;
+  seasonOpenValue: number;
+};
+
+export type TeamSeasonMetrics = {
+  seasonDollarGain: number;
+  seasonGainPercent: number;
+};
+
+export function computePickSeasonMetrics(
+  baselines: unknown,
+  week: number,
+  weekOpenValue: number,
+  weekCloseValue: number
+): PickSeasonMetrics {
   throw notImplemented("computePickSeasonMetrics");
 }
 
-export function computeTeamSeasonMetrics(...args) {
+export function computeTeamSeasonMetrics(
+  picks: readonly {
+    currentValue: number;
+    seasonOpenValue: number;
+    seasonDollarGain: number;
+  }[]
+): TeamSeasonMetrics {
   throw notImplemented("computeTeamSeasonMetrics");
 }
 
-export function loadBaselinesThroughWeek(...args) {
-  return [];
+export function loadBaselinesThroughWeek(...args: unknown[]): Map<string, unknown> {
+  return new Map();
 }
 

@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
  * src/lib/day-trader/ for the full explanation: 31 files were deleted at
@@ -26,22 +24,24 @@ import "server-only";
  * relying on it for anything that touches money or a real score.
  */
 
-function notImplemented(name) {
+function notImplemented(name: string): Error {
   return new Error(
     `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
     `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
   );
 }
 
-export function getFallbackStockQuote(...args) {
+export function getFallbackStockQuote(
+  ...args: unknown[]
+): { price: number; prevClose: number; changePercent: number } | null {
   return null;
 }
 
-export function listFallbackPoolSymbols(...args) {
+export function listFallbackPoolSymbols(...args: unknown[]) {
   return [];
 }
 
-export function mergeQuotesWithFallback(...args) {
+export function mergeQuotesWithFallback(...args: unknown[]) {
   throw notImplemented("mergeQuotesWithFallback");
 }
 

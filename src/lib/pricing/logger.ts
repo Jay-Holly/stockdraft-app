@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { isPricingFrozen } from "@/lib/market/pricing-freeze";
 import { isUsMarketOpen, getNyDateString } from "@/lib/market/hours";
 import { fetchFinnhubFullQuote, fetchAlpacaSnapshots } from "@/lib/pricing/providers";
-import { fetchCoinGeckoPrices, successesOf } from "@/lib/pricing/providers";
+import { fetchCoinGeckoPrices } from "@/lib/pricing/providers";
 import { fetchDailyOpenClose } from "@/lib/market/twelve-data";
 import {
   startSweep,
@@ -171,7 +171,7 @@ export async function runSweep(options: {
     : null;
 
   let stocks = wanted ? stockUniverse.filter((s) => wanted.has(s)) : stockUniverse;
-  let crypto = wanted ? cryptoUniverse.filter((s) => wanted.has(s)) : cryptoUniverse;
+  const crypto = wanted ? cryptoUniverse.filter((s) => wanted.has(s)) : cryptoUniverse;
 
   if (!wanted && options.limitStocks) {
     stocks = stocks.slice(0, options.limitStocks);

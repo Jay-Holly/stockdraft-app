@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
  * src/lib/day-trader/ for the full explanation: 31 files were deleted at
@@ -26,44 +24,50 @@ import "server-only";
  * relying on it for anything that touches money or a real score.
  */
 
-function notImplemented(name) {
+function notImplemented(name: string): Error {
   return new Error(
     `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
     `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
   );
 }
 
-export function computeGainPercent(from, to) {
+export function computeGainPercent(from: number, to: number): number {
   if (typeof from !== "number" || !(from > 0) || typeof to !== "number" || !Number.isFinite(to)) return 0;
   return ((to - from) / from) * 100;
 }
 
-export function computeSharesFromBudget(budget, price) {
+export function computeSharesFromBudget(budget: number, price: number): number {
   if (typeof price !== "number" || !(price > 0) || typeof budget !== "number") return 0;
   return budget / price;
 }
 
-export function fetchStockQuotes(...args) {
+type SimpleQuote = { price: number; changePercent: number };
+
+export function fetchStockQuotes(...args: unknown[]): Map<string, SimpleQuote> {
+  return new Map();
+}
+
+// These three return a real (zero-price) object rather than null — real
+// callers (awards/claim.ts, roster/ir-moves.ts) already check `price <= 0`
+// as their own "no data" signal and never guard for null, matching the
+// original functions' contract.
+export function getCryptoQuote(...args: unknown[]): SimpleQuote {
+  return { price: 0, changePercent: 0 };
+}
+
+export function getStockQuote(...args: unknown[]): SimpleQuote {
+  return { price: 0, changePercent: 0 };
+}
+
+export function getSymbolQuote(...args: unknown[]): SimpleQuote {
+  return { price: 0, changePercent: 0 };
+}
+
+export function getCryptoQuotesMap(...args: unknown[]): Record<string, SimpleQuote> {
   return {};
 }
 
-export function getCryptoQuote(...args) {
-  return null;
-}
-
-export function getCryptoQuotesMap(...args) {
-  return {};
-}
-
-export function getLastCryptoQuoteSource(...args) {
-  return null;
-}
-
-export function getStockQuote(...args) {
-  return null;
-}
-
-export function getSymbolQuote(...args) {
+export function getLastCryptoQuoteSource(...args: unknown[]): string | null {
   return null;
 }
 
