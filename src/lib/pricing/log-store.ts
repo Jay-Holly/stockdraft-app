@@ -209,12 +209,113 @@ export async function orderByStaleness(
  * the observation itself was malformed, which should never happen if the
  * logger built it correctly, but the write must survive it if it does).
  */
-export async function writeObservations(
-  observations: readonly Observation[]
-): Promise<{ written: number; rejected: number }> {
-  if (observations.length === 0) return { written: 0, rejected: 0 };
+/**
+ * The last recorded price, high and low for each symbol — used to decide
+ * whether a new sample says anything new.
+ */
+async function lastObservedValues(
+  symbols: readonly string[]
+): Promise<Map<string, { price: number; dayHigh: number | null; dayLow: number | null }>> {
+  const out = new Map<string, { price: number; dayHigh: number | null; dayLow: number | null }>();
+  if (symbols.length === 0) return out;
 
   const supabase = createServiceClient();
+  const num = (v: unknown): number | null => {
+    if (v == null) return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // Chunked for the same reason every read here is: PostgREST caps rows and
+  // URL length, and this system asks about 552 symbols at a time.
+  for (let i = 0; i < symbols.length; i += 150) {
+    const group = symbols.slice(i, i + 150);
+    const { data, error } = await supabase
+      .from("price_log_latest")
+      .select("symbol, price, day_high, day_low")
+      .in("symbol", group);
+
+    if (error) {
+      // Unknown previous state means we cannot prove a sample is redundant.
+      // Write it. Dropping an observation we are unsure about would lose real
+      // data; writing a duplicate only costs a row.
+      console.error(`[price-log] staleness check failed, writing all: ${error.message}`);
+      return new Map();
+    }
+
+    for (const row of data ?? []) {
+      const price = num(row.price);
+      if (price == null) continue;
+      out.set(row.symbol as string, {
+        price,
+        dayHigh: num(row.day_high),
+        dayLow: num(row.day_low),
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Writes observations, skipping samples that say nothing new.
+ *
+ * The logger sweeps every minute. Most of the 552 symbols do not move in any
+ * given minute — and overnight, on weekends, and on holidays, none of the
+ * stocks move at all. Writing an identical row every minute regardless would
+ * add roughly 24 million rows a month, almost all of them saying exactly what
+ * the row before them said.
+ *
+ * So a `sample` is written only when the price, the day's high, or the day's
+ * low actually differs from the last thing recorded for that symbol. Nothing
+ * downstream notices the difference: readers ask for the latest price, and the
+ * latest price is unchanged precisely when no row was written.
+ *
+ * Two things are NEVER skipped:
+ *   - `open` and `close` anchors. They are the scoring record, and a contest
+ *     settling needs the anchor to exist for its own session even when the
+ *     price is identical to yesterday's.
+ *   - Failures. A symbol that stopped answering is news every single time,
+ *     and the whole point of this table is that refusals are recorded rather
+ *     than smoothed over.
+ *
+ * A useful side effect: because a row is now written only when something
+ * changed, the existence of a row IS the change event. "Has anything moved
+ * since I last looked?" becomes a cheap question, which is what live-updating
+ * pages need.
+ */
+export async function writeObservations(
+  observations: readonly Observation[]
+): Promise<{ written: number; rejected: number; skipped: number }> {
+  if (observations.length === 0) return { written: 0, rejected: 0, skipped: 0 };
+
+  const supabase = createServiceClient();
+
+  const isRedundantCandidate = (o: Observation): boolean =>
+    o.kind === "sample" && "price" in o;
+
+  const candidates = observations.filter(isRedundantCandidate);
+  const previous = await lastObservedValues(candidates.map((o) => o.symbol));
+
+  const same = (a: number | null | undefined, b: number | null): boolean => {
+    const av = a ?? null;
+    return av === b;
+  };
+
+  const toWrite = observations.filter((o) => {
+    if (!isRedundantCandidate(o)) return true;
+    const prev = previous.get(o.symbol);
+    if (!prev) return true;
+    const priced = o as Extract<Observation, { price: number }>;
+    return !(
+      priced.price === prev.price &&
+      same(priced.dayHigh, prev.dayHigh) &&
+      same(priced.dayLow, prev.dayLow)
+    );
+  });
+
+  const skipped = observations.length - toWrite.length;
+  if (toWrite.length === 0) return { written: 0, rejected: 0, skipped };
 
   // One uniform row shape (nulls for whichever side doesn't apply) rather
   // than a union of two shapes — the union type-checks per-observation but
@@ -235,7 +336,7 @@ export async function writeObservations(
     failure_reason: string | null;
   };
 
-  const rows: Row[] = observations.map((o) => ({
+  const rows: Row[] = toWrite.map((o) => ({
     symbol: o.symbol,
     asset_class: o.assetClass,
     kind: o.kind,
@@ -272,8 +373,59 @@ export async function writeObservations(
         written++;
       }
     }
-    return { written, rejected };
+    return { written, rejected, skipped };
   }
 
-  return { written: count ?? rows.length, rejected: 0 };
+  return { written: count ?? rows.length, rejected: 0, skipped };
+}
+
+/**
+ * Is a sweep already in flight?
+ *
+ * At a one-minute cadence this matters: a healthy sweep finishes in about ten
+ * seconds, but when Alpaca is down the fallback goes symbol-by-symbol through
+ * Finnhub and has taken over nine minutes. Without this, every minute would
+ * start another one on top of the last.
+ *
+ * A sweep older than `staleAfterMs` is treated as dead rather than running —
+ * that is the "stuck reporting running forever" state a platform kill leaves
+ * behind. It gets closed out honestly here instead of blocking every sweep
+ * that follows it, which is exactly what happened to sweep #8.
+ */
+export async function findRunningSweep(
+  staleAfterMs: number
+): Promise<{ id: number; startedAt: string } | null> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("price_sweep")
+    .select("id, started_at")
+    .eq("status", "running")
+    .order("started_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error(`[price-log] could not check for a running sweep: ${error.message}`);
+    return null;
+  }
+
+  const row = data?.[0];
+  if (!row) return null;
+
+  const startedAt = row.started_at as string;
+  const age = Date.now() - new Date(startedAt).getTime();
+
+  if (age > staleAfterMs) {
+    await supabase
+      .from("price_sweep")
+      .update({
+        status: "aborted",
+        finished_at: new Date().toISOString(),
+        error: `Abandoned: still 'running' after ${Math.round(age / 1000)}s. Closed out by a later sweep.`,
+      })
+      .eq("id", row.id);
+    console.error(`[price-log] closed out abandoned sweep ${row.id} (${Math.round(age / 1000)}s old)`);
+    return null;
+  }
+
+  return { id: row.id as number, startedAt };
 }

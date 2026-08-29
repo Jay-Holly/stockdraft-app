@@ -231,15 +231,32 @@ export async function getLatestPrices(
 
   const supabase = createServiceClient();
   const hits = new Map<string, PriceHit>();
-  const failures = new Map<string, string | null>();
 
   for (const group of chunk(wanted, SYMBOL_CHUNK)) {
+    // The most recent row that actually HAS a price — not simply the most
+    // recent row.
+    //
+    // This distinction became load-bearing when the logger moved to
+    // write-on-change: prices are now written only when they move, but a
+    // failure is written every time it happens. Reading "newest row per
+    // symbol" would therefore let a single transient provider error erase a
+    // symbol's price everywhere in the app, one minute after a perfectly good
+    // price was recorded. The good price is still in the table; the read was
+    // just asking the wrong question.
+    //
+    // Falling back to the last known price is right for LIVE display and
+    // wrong for settlement — which is why settlement does not come through
+    // here at all. It uses getAnchors, where the anchor either exists for
+    // that session or the contest holds.
     const { data, error } = await supabase
-      .from("price_log_latest")
+      .from("price_log")
       .select(
         "symbol, asset_class, price, failure_reason, change_percent, day_high, day_low, as_of, captured_at, source, set_by"
       )
-      .in("symbol", group);
+      .in("symbol", group)
+      .not("price", "is", null)
+      .is("superseded_at", null)
+      .order("captured_at", { ascending: false });
 
     if (error) {
       throw new Error(
@@ -249,15 +266,35 @@ export async function getLatestPrices(
 
     for (const row of (data ?? []) as PriceLogRow[]) {
       const symbol = row.symbol.toUpperCase();
+      if (hits.has(symbol)) continue; // newest-first, so the first one wins
       const hit = rowToHit(row);
       if (hit) hits.set(symbol, hit);
-      else if (row.failure_reason != null) failures.set(symbol, row.failure_reason);
+    }
+  }
+
+  // Anything with no priced row at all is genuinely absent. Report why, using
+  // the most recent failure recorded for it if there is one.
+  const stillMissing = wanted.filter((s) => !hits.has(s));
+  const failures = new Map<string, string | null>();
+
+  if (stillMissing.length > 0) {
+    for (const group of chunk(stillMissing, SYMBOL_CHUNK)) {
+      const { data } = await supabase
+        .from("price_log")
+        .select("symbol, failure_reason, captured_at")
+        .in("symbol", group)
+        .not("failure_reason", "is", null)
+        .order("captured_at", { ascending: false });
+
+      for (const row of data ?? []) {
+        const symbol = String(row.symbol).toUpperCase();
+        if (!failures.has(symbol)) failures.set(symbol, row.failure_reason as string);
+      }
     }
   }
 
   const misses = new Map<string, PriceMiss>();
-  for (const symbol of wanted) {
-    if (hits.has(symbol)) continue;
+  for (const symbol of stillMissing) {
     misses.set(symbol, {
       symbol,
       reason: failures.has(symbol) ? "logged-failure" : "no-observation",

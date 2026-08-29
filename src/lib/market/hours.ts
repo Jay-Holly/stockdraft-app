@@ -31,6 +31,20 @@ export function getNyDateString(date = new Date()): string {
   return formatter.format(date);
 }
 
+/**
+ * Is this a day US equities trade at all? Mon-Fri only.
+ *
+ * NOTE: there is no market-holiday calendar in this codebase, so this returns
+ * true on Thanksgiving and Christmas. It is still strictly better than the
+ * weekday-blind check it replaced: it stops a Saturday or Sunday from getting
+ * a stock open/close anchor built out of Friday's stale price. A holiday
+ * calendar is the remaining gap and would slot in right here.
+ */
+export function isUsTradingDay(date = new Date()): boolean {
+  const { weekday } = getNyParts(date);
+  return weekday !== "Sat" && weekday !== "Sun";
+}
+
 /** US equities session: Mon–Fri 9:30 AM – 4:00 PM Eastern. */
 export function isUsMarketOpen(date = new Date()): boolean {
   const { weekday, hour, minute } = getNyParts(date);

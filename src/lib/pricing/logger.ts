@@ -2,7 +2,7 @@ import "server-only";
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { isPricingFrozen } from "@/lib/market/pricing-freeze";
-import { isUsMarketOpen, getNyDateString } from "@/lib/market/hours";
+import { isUsMarketOpen, isUsTradingDay, getNyDateString } from "@/lib/market/hours";
 import { fetchFinnhubFullQuote, fetchAlpacaSnapshots } from "@/lib/pricing/providers";
 import { fetchCoinGeckoPrices } from "@/lib/pricing/providers";
 import { fetchDailyOpenClose } from "@/lib/market/twelve-data";
@@ -204,8 +204,27 @@ export async function runSweep(options: {
 
   // --- Stocks: Alpaca first, one batch call for everyone. ---
   const marketOpen = isUsMarketOpen(now);
-  const wantOpenAnchor = inWindow(now, OPEN_ANCHOR_WINDOW) || marketOpen;
-  const wantCloseAnchor = !marketOpen;
+  const tradingDay = isUsTradingDay(now);
+
+  // Both anchors require a day the market actually traded.
+  //
+  // `wantCloseAnchor` used to be simply `!marketOpen`, which is true all
+  // weekend and every weekday before 9:30. Two ways that went wrong, and the
+  // second is the dangerous one:
+  //
+  //   - On a Saturday it wrote a full set of stock "close" anchors for a
+  //     session that never happened, using Friday's stale quote.
+  //   - On a Monday at 8 AM it wrote Monday's close anchor from a pre-market
+  //     price. The anchor unique index then BLOCKS the real 4 PM close from
+  //     ever landing, so the whole day would score against a stale number
+  //     with nothing anywhere reporting a failure.
+  //
+  // Now a close may only be written from the close window onward (15:55 ET),
+  // which still allows a later backfill on the same day if the 4 PM sweep is
+  // missed, but never before the session has actually closed.
+  const wantOpenAnchor = tradingDay && (inWindow(now, OPEN_ANCHOR_WINDOW) || marketOpen);
+  const wantCloseAnchor =
+    tradingDay && nyMinutesOfDay(now) >= CLOSE_ANCHOR_WINDOW.startMin;
 
   const [haveOpen, haveClose] = await Promise.all([
     wantOpenAnchor ? existingAnchors(sessionDate, "open") : Promise.resolve(new Set<string>()),
