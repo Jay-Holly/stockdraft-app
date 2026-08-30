@@ -33,9 +33,10 @@ import { getCryptoQuotesMap, getStockQuote } from "@/lib/roster/quotes";
 import { getLeagueBotMembers } from "@/lib/league/league-bots";
 import { MIN_STOCK_PRICE_USD } from "@/lib/market/draft-pool";
 import {
-  getFallbackStockQuote,
-  listFallbackPoolSymbols,
-} from "@/lib/market/fallback-quotes";
+  screenPrice,
+  screenSymbols,
+  primeDraftPriceScreen,
+} from "@/lib/draft/price-screen";
 import { fetchCryptoPool } from "@/lib/crypto-pool/server";
 import { isCryptoPickEligible } from "@/lib/draft/engine";
 import { shouldStealthBots } from "@/lib/league/stealth-bots";
@@ -1275,7 +1276,8 @@ export async function advanceAfterPick(
 async function getStockPrice(symbol: string): Promise<number> {
   const { price } = await getStockQuote(symbol);
   if (price > 0) return price;
-  return getFallbackStockQuote(symbol)?.price ?? 0;
+  await primeDraftPriceScreen();
+  return screenPrice(symbol);
 }
 
 type AutoPickStockTier = "strict" | "relaxed" | "desperate";
@@ -1300,7 +1302,10 @@ async function loadAutoPickPoolSymbols(): Promise<string[]> {
   if (pool.length > 0) {
     return pool.map((stock) => stock.symbol.toUpperCase());
   }
-  return listFallbackPoolSymbols();
+  // The draft pool read failed. Fall back to whatever the price log can
+  // currently price, rather than a list from a committed file.
+  await primeDraftPriceScreen();
+  return screenSymbols();
 }
 
 function pickBestStockCandidate(
@@ -1317,7 +1322,7 @@ function pickBestStockCandidate(
     if (offBoard.has(symbol)) continue;
     if (isCryptoSymbol(symbol)) continue;
 
-    const fallback = getFallbackStockQuote(symbol);
+    const fallback = { price: screenPrice(symbol) };
     let price = fallback?.price ?? 0;
 
     if (tier === "strict") {
@@ -1496,7 +1501,7 @@ async function trySafetyStockAutoPick(
 
     const offBoard = state.state.leagueOffBoard.includes(safety);
     const mine = getMyStockSymbols(state.state.picks).has(safety);
-    const fallbackPrice = getFallbackStockQuote(safety)?.price ?? 0;
+    const fallbackPrice = screenPrice(safety);
     const price = (await getStockPrice(safety)) || fallbackPrice;
     if (!offBoard && !mine && isStockPickEligible(safety, price)) {
       return { symbol: safety, price, reason: "safety_queue" };

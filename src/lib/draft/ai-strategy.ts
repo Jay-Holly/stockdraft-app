@@ -1,4 +1,8 @@
-import { getFallbackStockQuote } from "@/lib/market/fallback-quotes";
+import {
+  primeDraftPriceScreen,
+  screenPrice,
+  screenQuote,
+} from "@/lib/draft/price-screen";
 import {
   enrichDraftPoolStocks,
   filterDraftPoolStocks,
@@ -78,13 +82,13 @@ async function buildStockCandidates(
 function buildStockCandidatesFast(stocks: DraftPoolStock[]): StockCandidate[] {
   const candidates: StockCandidate[] = [];
   for (const stock of stocks) {
-    const fallback = getFallbackStockQuote(stock.symbol);
-    const price = fallback?.price ?? 0;
+    const screened = screenQuote(stock.symbol);
+    const price = screened?.price ?? 0;
     if (!isStockPickEligible(stock.symbol, price)) continue;
     candidates.push({
       ...stock,
       price,
-      changePercent: fallback?.changePercent ?? 0,
+      changePercent: screened?.changePercent ?? 0,
     });
   }
   return candidates;
@@ -277,8 +281,7 @@ async function stockDecisionFromPool(
 ): Promise<AiPickDecision | null> {
   if (!stock) return null;
   if (fast) {
-    const fallback = getFallbackStockQuote(stock.symbol);
-    const screened = fallback?.price ?? 0;
+    const screened = screenPrice(stock.symbol);
     if (screened <= 0 || !isStockPickEligible(stock.symbol, screened)) {
       return null;
     }
@@ -295,7 +298,8 @@ async function stockDecisionFromCandidate(
   candidate: StockCandidate | null
 ): Promise<AiPickDecision | null> {
   if (!candidate || candidate.price <= 0) return null;
-  // Candidates built by buildStockCandidatesFast carry fallback-table prices.
+  // Candidates built by buildStockCandidatesFast carry screened prices from
+  // the price log — see price-screen.ts.
   // Re-resolve so the recorded price is the live one; a cache hit costs
   // nothing and a miss keeps the screened price rather than losing the turn.
   const price = await resolvePickPrice(candidate.symbol, candidate.price);
@@ -441,6 +445,13 @@ export async function decideAiPick(
   const { turn, picks, leagueOffBoard, sportsSimDraftRules, buyerCounts } =
     state;
   if (turn.type === "complete" || turn.type === "pushback_skip") return null;
+
+  // Load the whole pool's prices once, up front, so the fast strategy paths
+  // below can screen 502 symbols synchronously. Without this they screen
+  // against an empty map, every stock prices at $0, nothing is eligible, and
+  // the bot skips its pick — which is exactly what a live test draft produced
+  // before this existed.
+  if (fast) await primeDraftPriceScreen();
 
   const rules = draftRulesModeFromFlag(sportsSimDraftRules);
   const summary = summarizePicks(picks, rules);
