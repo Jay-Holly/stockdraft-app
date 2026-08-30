@@ -320,16 +320,17 @@ was run end to end, read-only, against live data:
 
 **Next, in priority order:**
 
-1. **Nothing surfaces a hold.** Contests held for good reason are invisible
-   until someone queries the table. Per §0, a silent hold is the highest
-   reputational exposure open. Jay has deprioritised the specific frozen SDDFS
-   backlog; the alerting gap is what matters.
-2. **`dfs_audit_runs` needs the stale-run guard** `price_sweep` now has — a run
+1. **`dfs_audit_runs` needs the stale-run guard** `price_sweep` now has — a run
    stuck in `running` currently blocks every run behind it.
-3. **Narrow audit round 2** to skip anchors already corroborated at capture.
+2. **Narrow audit round 2** to skip anchors already corroborated at capture.
    Approved, not built.
-4. **Open product decisions** (§8): Day Trader's two identical leaderboards, no
+3. **Open product decisions** (§8): Day Trader's two identical leaderboards, no
    `failed` contest status, Diamond Hands not yet reading `day_high`/`day_low`.
+
+**Holds are surfaced** at `/admin/holds` (migration 094, `system_holds`). A
+contest that will not lock, or a sweep that died mid-run, opens a visible hold
+that closes itself when the condition clears. Not yet wired: fund-release holds
+and stalled audit runs.
 
 **Still stubbed, and probably dead:** the `market/*` cache layer
 (cached-prices, fallback-quotes, refresh-*, upsert-*, warm-*) — superseded by
