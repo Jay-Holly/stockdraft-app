@@ -441,7 +441,7 @@ export async function decideAiPick(
   botConfig: BotConfig = {},
   options?: { fast?: boolean }
 ): Promise<AiPickDecision | null> {
-  const fast = options?.fast ?? false;
+  const fast = options?.fast ?? true;
   const { turn, picks, leagueOffBoard, sportsSimDraftRules, buyerCounts } =
     state;
   if (turn.type === "complete" || turn.type === "pushback_skip") return null;
