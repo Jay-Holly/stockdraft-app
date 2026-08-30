@@ -370,3 +370,54 @@ export async function getAnchorHistory(
 export function historyKey(symbol: string, sessionDate: string): string {
   return `${symbol.toUpperCase()}|${sessionDate}`;
 }
+
+/**
+ * Anchors that two sources could not settle between them.
+ *
+ * This is the third source's work queue, and it is deliberately narrow. The
+ * old audit spent a limited per-minute budget re-confirming symbols nobody
+ * doubted, and ran out of credits before reaching the end of the day's list —
+ * so it verified an arbitrary slice and never got to the rest. Two sources now
+ * agree on almost everything at capture time, which leaves the third source
+ * free to cover every case that actually needs it.
+ *
+ * `divergent` — the two sources disagreed beyond tolerance.
+ * `unverified` — only one source produced a price; not wrong, just uncorroborated.
+ * `recovered`  — the intended source had nothing and a fallback supplied it.
+ */
+export async function getAnchorsNeedingThirdSource(
+  sessionDate: string
+): Promise<
+  Array<{
+    symbol: string;
+    kind: "open" | "close";
+    price: number;
+    verifiedPrice: number | null;
+    verifyDiffPct: number | null;
+    verifyStatus: string;
+  }>
+> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("price_log")
+    .select("symbol, kind, price, verified_price, verify_diff_pct, verify_status")
+    .eq("session_date", sessionDate)
+    .in("kind", ["open", "close"])
+    .is("superseded_at", null)
+    .not("price", "is", null)
+    .in("verify_status", ["divergent", "unverified", "recovered"])
+    .order("verify_status", { ascending: true });
+
+  if (error) {
+    throw new Error(`[price-read] third-source queue read failed (${sessionDate}): ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    symbol: String(row.symbol).toUpperCase(),
+    kind: row.kind as "open" | "close",
+    price: Number(row.price),
+    verifiedPrice: row.verified_price == null ? null : Number(row.verified_price),
+    verifyDiffPct: row.verify_diff_pct == null ? null : Number(row.verify_diff_pct),
+    verifyStatus: String(row.verify_status),
+  }));
+}

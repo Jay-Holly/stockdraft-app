@@ -21,6 +21,7 @@ import { SeasonCalendarBanner } from "@/components/season/SeasonCalendarBanner";
 import { RosterIrBanner } from "@/components/season/RosterIrBanner";
 import { TeamLogoBox } from "@/components/season/TeamLogoBox";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
+import { useLivePrices } from "@/hooks/useLivePrices";
 
 export function MyTeamPageContent({
   initialRoster = null,
@@ -165,6 +166,34 @@ export function MyTeamPageContent({
     () => void load(roster?.viewWeek),
     isLiveRoster ? 30_000 : null
   );
+
+  // Every symbol on this roster, in any slot.
+  const rosterSymbols = useMemo(() => {
+    if (!roster) return [];
+    const all = [
+      ...roster.starters,
+      ...roster.bench,
+      ...roster.ir,
+      ...roster.crypto,
+    ];
+    return [
+      ...new Set(
+        all
+          .map((pick) => pick.symbol.toUpperCase())
+          .filter((symbol) => symbol && symbol !== "__OPEN__")
+      ),
+    ];
+  }, [roster]);
+
+  // The logger pushes only what moved. When something on this roster is in
+  // that push, reload now rather than waiting out the 30-second timer above.
+  //
+  // The push is a signal, not data: the server recomputes the values, so the
+  // browser never does scoring arithmetic of its own. The timer stays as the
+  // fallback for a dropped socket, the same way DraftRoom handles it.
+  useLivePrices(isLiveRoster ? rosterSymbols : [], () => {
+    void load(roster?.viewWeek);
+  });
 
   async function handleMoveToIr() {
     if (!irMoveStarterId || !irMoveSlotId) return;

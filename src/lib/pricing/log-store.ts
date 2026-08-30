@@ -34,6 +34,11 @@ export type Observation =
       asOf: Date;
       source: Exclude<LogSource, "manual">;
       sweepId: number;
+      /** A second, independent source's price for the same instant. */
+      verifiedPrice?: number;
+      verifiedSource?: Exclude<LogSource, "manual">;
+      verifyDiffPct?: number | null;
+      verifyStatus?: "ok" | "divergent" | "unverified" | "recovered";
     }
   | {
       symbol: string;
@@ -284,10 +289,23 @@ async function lastObservedValues(
  * since I last looked?" becomes a cheap question, which is what live-updating
  * pages need.
  */
+export type WrittenTick = { symbol: string; price: number; changePercent: number | null };
+
 export async function writeObservations(
   observations: readonly Observation[]
-): Promise<{ written: number; rejected: number; skipped: number }> {
-  if (observations.length === 0) return { written: 0, rejected: 0, skipped: 0 };
+): Promise<{
+  written: number;
+  rejected: number;
+  skipped: number;
+  /**
+   * The priced observations this call actually stored — i.e. exactly what
+   * changed. This is what gets pushed to open browsers; a symbol that did not
+   * move produced no row and so appears nowhere here.
+   */
+  writtenTicks: WrittenTick[];
+}> {
+  if (observations.length === 0)
+    return { written: 0, rejected: 0, skipped: 0, writtenTicks: [] };
 
   const supabase = createServiceClient();
 
@@ -315,7 +333,12 @@ export async function writeObservations(
   });
 
   const skipped = observations.length - toWrite.length;
-  if (toWrite.length === 0) return { written: 0, rejected: 0, skipped };
+  if (toWrite.length === 0) return { written: 0, rejected: 0, skipped, writtenTicks: [] };
+
+  const tickFor = (o: Observation): WrittenTick | null =>
+    "price" in o
+      ? { symbol: o.symbol, price: o.price, changePercent: o.changePercent ?? null }
+      : null;
 
   // One uniform row shape (nulls for whichever side doesn't apply) rather
   // than a union of two shapes — the union type-checks per-observation but
@@ -334,6 +357,11 @@ export async function writeObservations(
     day_low: number | null;
     as_of: string | null;
     failure_reason: string | null;
+    verified_price: number | null;
+    verified_source: string | null;
+    verify_diff_pct: number | null;
+    verify_status: string | null;
+    verified_at: string | null;
   };
 
   const rows: Row[] = toWrite.map((o) => ({
@@ -350,6 +378,11 @@ export async function writeObservations(
     day_low: "price" in o ? (o.dayLow ?? null) : null,
     as_of: "price" in o ? o.asOf.toISOString() : null,
     failure_reason: "price" in o ? null : o.failureReason,
+    verified_price: "price" in o ? (o.verifiedPrice ?? null) : null,
+    verified_source: "price" in o ? (o.verifiedSource ?? null) : null,
+    verify_diff_pct: "price" in o ? (o.verifyDiffPct ?? null) : null,
+    verify_status: "price" in o ? (o.verifyStatus ?? null) : null,
+    verified_at: "price" in o && o.verifyStatus ? new Date().toISOString() : null,
   }));
 
   const { error, count } = await supabase
@@ -362,7 +395,10 @@ export async function writeObservations(
     // one at a time so 552 good rows aren't lost because of 1 bad one.
     let written = 0;
     let rejected = 0;
-    for (const row of rows) {
+    const landed: WrittenTick[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       const single = await supabase.from("price_log").insert(row);
       if (single.error) {
         rejected++;
@@ -371,12 +407,22 @@ export async function writeObservations(
         );
       } else {
         written++;
+        // Only a row that actually landed may be broadcast. Pushing a rejected
+        // one would announce a price no reader can find, and the next refresh
+        // would snap the page back to the old value.
+        const tick = tickFor(toWrite[i]);
+        if (tick) landed.push(tick);
       }
     }
-    return { written, rejected, skipped };
+    return { written, rejected, skipped, writtenTicks: landed };
   }
 
-  return { written: count ?? rows.length, rejected: 0, skipped };
+  return {
+    written: count ?? rows.length,
+    rejected: 0,
+    skipped,
+    writtenTicks: toWrite.map(tickFor).filter((t): t is WrittenTick => t !== null),
+  };
 }
 
 /**
@@ -428,4 +474,74 @@ export async function findRunningSweep(
   }
 
   return { id: row.id as number, startedAt };
+}
+
+/**
+ * Anchors that have been written but not yet corroborated.
+ *
+ * The open is written the instant the batch source reports it, so the trading
+ * day can start on time, and is checked afterwards. This is that backlog.
+ */
+export async function listUnverifiedAnchors(
+  sessionDate: string,
+  kind: "open" | "close",
+  limit: number
+): Promise<Array<{ id: number; symbol: string; price: number }>> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("price_log")
+    .select("id, symbol, price")
+    .eq("session_date", sessionDate)
+    .eq("kind", kind)
+    .is("superseded_at", null)
+    .not("price", "is", null)
+    .eq("verify_status", "unverified")
+    .limit(limit);
+
+  if (error) {
+    console.error(`[price-log] could not list unverified ${kind} anchors: ${error.message}`);
+    return [];
+  }
+
+  return (data ?? []).map((r) => ({
+    id: r.id as number,
+    symbol: String(r.symbol).toUpperCase(),
+    price: Number(r.price),
+  }));
+}
+
+/**
+ * Records a second source's opinion of an anchor that was already written.
+ *
+ * This UPDATES a row, which is worth being explicit about in an append-only
+ * table: the price itself is never touched, and neither is anything about how
+ * it was captured. Only the corroboration fields — which were empty because
+ * the check had not happened yet — get filled in. The number a contest settles
+ * on remains exactly what was first written, and if it turns out to be wrong
+ * the correction path is still supersession, which preserves the original.
+ */
+export async function recordAnchorVerification(
+  id: number,
+  verification: {
+    verifiedPrice: number | null;
+    verifiedSource: LogSource | null;
+    diffPct: number | null;
+    status: "ok" | "divergent" | "unverified" | "recovered";
+  }
+): Promise<void> {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("price_log")
+    .update({
+      verified_price: verification.verifiedPrice,
+      verified_source: verification.verifiedSource,
+      verify_diff_pct: verification.diffPct,
+      verify_status: verification.status,
+      verified_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    console.error(`[price-log] could not record verification for row ${id}: ${error.message}`);
+  }
 }

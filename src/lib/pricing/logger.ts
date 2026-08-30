@@ -6,8 +6,12 @@ import { isUsMarketOpen, isUsTradingDay, getNyDateString } from "@/lib/market/ho
 import { fetchFinnhubFullQuote, fetchAlpacaSnapshots } from "@/lib/pricing/providers";
 import { fetchCoinGeckoPrices } from "@/lib/pricing/providers";
 import { fetchDailyOpenClose } from "@/lib/market/twelve-data";
+import { broadcastPriceChanges, type PriceTick } from "@/lib/pricing/broadcast";
+import { verifyAnchor } from "@/lib/pricing/verify";
 import {
   startSweep,
+  listUnverifiedAnchors,
+  recordAnchorVerification,
   finishSweep,
   existingAnchors,
   writeObservations,
@@ -233,6 +237,33 @@ export async function runSweep(options: {
 
   let sweepRejected = 0;
 
+  // Everything this sweep actually wrote — which, under write-on-change, is
+  // exactly what moved. Pushed to open browsers once at the end of the sweep
+  // rather than per batch, so a page gets one update per sweep instead of
+  // several partial ones.
+  const changedTicks: PriceTick[] = [];
+
+  /**
+   * What the batch source (Alpaca) reported for each stock this sweep.
+   *
+   * Kept because it is the free second opinion: the one batch call already
+   * returns every symbol's open, close, high and low, so corroborating an
+   * anchor against it costs nothing. It is IEX-only data, which is why it is
+   * the CHECK and not the anchor itself — the official open and close are set
+   * by auctions on the primary exchange, which IEX does not run.
+   */
+  const batchValues = new Map<
+    string,
+    { dayOpen: number | null; price: number; dayHigh: number | null; dayLow: number | null }
+  >();
+
+  /** writeObservations, plus a note of what changed so it can be pushed. */
+  async function writeAndTrack(observations: readonly Observation[]) {
+    const result = await writeObservations(observations);
+    changedTicks.push(...result.writtenTicks);
+    return result;
+  }
+
   /** Shared by both providers — a symbol's quote becomes the same three log rows either way. */
   async function writeStockQuote(
     symbol: string,
@@ -255,6 +286,24 @@ export async function runSweep(options: {
       },
     ];
 
+    // THE OPEN ANCHOR IS WRITTEN HERE, IMMEDIATELY, FROM THE BATCH SOURCE.
+    //
+    // Not from the consolidated source, and the reason is timing rather than
+    // accuracy. Finnhub has no batch endpoint and allows 60 calls a minute, so
+    // pricing 502 stocks through it takes the better part of ten minutes. At
+    // 9:30 that is the wrong trade: contests lock on the open, and a baseline
+    // that arrives ten minutes into the session is worse than one that is a
+    // few hundredths of a percent off. Alpaca prices the entire pool in one
+    // call, so the day starts on time.
+    //
+    // The open is still corroborated — just afterwards, by verifyOpenAnchors
+    // below, which runs in the background once the session is under way and
+    // nothing is waiting on it. Verification arriving late is fine. A baseline
+    // arriving late is not.
+    //
+    // The close is the opposite case and is handled the opposite way: nothing
+    // is waiting at 4 PM, so it is captured from the consolidated source
+    // directly. See captureStockCloseAnchors.
     if (wantOpenAnchor && !haveOpen.has(symbol) && q.dayOpen) {
       rows.push({
         symbol,
@@ -269,27 +318,21 @@ export async function runSweep(options: {
         asOf: nySessionMoment(sessionDate, 9, 30),
         source,
         sweepId,
+        // Written fast, corroborated later. Recorded honestly as
+        // single-sourced in the meantime rather than presumed correct.
+        verifyStatus: "unverified",
       });
       haveOpen.add(symbol);
     }
 
-    if (wantCloseAnchor && !haveClose.has(symbol)) {
-      rows.push({
-        symbol,
-        assetClass: "stock",
-        kind: "close",
-        sessionDate,
-        price: q.price,
-        dayHigh: q.dayHigh ?? undefined,
-        dayLow: q.dayLow ?? undefined,
-        asOf: nySessionMoment(sessionDate, 16, 0),
-        source,
-        sweepId,
-      });
-      haveClose.add(symbol);
-    }
+    batchValues.set(symbol, {
+      dayOpen: q.dayOpen,
+      price: q.price,
+      dayHigh: q.dayHigh,
+      dayLow: q.dayLow,
+    });
 
-    const { rejected } = await writeObservations(rows);
+    const { rejected } = await writeAndTrack(rows);
     sweepRejected += rejected;
   }
 
@@ -372,7 +415,7 @@ export async function runSweep(options: {
         source: "finnhub",
         sweepId,
       }));
-      const { rejected } = await writeObservations(rows);
+      const { rejected } = await writeAndTrack(rows);
       sweepRejected += rejected;
       console.error(
         `[logger] sweep ${sweepId}: hit its time budget with ${notAttempted.length} symbol(s) still unattempted — picked up first by the next sweep`
@@ -396,7 +439,7 @@ export async function runSweep(options: {
 
       if (openPrice === null && closePrice === null) {
         failed++;
-        const { rejected } = await writeObservations([
+        const { rejected } = await writeAndTrack([
           {
             symbol,
             assetClass: "stock",
@@ -458,11 +501,183 @@ export async function runSweep(options: {
         haveClose.add(symbol);
       }
 
-      const { rejected } = await writeObservations(rows);
+      const { rejected } = await writeAndTrack(rows);
       sweepRejected += rejected;
     }
     await reportProgress(true);
   }
+
+  // --- Stock CLOSE anchors: consolidated source, corroborated at capture. ---
+  //
+  // Samples above come from the batch source because it is one call and fast
+  // enough to sample every minute. Anchors are different: they are the numbers
+  // contests settle on, and the batch source is IEX-only — it does not run the
+  // opening or closing auction that sets the official price. Measured against
+  // consolidated closes the gap averages ~0.02% and reaches ~0.07%, which is
+  // invisible on a screen and can still decide a close matchup.
+  //
+  // So each anchor is fetched from Finnhub (consolidated) and checked against
+  // the batch value already in hand. Two independent sources, the same instant,
+  // every symbol, at no extra API cost — the check that used to happen hours
+  // later against a third source's limited budget now happens at capture, and
+  // the third source is reserved for the cases where these two disagree.
+  //
+  // Finnhub has no batch endpoint and allows 60 calls a minute, so a full
+  // anchor pass takes several minutes of wall clock. That is fine: it is
+  // time-boxed like everything else here, symbols it does not reach keep their
+  // anchor unwritten (never a guessed one), and the next sweep continues.
+  async function captureStockCloseAnchors(): Promise<void> {
+    if (!wantCloseAnchor) return;
+
+    const targets = stocks.filter((symbol) => !haveClose.has(symbol));
+    if (targets.length === 0) return;
+
+    let captured = 0;
+
+    for (const symbol of targets) {
+      if (Date.now() >= sweepHardDeadline) {
+        console.log(
+          `[logger] anchor pass hit its time budget after ${captured} symbol(s); ` +
+            `${targets.length - captured} still need an anchor and will be picked up by the next sweep`
+        );
+        break;
+      }
+
+      const fh = await fetchFinnhubFullQuote(symbol);
+      apiCalls++;
+
+      const batch = batchValues.get(symbol);
+      const rows: Observation[] = [];
+
+      /** Build one anchor: consolidated price first, batch value as the check. */
+      const buildAnchor = (
+        kind: "open" | "close",
+        consolidated: number | null,
+        batchValue: number | null,
+        asOf: Date
+      ): Observation | null => {
+        const usingFallback = !(typeof consolidated === "number" && consolidated > 0);
+        const price = usingFallback ? batchValue : consolidated;
+        // No price from either source: write nothing. A missing anchor holds
+        // the contest, which is the whole point — it is never filled in with
+        // whatever number happened to be nearby.
+        if (!(typeof price === "number" && price > 0)) return null;
+
+        const secondary = usingFallback ? null : batchValue;
+        const v = verifyAnchor(price, secondary, usingFallback);
+
+        return {
+          symbol,
+          assetClass: "stock",
+          kind,
+          sessionDate,
+          price,
+          dayHigh: batch?.dayHigh ?? undefined,
+          dayLow: batch?.dayLow ?? undefined,
+          asOf,
+          source: usingFallback ? "alpaca" : "finnhub",
+          sweepId,
+          verifiedPrice: secondary ?? undefined,
+          verifiedSource: secondary != null ? "alpaca" : undefined,
+          verifyDiffPct: v.diffPct,
+          verifyStatus: v.status,
+        };
+      };
+
+      if (!haveClose.has(symbol)) {
+        const row = buildAnchor(
+          "close",
+          fh.status === "ok" ? fh.quote.price : null,
+          batch?.price ?? null,
+          nySessionMoment(sessionDate, 16, 0)
+        );
+        if (row) {
+          rows.push(row);
+          haveClose.add(symbol);
+        }
+      }
+
+      if (rows.length > 0) {
+        const { rejected } = await writeAndTrack(rows);
+        sweepRejected += rejected;
+        captured++;
+
+        const divergent = rows.filter((r) => "verifyStatus" in r && r.verifyStatus === "divergent");
+        for (const row of divergent) {
+          if (!("price" in row)) continue;
+          console.error(
+            `[logger] anchor DISAGREEMENT ${symbol} ${row.kind} ${sessionDate}: ` +
+              `consolidated ${row.price} vs batch ${row.verifiedPrice} ` +
+              `(${row.verifyDiffPct?.toFixed(3)}%) — queued for a third source`
+          );
+        }
+      }
+    }
+  }
+
+  // --- Background corroboration of the open anchor. ---
+  //
+  // The open was written immediately from the batch source so the session
+  // could start on time. This is the other half of that trade: once nothing is
+  // waiting, the consolidated source is asked what it saw, and its answer is
+  // recorded against the anchor.
+  //
+  // Deliberately last in the sweep and strictly time-boxed. It is the least
+  // urgent thing the logger does — nobody is blocked on it, and it must never
+  // be the reason a sample or a close anchor is late. Whatever it does not
+  // reach stays queued and the next sweep continues, so 502 symbols get
+  // corroborated over the course of the morning rather than all at once.
+  //
+  // A disagreement does NOT rewrite the anchor. Contests may already have
+  // locked on it, and silently changing the number a contest was scored
+  // against is precisely the kind of invisible edit this table exists to
+  // prevent. It is recorded as divergent, logged loudly, and handed to the
+  // third source; correcting it is a deliberate supersession, which keeps the
+  // original visible forever.
+  async function verifyOpenAnchors(): Promise<void> {
+    if (!tradingDay) return;
+
+    const pending = await listUnverifiedAnchors(sessionDate, "open", 200);
+    if (pending.length === 0) return;
+
+    let checked = 0;
+
+    for (const anchor of pending) {
+      if (Date.now() >= sweepHardDeadline) break;
+
+      const fh = await fetchFinnhubFullQuote(anchor.symbol);
+      apiCalls++;
+
+      const consolidatedOpen = fh.status === "ok" ? fh.quote.dayOpen : null;
+      const v = verifyAnchor(anchor.price, consolidatedOpen);
+
+      // Nothing came back. Leave it queued rather than marking it checked —
+      // "we asked and got no answer" is not verification.
+      if (consolidatedOpen == null && v.status === "unverified") continue;
+
+      await recordAnchorVerification(anchor.id, {
+        verifiedPrice: consolidatedOpen,
+        verifiedSource: consolidatedOpen != null ? "finnhub" : null,
+        diffPct: v.diffPct,
+        status: v.status,
+      });
+      checked++;
+
+      if (v.status === "divergent") {
+        console.error(
+          `[logger] OPEN anchor disagreement ${anchor.symbol} ${sessionDate}: ` +
+            `stored ${anchor.price} vs consolidated ${consolidatedOpen} ` +
+            `(${v.diffPct?.toFixed(3)}%) — anchor unchanged, queued for a third source`
+        );
+      }
+    }
+
+    if (checked > 0) {
+      console.log(`[logger] corroborated ${checked} open anchor(s) for ${sessionDate}`);
+    }
+  }
+
+  await captureStockCloseAnchors();
 
   // --- Crypto: one CoinGecko call for the whole pool. ---
   if (crypto.length > 0) {
@@ -537,7 +752,7 @@ export async function runSweep(options: {
 
     // Crypto is one API call for the whole pool, so there's no per-symbol
     // pacing to interleave with — write it as a single batch and report once.
-    const { rejected } = await writeObservations(cryptoObservations);
+    const { rejected } = await writeAndTrack(cryptoObservations);
     sweepRejected += rejected;
     await reportProgress(true);
   }
@@ -546,7 +761,21 @@ export async function runSweep(options: {
     console.error(`[logger] sweep ${sweepId}: ${sweepRejected} observation(s) rejected on write`);
   }
 
+  // Genuinely last, after crypto. This is the only work in the sweep nobody is
+  // waiting on, so it gets whatever time budget is left over and never
+  // competes with pricing for it.
+  await verifyOpenAnchors();
+
   await finishSweep(sweepId, { ok, failed, apiCalls });
+
+  // Push what moved to any open page. Deliberately after finishSweep: the log
+  // is the record and the push is a convenience, so the sweep is complete and
+  // durable before anything is sent. A failed push is logged inside
+  // broadcastPriceChanges and never fails the sweep — clients poll as a
+  // fallback, the same way DraftRoom already treats its realtime channels.
+  if (changedTicks.length > 0) {
+    await broadcastPriceChanges(changedTicks);
+  }
 
   return {
     sweepId,
