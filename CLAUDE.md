@@ -302,40 +302,43 @@ The Pittsburgh beta is dozens of people. None of this is work for now.
 *Replace this section entirely at the end of each session. Keep it short — what
 is in flight, what is blocked, what is next. Not a history.*
 
-**Last updated:** 2026-08-29
+**Last updated:** 2026-08-30
 
-**State:** Branch `scoring-rebuild`, clean, pushed. **Nothing deployed** —
-`main` is still what is live. Migrations 089–093 applied. Pricing still frozen.
+**DEPLOYED AND LIVE.** `main` is at `6e5e880`; the whole rebuild is in
+production. The freeze is OFF. Migrations 089–094 applied. `main` and
+`scoring-rebuild` are identical.
 
-**Every league can score.** No scorer has a stub dependency left. The pipeline
-was run end to end, read-only, against live data:
+Verified running in production, not just built:
 
-- Season/AI leagues: 11 rosters scored from real prices, real baselines, real
-  chained opens. Gains ranged −1.38% to +4.71%. One roster correctly HELD on an
-  unpriceable symbol.
-- SDDFS: a real 2026-08-26 contest re-scored — 69 pick percentages recomputed,
-  all 69 matching the stored values exactly.
-- Day Trader: positions priced from the log; an unknown symbol is absent rather
-  than fabricated.
+- Cron sweeps every minute: **552 symbols, 2 API calls, ~17s, zero failures**
+  (one Alpaca batch + one CoinGecko call).
+- `/my-team` and `/matchups` render real values that match an independent
+  offline computation to the dollar (−0.47% / −$5,228 on a week-11 roster).
+- `/admin/prices` and `/admin/holds` both live. Zero open holds.
+- Market API routes serve from the log; unknown symbols are absent, never
+  fabricated.
+
+**Gotcha worth remembering:** the Alpaca keys were missing from Vercel at first
+deploy, so production silently ran the whole pool through per-symbol Finnhub —
+correct behaviour, self-healing, but ~9 minutes a sweep. Env vars are set now
+for Production and Preview. **Environment variables only apply to a NEW build:
+adding them requires a redeploy.**
 
 **Next, in priority order:**
 
-1. **`dfs_audit_runs` needs the stale-run guard** `price_sweep` now has — a run
-   stuck in `running` currently blocks every run behind it.
-2. **Narrow audit round 2** to skip anchors already corroborated at capture.
-   Approved, not built.
-3. **Open product decisions** (§8): Day Trader's two identical leaderboards, no
+1. **The draft room is the one untested player path.** Everything else has been
+   clicked through in a browser. Test it in a throwaway league before the beta —
+   loading a live draft room can start a pick timer against real data.
+2. **`dfs_audit_runs` needs the stale-run guard** `price_sweep` has; a run stuck
+   in `running` blocks every run behind it.
+3. **Narrow audit round 2** to skip anchors already corroborated at capture.
+4. **Open product decisions** (§8): Day Trader's two identical leaderboards, no
    `failed` contest status, Diamond Hands not yet reading `day_high`/`day_low`.
+5. **Re-enable Vercel Deployment Protection for previews** — it was turned off
+   to allow browser verification and preview URLs are wired to the production
+   database.
 
-**Holds are surfaced** at `/admin/holds` (migration 094, `system_holds`). A
-contest that will not lock, or a sweep that died mid-run, opens a visible hold
-that closes itself when the condition clears. Not yet wired: fund-release holds
-and stalled audit runs.
-
-**Still stubbed, and probably dead:** the `market/*` cache layer
-(cached-prices, fallback-quotes, refresh-*, upsert-*, warm-*) — superseded by
-the price log. Check callers, then delete rather than rebuild.
-`roster/historical.ts` and `roster/team-stats.ts` are display only.
-
-**Before deploying:** confirm no throwing stub is still reachable from a path a
-player can hit. That is the remaining gate, and it is now small.
+**Housekeeping:** all SDDFS beta data (180 contests / 737 entries / 8,820
+picks) was deleted 2026-08-30 at Jay's instruction; a JSON backup is at
+`~/Desktop/sddfs-backup-2026-08-30/`. `dfs_price_audits` and `dfs_audit_runs`
+history was left in place.
