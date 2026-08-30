@@ -304,35 +304,37 @@ is in flight, what is blocked, what is next. Not a history.*
 
 **Last updated:** 2026-08-29
 
-**State:** Branch `scoring-rebuild`, working tree clean, nine commits this
-session, **nothing pushed and nothing deployed**. `main` is still what is live.
-Migrations 089–093 all applied to the live database. Production pricing is still
-frozen.
+**State:** Branch `scoring-rebuild`, clean, pushed. **Nothing deployed** —
+`main` is still what is live. Migrations 089–093 applied. Pricing still frozen.
 
-**Working and proven against real data:** the price log as the only price
-source; the logger sweeping every minute with write-on-change; live push to
-browsers over Supabase Realtime; DFS contests holding rather than locking on
-missing baselines; anchors corroborated at capture; baselines chaining across
-periods; season-league scoring wired end to end (`matchup/scoring.ts` has no
-stub dependencies left); the DFS audit chain restored.
+**Every league can score.** No scorer has a stub dependency left. The pipeline
+was run end to end, read-only, against live data:
+
+- Season/AI leagues: 11 rosters scored from real prices, real baselines, real
+  chained opens. Gains ranged −1.38% to +4.71%. One roster correctly HELD on an
+  unpriceable symbol.
+- SDDFS: a real 2026-08-26 contest re-scored — 69 pick percentages recomputed,
+  all 69 matching the stored values exactly.
+- Day Trader: positions priced from the log; an unknown symbol is absent rather
+  than fabricated.
 
 **Next, in priority order:**
 
-1. **12 SDDFS contests are frozen**, holding real entry fees, and the audit that
-   would resolve them has been stuck in `running` since 2026-08-26 (8 of 544
-   symbols). Nothing alerts on either. Per §0, a silent hold is the highest
-   reputational exposure open. *Jay has explicitly deprioritised the old frozen
-   contests themselves — but the alerting gap remains.*
-2. **Give `dfs_audit_runs` a stale-run guard**, the same one `price_sweep` now
-   has, so a dead run cannot jam every run behind it.
-3. **Narrow audit round 2** to skip anchors already corroborated at capture, so
-   Twelve Data's 8/min budget is spent only on exceptions. Approved, not built.
+1. **Nothing surfaces a hold.** Contests held for good reason are invisible
+   until someone queries the table. Per §0, a silent hold is the highest
+   reputational exposure open. Jay has deprioritised the specific frozen SDDFS
+   backlog; the alerting gap is what matters.
+2. **`dfs_audit_runs` needs the stale-run guard** `price_sweep` now has — a run
+   stuck in `running` currently blocks every run behind it.
+3. **Narrow audit round 2** to skip anchors already corroborated at capture.
+   Approved, not built.
+4. **Open product decisions** (§8): Day Trader's two identical leaderboards, no
+   `failed` contest status, Diamond Hands not yet reading `day_high`/`day_low`.
 
-**Still stubbed:** `day-trader/leaderboard.ts`, `day-trader/position-gains.ts`,
-`sddfs/scoring.ts`, `roster/historical.ts`, `roster/team-stats.ts`, and the
-`market/*` cache files (likely dead now that the log exists — check callers
-before rebuilding, they may want deleting instead).
+**Still stubbed, and probably dead:** the `market/*` cache layer
+(cached-prices, fallback-quotes, refresh-*, upsert-*, warm-*) — superseded by
+the price log. Check callers, then delete rather than rebuild.
+`roster/historical.ts` and `roster/team-stats.ts` are display only.
 
-**Before deploying:** this branch still contains throwing stubs that `main` has
-real code for. Deploying replaces working features with ones that break the
-moment a player touches them.
+**Before deploying:** confirm no throwing stub is still reachable from a path a
+player can hit. That is the remaining gate, and it is now small.
