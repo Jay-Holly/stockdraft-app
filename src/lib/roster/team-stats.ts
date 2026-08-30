@@ -1,62 +1,128 @@
-/**
- * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
- * src/lib/day-trader/ for the full explanation: 31 files were deleted at
- * the start of the scoring-rebuild branch (2026-08-27), and this dev server
- * points at the live production database, not a sandbox.
- *
- * Every export below is synchronous even where the real function will be
- * async, on purpose: a sync throw propagates correctly whether or not a
- * caller awaits it; an async stub that a caller doesn't await would hand
- * back a Promise object instead of throwing, which is a worse, quieter
- * failure than the one this file exists to prevent.
- *
- * Two behaviors, chosen per export, never guessed at random:
- *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
- *     an outcome throws immediately. Faking that value is how a $0.15 open
- *     scored a stock at +57,320% the first time. A loud error beats a quiet
- *     wrong number.
- *   - A function whose job is a plain READ (a quote, a list, a lookup) that
- *     found nothing returns an honestly empty result — the same shape a real
- *     "no rows" answer would have. That is not a fabrication; it is what an
- *     empty result actually looks like.
- *
- * Rebuild this against the real logic (and the new pricing module) before
- * relying on it for anything that touches money or a real score.
- */
+import type { LeagueScoringMode } from "@/lib/league/scoring-mode";
+import type { RosterPickView } from "@/lib/roster/types";
+import { isScoringRosterPick } from "@/lib/roster/crypto-picks";
+import { computeScoringWeekGainPercent } from "@/lib/roster/scoring-math";
 
-function notImplemented(name: string): Error {
-  return new Error(
-    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
-    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
-  );
-}
+export type TeamGainStats = {
+  weekDollarGain: number;
+  weekGainPercent: number;
+  seasonDollarGain: number;
+  seasonGainPercent: number;
+};
 
 export type OrderedGainStat = {
   key: string;
   label: string;
   value: number;
-  format: "money" | "percent";
+  format: "money" | "pct";
 };
 
-export type TeamGainStats = unknown;
+export function computeTeamGainStats(picks: RosterPickView[]): TeamGainStats {
+  const scoring = picks.filter(isScoringRosterPick);
 
-export function computeTeamGainStats(...args: unknown[]): TeamGainStats {
-  throw notImplemented("computeTeamGainStats");
+  const weekInputs = scoring.map((pick) => ({
+    currentValue: pick.currentValue,
+    weekOpenValue: pick.weekOpenValue,
+  }));
+
+  const seasonInputs = scoring.map((pick) => ({
+    currentValue: pick.currentValue,
+    weekOpenValue: pick.seasonOpenValue,
+  }));
+
+  return {
+    weekDollarGain: scoring.reduce((sum, pick) => sum + pick.weekDollarGain, 0),
+    weekGainPercent: computeScoringWeekGainPercent(weekInputs),
+    seasonDollarGain: scoring.reduce(
+      (sum, pick) => sum + pick.seasonDollarGain,
+      0
+    ),
+    seasonGainPercent: computeScoringWeekGainPercent(seasonInputs),
+  };
 }
 
-export function getOrderedGainStats(...args: unknown[]): OrderedGainStat[] {
-  return [];
+export function getPrimaryMatchupScore(
+  stats: TeamGainStats,
+  scoringMode: LeagueScoringMode
+): number {
+  return scoringMode === "dollar_gain"
+    ? stats.weekDollarGain
+    : stats.weekGainPercent;
 }
 
-export function getOrderedPickGainStats(...args: unknown[]): OrderedGainStat[] {
-  return [];
+export function getOrderedGainStats(
+  stats: TeamGainStats,
+  scoringMode: LeagueScoringMode
+): OrderedGainStat[] {
+  const byKey: Record<string, OrderedGainStat> = {
+    weekDollar: {
+      key: "weekDollar",
+      label: "Weekly $",
+      value: stats.weekDollarGain,
+      format: "money",
+    },
+    weekPct: {
+      key: "weekPct",
+      label: "Weekly %",
+      value: stats.weekGainPercent,
+      format: "pct",
+    },
+    seasonDollar: {
+      key: "seasonDollar",
+      label: "Season $",
+      value: stats.seasonDollarGain,
+      format: "money",
+    },
+    seasonPct: {
+      key: "seasonPct",
+      label: "Season %",
+      value: stats.seasonGainPercent,
+      format: "pct",
+    },
+  };
+
+  const order =
+    scoringMode === "dollar_gain"
+      ? (["weekDollar", "seasonDollar"] as const)
+      : (["weekPct", "seasonPct"] as const);
+
+  return order.map((key) => byKey[key]);
 }
 
-export function getPrimaryMatchupScore(...args: unknown[]): number {
-  throw notImplemented("getPrimaryMatchupScore");
+export function getOrderedPickGainStats(
+  pick: RosterPickView,
+  scoringMode: LeagueScoringMode
+): OrderedGainStat[] {
+  return getOrderedGainStats(
+    {
+      weekDollarGain: pick.weekDollarGain,
+      weekGainPercent: pick.weekGainPercent,
+      seasonDollarGain: pick.seasonDollarGain,
+      seasonGainPercent: pick.gainPercent,
+    },
+    scoringMode
+  );
 }
 
-export function resolveMatchupLeader(...args: unknown[]): "home" | "away" | "tie" | null {
-  throw notImplemented("resolveMatchupLeader");
-}
+export function resolveMatchupLeader(
+  home: TeamGainStats,
+  away: TeamGainStats,
+  scoringMode: LeagueScoringMode,
+  winnerUserId: string | null,
+  homeUserId: string,
+  awayUserId: string,
+  status: string
+): "home" | "away" | "tie" | null {
+  if (status === "complete") {
+    if (!winnerUserId) return "tie";
+    if (winnerUserId === homeUserId) return "home";
+    if (winnerUserId === awayUserId) return "away";
+  }
 
+  const homePrimary = getPrimaryMatchupScore(home, scoringMode);
+  const awayPrimary = getPrimaryMatchupScore(away, scoringMode);
+  const epsilon = scoringMode === "dollar_gain" ? 0.01 : 0.0001;
+
+  if (Math.abs(homePrimary - awayPrimary) < epsilon) return "tie";
+  return homePrimary > awayPrimary ? "home" : "away";
+}

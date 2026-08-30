@@ -1,37 +1,22 @@
+import "server-only";
+
 /**
- * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
- * src/lib/day-trader/ for the full explanation: 31 files were deleted at
- * the start of the scoring-rebuild branch (2026-08-27), and this dev server
- * points at the live production database, not a sandbox.
+ * Writing to the old stock price cache — now a deliberate no-op.
  *
- * Every export below is synchronous even where the real function will be
- * async, on purpose: a sync throw propagates correctly whether or not a
- * caller awaits it; an async stub that a caller doesn't await would hand
- * back a Promise object instead of throwing, which is a worse, quieter
- * failure than the one this file exists to prevent.
+ * `stock_prices` was the reader-facing cache, refreshed by its own cron and
+ * topped up by whichever route happened to fetch a fresh quote. Nothing reads
+ * it any more: every price in the app comes from `price_log`, which only the
+ * logger writes. Keeping this writing to a table nobody reads would produce a
+ * second, diverging record of what a price was — which is precisely the
+ * situation the price log was built to end.
  *
- * Two behaviors, chosen per export, never guessed at random:
- *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
- *     an outcome throws immediately. Faking that value is how a $0.15 open
- *     scored a stock at +57,320% the first time. A loud error beats a quiet
- *     wrong number.
- *   - A function whose job is a plain READ (a quote, a list, a lookup) that
- *     found nothing returns an honestly empty result — the same shape a real
- *     "no rows" answer would have. That is not a fabrication; it is what an
- *     empty result actually looks like.
- *
- * Rebuild this against the real logic (and the new pricing module) before
- * relying on it for anything that touches money or a real score.
+ * Kept as a no-op rather than deleted because a caller still exists
+ * (`/api/market/search`). It returns quietly so nothing breaks, and this
+ * comment explains why the write is gone rather than leaving a future reader
+ * to wonder whether it was lost by accident.
  */
-
-function notImplemented(name: string): Error {
-  return new Error(
-    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
-    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
-  );
+export async function upsertStockPriceCache(
+  _quotes: unknown
+): Promise<void> {
+  return;
 }
-
-export function upsertStockPriceCache(...args: unknown[]) {
-  throw notImplemented("upsertStockPriceCache");
-}
-

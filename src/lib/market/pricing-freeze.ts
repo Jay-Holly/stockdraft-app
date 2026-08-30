@@ -1,20 +1,35 @@
 /**
- * Hard stop on every Finnhub and Twelve Data call, and on all SDDFS/SDWFS
- * locking and scoring, indefinitely — by direct instruction, 2026-08-28.
+ * The pricing freeze — now OFF.
  *
- * The previous version of this freeze auto-lifted at the next Eastern
- * calendar day with no manual step. That is what caused the 2026-08-27
- * SDDFS contests to lock with the wrong "open" price the moment it lifted
- * overnight: lockDueContests has no staleness check, so it locked a
- * day-old contest using a live quote taken hours after that day's market
- * had already closed. An auto-resuming freeze is not safe while the
- * scoring system itself is being rebuilt (see the `scoring-rebuild`
- * branch) — a silent resume could lock/score against half-finished code.
+ * It was switched on by direct instruction on 2026-08-28 as a hard stop on
+ * every provider call and on all SDDFS/SDWFS locking and scoring, because the
+ * scoring system was being rebuilt underneath and a silent resume could lock
+ * or score against half-finished code.
  *
- * This freeze stays on until someone changes FROZEN to false by hand and
- * ships it. No date logic, no auto-lift.
+ * The history is worth keeping, because it is the reason this file has no date
+ * logic. An earlier version auto-lifted at the next Eastern calendar day with
+ * no manual step, and that is exactly what caused the 2026-08-27 SDDFS
+ * contests to lock against the wrong opening price: the freeze lifted
+ * overnight, and lockDueContests — which had no staleness check — locked a
+ * day-old contest using a live quote taken hours after that day's market had
+ * closed.
+ *
+ * Both reasons are now addressed rather than merely waited out:
+ *
+ *   - The rebuild is finished. Every league can score, every scorer reads the
+ *     price log, and no provider call remains outside the logger.
+ *   - A contest can no longer lock against a price that is not a real opening
+ *     anchor for its own session. It holds instead, visibly, and the hold
+ *     appears at /admin/holds.
+ *
+ * So the condition this freeze was protecting against no longer exists. It
+ * stays off until someone sets FROZEN back to true by hand — still no date
+ * logic, still no auto-anything, in either direction.
+ *
+ * NOTE: this takes effect the moment this branch is deployed. Until then it
+ * changes nothing, because `main` carries its own copy set to true.
  */
-const FROZEN = true;
+const FROZEN = false;
 
 export function isPricingFrozen(): boolean {
   return FROZEN;

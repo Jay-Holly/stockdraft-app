@@ -1,47 +1,48 @@
 /**
- * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
- * src/lib/day-trader/ for the full explanation: 31 files were deleted at
- * the start of the scoring-rebuild branch (2026-08-27), and this dev server
- * points at the live production database, not a sandbox.
+ * There is no fallback quote any more, and that is the point.
  *
- * Every export below is synchronous even where the real function will be
- * async, on purpose: a sync throw propagates correctly whether or not a
- * caller awaits it; an async stub that a caller doesn't await would hand
- * back a Promise object instead of throwing, which is a worse, quieter
- * failure than the one this file exists to prevent.
+ * This module used to serve prices from `src/data/sp500-fallback-quotes.json`,
+ * a snapshot committed to the repo, whenever a live quote was unavailable. A
+ * price nobody observed is not a price: served into a draft it sets the shares
+ * a manager holds forever, and served into a portfolio it decides a rank.
  *
- * Two behaviors, chosen per export, never guessed at random:
- *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
- *     an outcome throws immediately. Faking that value is how a $0.15 open
- *     scored a stock at +57,320% the first time. A loud error beats a quiet
- *     wrong number.
- *   - A function whose job is a plain READ (a quote, a list, a lookup) that
- *     found nothing returns an honestly empty result — the same shape a real
- *     "no rows" answer would have. That is not a fabrication; it is what an
- *     empty result actually looks like.
+ * The price log removed the need for it. The logger sweeps all 552 symbols
+ * every minute and records what it got, so "no live quote" now means the log
+ * genuinely has nothing — and the honest answer to that is nothing, not a
+ * number from a file.
  *
- * Rebuild this against the real logic (and the new pricing module) before
- * relying on it for anything that touches money or a real score.
+ * Every caller already handles an absent quote: usePoolQuotes skips the symbol,
+ * the draft's price lookup falls through to 0 which its own guards reject, and
+ * the market API omits it. Nothing needs a fabricated number to keep working.
  */
 
-function notImplemented(name: string): Error {
-  return new Error(
-    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
-    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
-  );
-}
+export type FallbackQuote = {
+  price: number;
+  prevClose: number;
+  changePercent: number;
+};
 
-export function getFallbackStockQuote(
-  ...args: unknown[]
-): { price: number; prevClose: number; changePercent: number } | null {
+/** Always null. See above — an unobserved price is not a price. */
+export function getFallbackStockQuote(_symbol: string): FallbackQuote | null {
   return null;
 }
 
-export function listFallbackPoolSymbols(...args: unknown[]) {
+/**
+ * Always empty. This existed so autopick had a symbol list when the draft pool
+ * came back empty; an empty draft pool is a real failure that should surface,
+ * not be papered over with a stale list from a file.
+ */
+export function listFallbackPoolSymbols(): string[] {
   return [];
 }
 
-export function mergeQuotesWithFallback(...args: unknown[]) {
-  throw notImplemented("mergeQuotesWithFallback");
+/**
+ * Passes live quotes through unchanged. A symbol with no live quote is absent
+ * from the result rather than filled in.
+ */
+export function mergeQuotesWithFallback<T>(
+  _symbols: readonly string[],
+  live: Record<string, T>
+): Record<string, T> {
+  return live;
 }
-
