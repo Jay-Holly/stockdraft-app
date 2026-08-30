@@ -2,6 +2,7 @@ import "server-only";
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { getNyDateString } from "@/lib/market/hours";
+import { recordHold } from "@/lib/holds/store";
 import type { AssetClass } from "@/lib/pricing/store";
 
 /**
@@ -470,6 +471,19 @@ export async function findRunningSweep(
       })
       .eq("id", row.id);
     console.error(`[price-log] closed out abandoned sweep ${row.id} (${Math.round(age / 1000)}s old)`);
+
+    // A sweep dying mid-flight is exactly the kind of thing that used to be
+    // discovered a week later. Surface it.
+    await recordHold({
+      kind: "sweep-stalled",
+      subjectType: "price_sweep",
+      subjectId: String(row.id),
+      reason:
+        `A price sweep died mid-run and sat marked 'running' for ` +
+        `${Math.round(age / 1000)}s before being closed out. Prices may be stale ` +
+        `for the period it covered.`,
+      detail: { sweepId: row.id, startedAt, ageSeconds: Math.round(age / 1000) },
+    });
     return null;
   }
 

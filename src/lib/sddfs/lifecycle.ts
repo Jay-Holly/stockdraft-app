@@ -9,6 +9,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { finalizeSddfsContest } from "@/lib/sddfs/scoring";
 import { isUsableQuote, safePctChange } from "@/lib/market/quote-guards";
 import { planContestLock } from "@/lib/dfs/lock-plan";
+import { recordHold, resolveHold } from "@/lib/holds/store";
 import { getOpeningPricesWithRetry } from "@/lib/market/open-price-retry";
 import { fetchContestAnchors } from "@/lib/pricing/contest-quotes";
 import { fillMissingOpens } from "@/lib/dfs/backfill";
@@ -120,6 +121,21 @@ async function lockDueContests(
           `Contest stays open and will retry; it will NOT lock on partial baselines.`
       );
       held.push({ contestId: contest.id, missingSymbols: plan.missingSymbols });
+
+      // Make the refusal visible. Logging it is not enough — a hold nobody
+      // can see is indistinguishable from the system having lost the money.
+      await recordHold({
+        kind: "contest-lock",
+        subjectType: "sddfs_contest",
+        subjectId: contest.id,
+        reason:
+          `Contest will not lock: no opening price for ${plan.missingSymbols.length} symbol(s). ` +
+          `It stays open and retries. Entries are unaffected and nothing has been scored.`,
+        detail: {
+          missingSymbols: plan.missingSymbols,
+          picks: picks.length,
+        },
+      });
       continue;
     }
 
@@ -147,6 +163,11 @@ async function lockDueContests(
       .from("sddfs_contests")
       .update({ status: "locked" })
       .eq("id", contest.id);
+
+    // Locked successfully — if this contest was held on an earlier tick, that
+    // episode is over. Kept as a resolved record rather than deleted: "held,
+    // then released, here is when" is the evidence worth having.
+    await resolveHold("contest-lock", "sddfs_contest", contest.id, "locked with a full set of opening prices");
 
     results.push({ contestId: contest.id, picksSnapshotted: picks?.length ?? 0 });
   }
