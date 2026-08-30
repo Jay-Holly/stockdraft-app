@@ -1,44 +1,70 @@
-/**
- * PLACEHOLDER for the quote-fetching piece only — see leaderboard.ts for the
- * same situation and why it exists (31 files deleted at the start of the
- * scoring-rebuild branch, this one not yet rebuilt against the new pricing
- * module).
- *
- * The two compute functions below are plain arithmetic with no data source of
- * their own — they are implemented for real, not stubbed, because there is
- * nothing to fabricate: they just add up whatever numbers they're handed.
- *
- * `fetchDayTraderPositionQuotes` is the one piece that actually needs a price
- * source. It intentionally does NOT call `getPrices` from `@/lib/pricing` —
- * that reader path still live-fetches on a cache miss and does not check
- * `isPricingFrozen()` (a known gap, see SCORING_REBUILD_HANDOFF §7), so
- * wiring it here would let a Day Trader page load spend live Finnhub calls
- * that bypass the freeze entirely. Returning no quotes is the honest answer
- * until Day Trader is deliberately wired to the price log with its own
- * freshness rule — a missing price becomes $0 of market value for that
- * position (see the `?? 0` at each call site), not a guessed price, which
- * matches how every other gap in this system is meant to fail.
- */
+import "server-only";
 
-export type DayTraderQuote = { price: number };
-export type DayTraderQuoteMap = Record<string, DayTraderQuote>;
+import { getLatestPrices } from "@/lib/pricing/read";
 
-export async function fetchDayTraderPositionQuotes(
-  _positions: readonly { symbol: string }[]
-): Promise<DayTraderQuoteMap> {
-  return {};
-}
+export type DayTraderStockQuote = {
+  price: number;
+  changePercent: number;
+  prevClose: number;
+};
 
 export function computeDayTraderEntryValue(
   cashBalance: number,
   positions: readonly { symbol: string; shares: number }[],
-  quotes: DayTraderQuoteMap
+  quotes: Record<string, Pick<DayTraderStockQuote, "price">>
 ): number {
-  const positionsValue = positions.reduce((sum, position) => {
-    const price = quotes[position.symbol]?.price ?? 0;
-    return sum + position.shares * price;
-  }, 0);
-  return cashBalance + positionsValue;
+  let equity = 0;
+  for (const position of positions) {
+    const quote = quotes[position.symbol.toUpperCase()];
+    equity += position.shares * (quote?.price ?? 0);
+  }
+  return cashBalance + equity;
+}
+
+/**
+ * Prices for a Day Trader entry's positions, from the price log.
+ *
+ * This used to read a cached quote table and, for anything the cache had not
+ * heard of, fall back to a hardcoded quote committed to the repo months
+ * earlier. That fallback is the reason this is repointed rather than restored:
+ * a price nobody observed is not a price, and serving one into a portfolio
+ * valuation makes an entry's worth — and therefore its rank and its payout —
+ * a number derived from a stale file.
+ *
+ * A symbol the log has no price for is now simply ABSENT from the result.
+ * `computeDayTraderEntryValue` already treats an absent quote as contributing
+ * nothing, and the leaderboard can see that a position could not be valued
+ * instead of ranking it against fiction.
+ */
+export async function fetchDayTraderPositionQuotes(
+  positions: readonly { symbol: string }[]
+): Promise<Record<string, DayTraderStockQuote>> {
+  const symbols = [
+    ...new Set(positions.map((position) => String(position.symbol).toUpperCase())),
+  ].filter(Boolean);
+  if (symbols.length === 0) return {};
+
+  const lookup = await getLatestPrices(symbols);
+  const quotes: Record<string, DayTraderStockQuote> = {};
+
+  for (const [symbol, hit] of lookup.hits) {
+    const changePercent = hit.changePercent ?? 0;
+    // Derived from the provider's own change rather than invented: with no
+    // change reported, prevClose equals the price and the move shows as flat,
+    // which is the truthful "we do not know" rendering.
+    const prevClose =
+      changePercent !== 0 ? hit.price / (1 + changePercent / 100) : hit.price;
+    quotes[symbol] = { price: hit.price, changePercent, prevClose };
+  }
+
+  if (lookup.misses.size > 0) {
+    console.warn(
+      `[day-trader] no usable price for ${lookup.misses.size} position symbol(s): ` +
+        [...lookup.misses.keys()].slice(0, 10).join(", ")
+    );
+  }
+
+  return quotes;
 }
 
 export function computeDayTraderFinalMetrics(
@@ -46,6 +72,7 @@ export function computeDayTraderFinalMetrics(
   finalValue: number
 ): { finalDollarGain: number; finalPctGain: number } {
   const finalDollarGain = finalValue - startingValue;
-  const finalPctGain = startingValue > 0 ? (finalDollarGain / startingValue) * 100 : 0;
+  const finalPctGain =
+    startingValue > 0 ? (finalDollarGain / startingValue) * 100 : 0;
   return { finalDollarGain, finalPctGain };
 }
