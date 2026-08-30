@@ -149,6 +149,21 @@ can be tested without settling a real contest in the production database.
 
 **6. Never commit, push or deploy without being asked.** Every time.
 
+**7. Keep this file current — it is the handoff.**
+This document is read at the start of every session and is the only thing a
+fresh session knows. Before finishing a session, update it:
+
+- Correct any fact that changed. Move finished items out of "open questions"
+  into "settled", or delete them.
+- Replace §10 "Where to pick up" wholesale with the current state.
+- **Edit in place. Do not append.** This file loads in full every session and
+  costs tokens every time, so a session log appended here is paid for forever.
+  Session narrative belongs in a handoff doc, not here. If this file is growing
+  every session, it is being used wrong.
+
+A stale CLAUDE.md is worse than none, because the next session reads it
+confidently and has no reason to doubt it.
+
 ---
 
 ## 5. Verification checklist
@@ -279,3 +294,45 @@ write standings down, and let pages read the finished table. Never score on a
 page load.
 
 The Pittsburgh beta is dozens of people. None of this is work for now.
+
+---
+
+## 10. Where to pick up
+
+*Replace this section entirely at the end of each session. Keep it short — what
+is in flight, what is blocked, what is next. Not a history.*
+
+**Last updated:** 2026-08-29
+
+**State:** Branch `scoring-rebuild`, working tree clean, nine commits this
+session, **nothing pushed and nothing deployed**. `main` is still what is live.
+Migrations 089–093 all applied to the live database. Production pricing is still
+frozen.
+
+**Working and proven against real data:** the price log as the only price
+source; the logger sweeping every minute with write-on-change; live push to
+browsers over Supabase Realtime; DFS contests holding rather than locking on
+missing baselines; anchors corroborated at capture; baselines chaining across
+periods; season-league scoring wired end to end (`matchup/scoring.ts` has no
+stub dependencies left); the DFS audit chain restored.
+
+**Next, in priority order:**
+
+1. **12 SDDFS contests are frozen**, holding real entry fees, and the audit that
+   would resolve them has been stuck in `running` since 2026-08-26 (8 of 544
+   symbols). Nothing alerts on either. Per §0, a silent hold is the highest
+   reputational exposure open. *Jay has explicitly deprioritised the old frozen
+   contests themselves — but the alerting gap remains.*
+2. **Give `dfs_audit_runs` a stale-run guard**, the same one `price_sweep` now
+   has, so a dead run cannot jam every run behind it.
+3. **Narrow audit round 2** to skip anchors already corroborated at capture, so
+   Twelve Data's 8/min budget is spent only on exceptions. Approved, not built.
+
+**Still stubbed:** `day-trader/leaderboard.ts`, `day-trader/position-gains.ts`,
+`sddfs/scoring.ts`, `roster/historical.ts`, `roster/team-stats.ts`, and the
+`market/*` cache files (likely dead now that the log exists — check callers
+before rebuilding, they may want deleting instead).
+
+**Before deploying:** this branch still contains throwing stubs that `main` has
+real code for. Deploying replaces working features with ones that break the
+moment a player touches them.
