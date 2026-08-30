@@ -1,67 +1,201 @@
-/**
- * PLACEHOLDER — not a rebuild. See leaderboard.ts and portfolio-value.ts in
- * src/lib/day-trader/ for the full explanation: 31 files were deleted at
- * the start of the scoring-rebuild branch (2026-08-27), and this dev server
- * points at the live production database, not a sandbox.
- *
- * Every export below is synchronous even where the real function will be
- * async, on purpose: a sync throw propagates correctly whether or not a
- * caller awaits it; an async stub that a caller doesn't await would hand
- * back a Promise object instead of throwing, which is a worse, quieter
- * failure than the one this file exists to prevent.
- *
- * Two behaviors, chosen per export, never guessed at random:
- *   - A function whose job is to WRITE, COMPUTE a business number, or DECIDE
- *     an outcome throws immediately. Faking that value is how a $0.15 open
- *     scored a stock at +57,320% the first time. A loud error beats a quiet
- *     wrong number.
- *   - A function whose job is a plain READ (a quote, a list, a lookup) that
- *     found nothing returns an honestly empty result — the same shape a real
- *     "no rows" answer would have. That is not a fabrication; it is what an
- *     empty result actually looks like.
- *
- * Rebuild this against the real logic (and the new pricing module) before
- * relying on it for anything that touches money or a real score.
- */
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DraftPick } from "@/lib/draft/types";
+import { canonicalActiveCryptoPicks } from "@/lib/roster/crypto-picks";
+import type { WeekBaselineRow } from "@/lib/season/weekend-scoring";
+import {
+  computeWeekDollarGain,
+  computeWeekGainPercent,
+  computeScoringWeekGainPercent,
+} from "@/lib/roster/scoring-math";
 
-function notImplemented(name: string): Error {
-  return new Error(
-    `${name}: not implemented — deleted in the scoring-rebuild branch cleanup ` +
-    `(2026-08-27), not yet rebuilt. See SCORING_REBUILD_HANDOFF_2026-08-28.md.`
-  );
+type BaselineWeekMap = Map<number, WeekBaselineRow>;
+
+function mergeCryptoBaselineWeekMaps(
+  pickIds: string[],
+  byPick: Map<string, BaselineWeekMap>,
+  throughWeek: number
+): BaselineWeekMap {
+  const merged = new Map<number, WeekBaselineRow>();
+
+  for (let week = 1; week <= throughWeek; week++) {
+    for (const pickId of pickIds) {
+      const row = byPick.get(pickId)?.get(week);
+      if (row) {
+        merged.set(week, row);
+        break;
+      }
+    }
+  }
+
+  return merged;
+}
+
+function applyCryptoBaselineMerges(
+  byPick: Map<string, BaselineWeekMap>,
+  picks: DraftPick[],
+  throughWeek: number
+): void {
+  const canonical = canonicalActiveCryptoPicks(picks);
+  const symbolToPickIds = new Map<string, string[]>();
+  const pickOrder = new Map(picks.map((pick) => [pick.id, pick.pick_order]));
+
+  for (const pick of picks) {
+    if (pick.pick_type !== "crypto") continue;
+    const symbol = pick.symbol.toUpperCase();
+    const ids = symbolToPickIds.get(symbol) ?? [];
+    ids.push(pick.id);
+    symbolToPickIds.set(symbol, ids);
+  }
+
+  for (const canon of canonical) {
+    const symbol = canon.symbol.toUpperCase();
+    const siblingIds = [...(symbolToPickIds.get(symbol) ?? [canon.id])].sort(
+      (a, b) => (pickOrder.get(a) ?? 0) - (pickOrder.get(b) ?? 0)
+    );
+    const orderedIds = [
+      canon.id,
+      ...siblingIds.filter((id) => id !== canon.id),
+    ];
+    const merged = mergeCryptoBaselineWeekMaps(orderedIds, byPick, throughWeek);
+    if (merged.size > 0) {
+      byPick.set(canon.id, merged);
+    }
+  }
 }
 
 export type PickSeasonMetrics = {
-  seasonDollarGain: number;
-  seasonGainPercent: number;
   seasonOpenValue: number;
-};
-
-export type TeamSeasonMetrics = {
   seasonDollarGain: number;
   seasonGainPercent: number;
 };
 
+export type ScoringValueInput = {
+  currentValue: number;
+  weekOpenValue: number;
+};
+
+export async function loadBaselinesThroughWeek(
+  supabase: SupabaseClient,
+  leagueId: string,
+  userId: string,
+  throughWeek: number,
+  options?: { picks?: DraftPick[] }
+): Promise<Map<string, BaselineWeekMap>> {
+  const { data, error } = await supabase
+    .from("roster_week_baselines")
+    .select(
+      "pick_id, week_number, value_at_open, value_at_close, stock_value_at_friday_close"
+    )
+    .eq("league_id", leagueId)
+    .eq("user_id", userId)
+    .gte("week_number", 1)
+    .lte("week_number", throughWeek)
+    .order("week_number", { ascending: true });
+
+  if (error || !data) return new Map();
+
+  const byPick = new Map<string, BaselineWeekMap>();
+
+  for (const row of data) {
+    const weekMap = byPick.get(row.pick_id) ?? new Map<number, WeekBaselineRow>();
+    weekMap.set(row.week_number, {
+      valueAtOpen: Number(row.value_at_open),
+      valueAtClose:
+        row.value_at_close != null ? Number(row.value_at_close) : null,
+      stockValueAtFridayClose:
+        row.stock_value_at_friday_close != null
+          ? Number(row.stock_value_at_friday_close)
+          : null,
+    });
+    byPick.set(row.pick_id, weekMap);
+  }
+
+  if (options?.picks?.length) {
+    applyCryptoBaselineMerges(byPick, options.picks, throughWeek);
+  }
+
+  return byPick;
+}
+
+function resolveSeasonOpenValue(
+  baselineByWeek: BaselineWeekMap | undefined,
+  fallbackOpen: number
+): number {
+  const weekOne = baselineByWeek?.get(1);
+  if (weekOne && weekOne.valueAtOpen > 0) return weekOne.valueAtOpen;
+
+  if (baselineByWeek && baselineByWeek.size > 0) {
+    const firstWeek = Math.min(...baselineByWeek.keys());
+    const firstOpen = baselineByWeek.get(firstWeek)?.valueAtOpen ?? 0;
+    if (firstOpen > 0) return firstOpen;
+  }
+
+  return fallbackOpen;
+}
+
+/**
+ * Season totals = cumulative scored weeks since the current season's week-1
+ * baselines. Week 1 season metrics always match week 1 weekly metrics.
+ */
 export function computePickSeasonMetrics(
-  baselines: unknown,
-  week: number,
+  baselineByWeek: BaselineWeekMap | undefined,
+  throughWeek: number,
   weekOpenValue: number,
-  weekCloseValue: number
+  currentValue: number
 ): PickSeasonMetrics {
-  throw notImplemented("computePickSeasonMetrics");
+  if (throughWeek <= 1) {
+    const seasonDollarGain = computeWeekDollarGain(currentValue, weekOpenValue);
+    return {
+      seasonOpenValue: weekOpenValue,
+      seasonDollarGain,
+      seasonGainPercent: computeWeekGainPercent(currentValue, weekOpenValue),
+    };
+  }
+
+  const seasonOpenValue = resolveSeasonOpenValue(baselineByWeek, weekOpenValue);
+  let seasonDollarGain = 0;
+
+  if (baselineByWeek) {
+    for (let week = 1; week < throughWeek; week++) {
+      const row = baselineByWeek.get(week);
+      // A $0 close/open means the quote fetch failed when the snapshot was
+      // taken — treat the week as unscored rather than a total wipeout.
+      if (!row || row.valueAtClose == null || row.valueAtClose <= 0) continue;
+      if (row.valueAtOpen <= 0) continue;
+      seasonDollarGain += computeWeekDollarGain(row.valueAtClose, row.valueAtOpen);
+    }
+  }
+
+  seasonDollarGain += computeWeekDollarGain(currentValue, weekOpenValue);
+
+  const seasonEndValue = seasonOpenValue + seasonDollarGain;
+
+  return {
+    seasonOpenValue,
+    seasonDollarGain,
+    seasonGainPercent: computeWeekGainPercent(seasonEndValue, seasonOpenValue),
+  };
 }
 
 export function computeTeamSeasonMetrics(
-  picks: readonly {
+  scoringPicks: Array<{
     currentValue: number;
     seasonOpenValue: number;
     seasonDollarGain: number;
-  }[]
-): TeamSeasonMetrics {
-  throw notImplemented("computeTeamSeasonMetrics");
-}
+  }>
+): { seasonDollarGain: number; seasonGainPercent: number } {
+  const seasonDollarGain = scoringPicks.reduce(
+    (sum, pick) => sum + pick.seasonDollarGain,
+    0
+  );
 
-export function loadBaselinesThroughWeek(...args: unknown[]): Map<string, unknown> {
-  return new Map();
-}
+  const seasonInputs: ScoringValueInput[] = scoringPicks.map((pick) => ({
+    currentValue: pick.currentValue,
+    weekOpenValue: pick.seasonOpenValue,
+  }));
 
+  return {
+    seasonDollarGain,
+    seasonGainPercent: computeScoringWeekGainPercent(seasonInputs),
+  };
+}
