@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Logo } from "@/components/Logo";
 import { PageWatermark } from "@/components/PageWatermark";
 import {
   LEAGUE_THEMES,
@@ -59,7 +58,6 @@ export function SeasonShell({
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <Logo size="sm" />
             <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-league-primary)]">
               {title}
             </span>

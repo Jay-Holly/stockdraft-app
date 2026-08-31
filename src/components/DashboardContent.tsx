@@ -438,35 +438,36 @@ export function DashboardContent({
         <PendingLeagueInviteBanner invites={pendingInvites} />
       )}
 
-      <section className="crest-card p-6">
-        <div className="flex items-center gap-4">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold truncate">{profile.team_name}</h1>
-            <p className="text-muted text-sm truncate">@{profile.username}</p>
-            <p className="text-muted text-xs mt-1">Member since {createdDate}</p>
-            <div className="flex items-center gap-3 mt-2">
-              <Link
-                href="/profile"
-                className="text-xs font-semibold text-gold hover:underline"
-              >
-                Manager Profile
-              </Link>
-              <Link
-                href="/my-account"
-                className="text-xs font-semibold text-gold hover:underline"
-              >
-                My Wallet
-              </Link>
-            </div>
-          </div>
+      <section className="crest-card p-4">
+        <div className="flex flex-col gap-2 items-center text-center">
           <Image
-            src={showBotSelection ? "/images/leagues/sdai.png" : "/images/brand/sdlogo.png"}
+            src="/images/brand/wide-logo.jpeg"
             alt="StockDuel"
-            width={140}
-            height={210}
-            className="h-44 w-auto shrink-0 -my-12 drop-shadow-[0_0_28px_rgba(208,171,72,0.5)]"
+            width={600}
+            height={80}
+            className="w-full h-auto"
             priority
           />
+          <div className="space-y-0.5">
+            <h1 className="text-2xl font-bold">{profile.team_name}</h1>
+            <p className="text-muted text-sm">@{profile.username}</p>
+            <p className="text-muted text-xs">Member since {createdDate}</p>
+          </div>
+          <div className="flex items-center gap-4 pt-2">
+            <Link
+              href="/profile"
+              className="text-xs font-semibold text-gold hover:underline"
+            >
+              Manager Profile
+            </Link>
+            <span className="text-muted text-xs">•</span>
+            <Link
+              href="/my-account"
+              className="text-xs font-semibold text-gold hover:underline"
+            >
+              My Wallet
+            </Link>
+          </div>
         </div>
       </section>
 

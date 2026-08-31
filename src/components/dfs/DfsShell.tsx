@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Logo } from "@/components/Logo";
 import { PageWatermark } from "@/components/PageWatermark";
 
 const LINKS = [
@@ -43,8 +42,7 @@ export function DfsShell({
         <div className="max-w-lg mx-auto">
           <div className="flex items-stretch justify-between gap-3 mb-3">
             <div className="flex flex-col justify-center">
-              <Logo size="sm" />
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gold mt-1">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-gold">
                 {title}
               </span>
             </div>
