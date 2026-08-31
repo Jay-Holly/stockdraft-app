@@ -4329,7 +4329,7 @@ body:has(.landing-screen.sides-always) {
   flex-direction: column;
   gap: 0.1rem;
   margin: 0;
-  font-size: clamp(0.5rem, 1.8vw, 0.75rem);
+  font-size: clamp(0.5rem, 1.8vw, 0.9375rem);
   line-height: 1.3;
   font-weight: 700;
   color: #fff;
@@ -4348,6 +4348,18 @@ body:has(.landing-screen.sides-always) {
 
   .landing-tagline-kicker {
     font-size: 1em;
+  }
+}
+
+/* Desktop only. On phones .landing-hero-panel is width-driven and roughly
+   matches the viewport, so the vw-based overlay width above already fits.
+   On desktop the panel shrinks to fit the viewport HEIGHT instead and ends
+   up much narrower than the viewport width, which let the tagline spill
+   past the ticker frame. Capping the overlay to its container's own width
+   here fixes that without touching the phone sizing above. */
+@media (min-width: 641px) {
+  .landing-hero-overlay {
+    max-width: 100%;
   }
 }
 
