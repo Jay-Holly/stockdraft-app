@@ -76,13 +76,15 @@ export function AiLeagueCard({
               <p className="text-[10px] text-muted uppercase tracking-wider">W-L</p>
             </div>
           )}
-          <Image
-            src="/images/leagues/sdai.png"
-            alt=""
-            width={44}
-            height={66}
-            className="shrink-0 rounded-md"
-          />
+          <div className="relative hide-sparkle">
+            <Image
+              src="/images/leagues/sdai.png"
+              alt=""
+              width={44}
+              height={66}
+              className="shrink-0 rounded-md"
+            />
+          </div>
         </div>
       </div>
 

@@ -47,13 +47,15 @@ export function DfsShell({
               </span>
             </div>
             {!hideHeaderLogo && (
-              <Image
-                src="/images/leagues/sddfs.png"
-                alt="SDDFS"
-                width={96}
-                height={96}
-                className="rounded-lg flex-shrink-0 h-auto w-24"
-              />
+              <div className="relative hide-sparkle">
+                <Image
+                  src="/images/leagues/sddfs.png"
+                  alt="SDDFS"
+                  width={96}
+                  height={96}
+                  className="rounded-lg flex-shrink-0 h-auto w-24"
+                />
+              </div>
             )}
           </div>
           <nav className="season-nav" aria-label="SDDFS navigation">

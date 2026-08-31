@@ -45,14 +45,16 @@ export function SimLeaguesPageContent({
       )}
 
       <div className="text-center">
-        <Image
-          src="/images/leagues/sdai.png"
-          alt="SDAI"
-          width={160}
-          height={160}
-          className="mx-auto rounded-2xl"
-          priority
-        />
+        <div className="relative inline-block mx-auto hide-sparkle">
+          <Image
+            src="/images/leagues/sdai.png"
+            alt="SDAI"
+            width={160}
+            height={160}
+            className="rounded-2xl"
+            priority
+          />
+        </div>
         <h1 className="text-xl font-bold mt-4">Sim Leagues</h1>
         <p className="text-muted text-sm mt-2">
           {leagues.length} league{leagues.length === 1 ? "" : "s"} vs. platform

@@ -368,14 +368,16 @@ export function DashboardContent({
             ← Cancel
           </button>
           <div className="text-center mb-8">
-            <Image
-              src="/images/leagues/sdai.png"
-              alt="StockDuel Artificial Intelligence"
-              width={220}
-              height={220}
-              className="mx-auto rounded-2xl"
-              priority
-            />
+            <div className="relative inline-block mx-auto hide-sparkle">
+              <Image
+                src="/images/leagues/sdai.png"
+                alt="StockDuel Artificial Intelligence"
+                width={220}
+                height={220}
+                className="rounded-2xl"
+                priority
+              />
+            </div>
             <h1 className="text-xl font-bold mt-4">SDAI</h1>
             <p className="text-muted text-sm mt-2">
               Draft live against three AI managers. Pick your opponents below.

@@ -46,14 +46,16 @@ export default async function StockDraftDfsLobbyPage() {
     <DfsShell title="SDDFS" hideWatermark hideHeaderLogo>
       <div data-league-theme="sddfs" className="max-w-lg mx-auto space-y-6">
         <div className="text-center">
-          <Image
-            src="/images/leagues/sddfs.png"
-            alt="SDDFS"
-            width={260}
-            height={260}
-            className="mx-auto rounded-2xl"
-            priority
-          />
+          <div className="relative inline-block mx-auto hide-sparkle">
+            <Image
+              src="/images/leagues/sddfs.png"
+              alt="SDDFS"
+              width={260}
+              height={260}
+              className="rounded-2xl"
+              priority
+            />
+          </div>
           <h1 className="text-xl font-bold mt-4">
             StockDuel Daily Fantasy Sport
           </h1>

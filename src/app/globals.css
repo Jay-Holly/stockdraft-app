@@ -148,6 +148,18 @@ body {
   pointer-events: none;
 }
 
+/* ── Hide sparkle star in bottom-right corner ── */
+.hide-sparkle::after {
+  content: "";
+  position: absolute;
+  bottom: 8%;
+  right: 8%;
+  width: 24px;
+  height: 24px;
+  background-color: #000;
+  border-radius: 50%;
+}
+
 .dashboard-tile::after {
   content: "";
   position: absolute;
