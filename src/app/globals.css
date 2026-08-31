@@ -4341,6 +4341,12 @@ body:has(.landing-screen.sides-always) {
   font-size: 1.35em;
 }
 
+@media (max-width: 640px) {
+  .landing-tagline-kicker {
+    font-size: 1em;
+  }
+}
+
 .landing-screen.sides-always .landing-hero-overlay .landing-actions {
   max-width: 15.2rem;
   gap: 0.55rem;
