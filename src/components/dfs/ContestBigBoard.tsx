@@ -43,7 +43,7 @@ export function ContestBigBoard({
 }) {
   const apiBase = league === "sddfs" ? "/api/sddfs" : "/api/sdwfs";
   const entryBase =
-    league === "sddfs" ? "/stockdraft-dfs/entry" : "/stockdraft-wfs/entry";
+    league === "sddfs" ? "/stockduel-dfs/entry" : "/stockduel-wfs/entry";
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());

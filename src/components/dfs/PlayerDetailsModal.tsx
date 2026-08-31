@@ -31,7 +31,7 @@ export function PlayerDetailsModal({
 }: {
   player: LeaderboardRow;
   allPlayers: LeaderboardRow[];
-  /** Route prefix for entry detail pages, e.g. "/stockdraft-dfs/entry". */
+  /** Route prefix for entry detail pages, e.g. "/stockduel-dfs/entry". */
   entryBase: string;
   onClose: () => void;
   onPlayerChange: (player: LeaderboardRow) => void;

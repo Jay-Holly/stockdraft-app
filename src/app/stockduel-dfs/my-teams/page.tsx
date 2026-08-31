@@ -129,7 +129,7 @@ export default function DfsMyTeamsPage() {
                       {dayEntries.map((entry) => (
                         <Link
                           key={entry.contestId}
-                          href={`/stockdraft-dfs/contests/${entry.contestId}`}
+                          href={`/stockduel-dfs/contests/${entry.contestId}`}
                           className="block bg-dark-card border border-white/10 rounded-xl p-4 hover:bg-white/5"
                         >
                           <div className="flex items-center justify-between">

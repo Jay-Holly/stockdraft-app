@@ -7,8 +7,8 @@ import { PageWatermark } from "@/components/PageWatermark";
 
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/stockdraft-wfs", label: "Lobby" },
-  { href: "/stockdraft-wfs/my-teams", label: "My Contests" },
+  { href: "/stockduel-wfs", label: "Lobby" },
+  { href: "/stockduel-wfs/my-teams", label: "My Contests" },
   { href: "/my-account", label: "My Wallet" },
 ];
 

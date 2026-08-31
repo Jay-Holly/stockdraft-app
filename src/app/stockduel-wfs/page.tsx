@@ -82,8 +82,8 @@ export default async function StockDraftWfsLobbyPage() {
                 key={contest.id}
                 href={
                   canEnter
-                    ? `/stockdraft-wfs/${contest.id}`
-                    : `/stockdraft-wfs/contests/${contest.id}`
+                    ? `/stockduel-wfs/${contest.id}`
+                    : `/stockduel-wfs/contests/${contest.id}`
                 }
                 className="block rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 hover:bg-white/5"
               >

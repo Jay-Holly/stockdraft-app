@@ -81,7 +81,7 @@ export default async function MyAccountPage({
 
       <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full space-y-6">
         <Link
-          href="/stockdraft-dfs"
+          href="/stockduel-dfs"
           className="inline-block text-sm text-muted hover:text-white transition-colors"
         >
           ← Back to lobby

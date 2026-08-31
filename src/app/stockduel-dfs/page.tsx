@@ -84,8 +84,8 @@ export default async function StockDraftDfsLobbyPage() {
                 key={contest.id}
                 href={
                   canEnter
-                    ? `/stockdraft-dfs/${contest.id}`
-                    : `/stockdraft-dfs/contests/${contest.id}`
+                    ? `/stockduel-dfs/${contest.id}`
+                    : `/stockduel-dfs/contests/${contest.id}`
                 }
                 className="block rounded-xl border border-[var(--color-league-accent)] bg-dark/40 p-4 hover:bg-white/5"
               >

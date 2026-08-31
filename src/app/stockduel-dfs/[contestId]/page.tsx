@@ -20,7 +20,7 @@ export default async function DfsContestDraftPage({
   const myEntries = await getMyDfsEntries();
   const existingEntry = myEntries.find((e) => e.contestId === contestId);
   if (existingEntry) {
-    redirect(`/stockdraft-dfs/entry/${existingEntry.entryId}`);
+    redirect(`/stockduel-dfs/entry/${existingEntry.entryId}`);
   }
 
   if (contest.status !== "open") {
@@ -34,7 +34,7 @@ export default async function DfsContestDraftPage({
               : "This contest has already been scored — pick another contest that's still open."}
           </div>
           <Link
-            href="/stockdraft-dfs"
+            href="/stockduel-dfs"
             className="inline-block text-sm text-gold hover:underline"
           >
             ← Back to lobby

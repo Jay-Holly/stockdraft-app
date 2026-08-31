@@ -260,7 +260,7 @@ export function DfsLineupBuilder({ contestId }: { contestId: string }) {
         DFS_SECTORS.map((sector) => ({ sector, symbol: picks[sector]!.symbol }))
       )
     );
-    router.push("/stockdraft-dfs");
+    router.push("/stockduel-dfs");
   }
 
   return (

@@ -20,7 +20,7 @@ export default async function WfsContestDraftPage({
   const myEntries = await getMyWfsEntries();
   const existingEntry = myEntries.find((e) => e.contestId === contestId);
   if (existingEntry) {
-    redirect(`/stockdraft-wfs/entry/${existingEntry.entryId}`);
+    redirect(`/stockduel-wfs/entry/${existingEntry.entryId}`);
   }
 
   if (contest.status !== "open") {
@@ -34,7 +34,7 @@ export default async function WfsContestDraftPage({
               : "This contest has already been scored — pick another contest that's still open."}
           </div>
           <Link
-            href="/stockdraft-wfs"
+            href="/stockduel-wfs"
             className="inline-block text-sm text-gold hover:underline"
           >
             ← Back to lobby

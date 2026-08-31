@@ -517,7 +517,7 @@ export function DashboardContent({
             },
             {
               label: "StockDuel Daily Fantasy Sport",
-              href: "/stockdraft-dfs",
+              href: "/stockduel-dfs",
               top: "76.5%",
               left: "4.8%",
               width: "43.9%",
@@ -525,7 +525,7 @@ export function DashboardContent({
             },
             {
               label: "StockDuel Weekly Fantasy Sport",
-              href: "/stockdraft-wfs",
+              href: "/stockduel-wfs",
               top: "76.5%",
               left: "50.9%",
               width: "44%",
@@ -607,7 +607,7 @@ export function DashboardContent({
             },
             {
               label: "Daily Fantasy Sport",
-              href: "/stockdraft-dfs",
+              href: "/stockduel-dfs",
               top: "68.4%",
               left: "4.7%",
               width: "44.1%",
@@ -616,7 +616,7 @@ export function DashboardContent({
             },
             {
               label: "Weekly Fantasy Sport",
-              href: "/stockdraft-wfs",
+              href: "/stockduel-wfs",
               top: "68.4%",
               left: "50.9%",
               width: "43.8%",

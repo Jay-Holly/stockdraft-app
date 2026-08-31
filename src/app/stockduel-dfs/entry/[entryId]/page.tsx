@@ -1,11 +1,11 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { WfsShell } from "@/components/dfs/WfsShell";
-import { WfsFreeAgentPanel } from "@/components/wfs/WfsFreeAgentPanel";
-import { SdwfsRulesButton } from "@/components/wfs/SdwfsRulesButton";
-import { getMyWfsEntries } from "@/lib/wfs/my-teams";
-import { tierNameForBuyIn } from "@/lib/wfs/contests";
-import { getSdwfsContestLeaderboard } from "@/lib/sdwfs/leaderboard";
+import { DfsShell } from "@/components/dfs/DfsShell";
+import { FreeAgentPanel } from "@/components/dfs/FreeAgentPanel";
+import { SddfsRulesButton } from "@/components/dfs/SddfsRulesButton";
+import { getMyDfsEntries } from "@/lib/dfs/my-teams";
+import { tierNameForBuyIn } from "@/lib/dfs/contests";
+import { getSddfsContestLeaderboard } from "@/lib/sddfs/leaderboard";
 import { createClient } from "@/lib/supabase/server";
 
 function formatPct(pct: number | null) {
@@ -14,7 +14,7 @@ function formatPct(pct: number | null) {
   return `${sign}${pct.toFixed(2)}%`;
 }
 
-export default async function WfsEntryLeaguePage({
+export default async function DfsEntryLeaguePage({
   params,
 }: {
   params: Promise<{ entryId: string }>;
@@ -27,7 +27,7 @@ export default async function WfsEntryLeaguePage({
   } = await supabase.auth.getUser();
   if (!user) notFound();
 
-  const entries = await getMyWfsEntries();
+  const entries = await getMyDfsEntries();
   const myEntry = entries.find((e) => e.entryId === entryId);
 
   // Viewing someone else's entry: look it up directly (RLS allows any
@@ -36,33 +36,33 @@ export default async function WfsEntryLeaguePage({
   let contestId = myEntry?.contestId;
   let contestName = myEntry?.contestName;
   let buyIn = myEntry?.buyIn;
-  let weekStartDate = myEntry?.weekStartDate;
+  let contestDate = myEntry?.contestDate;
   let contestStatus = myEntry?.contestStatus;
 
   if (!myEntry) {
     const { data: otherEntry } = await supabase
-      .from("sdwfs_entries")
-      .select("id, contest_id, sdwfs_contests(buy_in, week_start_date, status)")
+      .from("sddfs_entries")
+      .select("id, contest_id, sddfs_contests(buy_in, contest_date, status)")
       .eq("id", entryId)
       .maybeSingle();
 
     if (!otherEntry) notFound();
 
-    const contest = Array.isArray(otherEntry.sdwfs_contests)
-      ? otherEntry.sdwfs_contests[0]
-      : otherEntry.sdwfs_contests;
+    const contest = Array.isArray(otherEntry.sddfs_contests)
+      ? otherEntry.sddfs_contests[0]
+      : otherEntry.sddfs_contests;
     if (!contest) notFound();
 
     contestId = otherEntry.contest_id;
     buyIn = Number(contest.buy_in);
     contestName = tierNameForBuyIn(buyIn);
-    weekStartDate = contest.week_start_date;
+    contestDate = contest.contest_date;
     contestStatus = contest.status as typeof contestStatus;
   }
 
   if (!contestId) notFound();
 
-  const { prizePool, isFinal, rows } = await getSdwfsContestLeaderboard(
+  const { prizePool, isFinal, rows } = await getSddfsContestLeaderboard(
     contestId,
     user.id
   );
@@ -71,26 +71,26 @@ export default async function WfsEntryLeaguePage({
   const isViewingOwnEntry = viewedRow?.isMe ?? false;
 
   return (
-    <WfsShell title={`SDWFS — ${contestName}`}>
+    <DfsShell title={`SDDFS — ${contestName}`}>
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold">{contestName}</h1>
             <p className="text-muted text-sm">
-              ${buyIn} buy-in — {weekStartDate} —{" "}
+              ${buyIn} buy-in — {contestDate} —{" "}
               {contestStatus === "open"
-                ? "Open — editable until Monday 9:30 AM ET lock"
+                ? "Open — editable until 9:30 AM ET lock"
                 : contestStatus === "locked"
                   ? "Locked — live standings below"
                   : "Final — contest scored"}
             </p>
             <div className="mt-2">
-              <SdwfsRulesButton />
+              <SddfsRulesButton />
             </div>
           </div>
           <Image
-            src="/images/leagues/sdwfs.png"
-            alt="SDWFS"
+            src="/images/leagues/sddfs.png"
+            alt="SDDFS"
             width={180}
             height={180}
             className="rounded-xl flex-shrink-0 w-32 h-32 sm:w-44 sm:h-44"
@@ -114,7 +114,7 @@ export default async function WfsEntryLeaguePage({
               rows.map((row) => (
                 <a
                   key={row.entryId}
-                  href={`/stockdraft-wfs/entry/${row.entryId}`}
+                  href={`/stockduel-dfs/entry/${row.entryId}`}
                   className={`flex items-center justify-between py-3 hover:bg-white/5 transition rounded-lg ${
                     row.isMe ? "bg-gold/5 -mx-4 px-4" : ""
                   } ${row.entryId === entryId ? "ring-1 ring-white/20 -mx-4 px-4" : ""}`}
@@ -171,7 +171,7 @@ export default async function WfsEntryLeaguePage({
                 : "Free Agents"}
             </h2>
             {myEntry.contestStatus === "open" ? (
-              <WfsFreeAgentPanel entries={[myEntry]} />
+              <FreeAgentPanel entries={[myEntry]} />
             ) : (
               <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center text-muted text-sm">
                 This contest is {myEntry.contestStatus} — moves are no longer
@@ -181,6 +181,6 @@ export default async function WfsEntryLeaguePage({
           </div>
         )}
       </div>
-    </WfsShell>
+    </DfsShell>
   );
 }

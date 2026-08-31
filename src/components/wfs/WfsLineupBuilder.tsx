@@ -199,7 +199,7 @@ export function WfsLineupBuilder({ contestId }: { contestId: string }) {
         WFS_SECTORS.map((sector) => ({ sector, symbol: picks[sector]!.symbol }))
       )
     );
-    router.push("/stockdraft-wfs");
+    router.push("/stockduel-wfs");
   }
 
   return (

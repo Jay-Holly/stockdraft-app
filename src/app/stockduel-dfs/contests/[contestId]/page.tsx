@@ -82,7 +82,7 @@ export default async function DfsContestBoardPage({
               <p className="text-sm text-gold">
                 Want to enter an upcoming contest?{" "}
                 <Link
-                  href="/stockdraft-dfs"
+                  href="/stockduel-dfs"
                   className="font-semibold hover:underline"
                 >
                   Go to the lobby →

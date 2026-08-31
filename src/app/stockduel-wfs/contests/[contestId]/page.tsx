@@ -87,7 +87,7 @@ export default async function WfsContestBoardPage({
               <p className="text-sm text-gold">
                 Want to enter next week&apos;s contests?{" "}
                 <Link
-                  href="/stockdraft-wfs"
+                  href="/stockduel-wfs"
                   className="font-semibold hover:underline"
                 >
                   Go to the lobby →
