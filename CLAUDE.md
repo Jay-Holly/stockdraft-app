@@ -302,11 +302,20 @@ The Pittsburgh beta is dozens of people. None of this is work for now.
 *Replace this section entirely at the end of each session. Keep it short — what
 is in flight, what is blocked, what is next. Not a history.*
 
-**Last updated:** 2026-08-30
+**Last updated:** 2026-08-31
 
 **DEPLOYED AND LIVE.** `main` is at `6e5e880`; the whole rebuild is in
 production. The freeze is OFF. Migrations 089–094 applied. `main` and
 `scoring-rebuild` are identical.
+
+**SDDFS QA Contest Ready for Monday (Sept 1):**
+
+- **80-team contest created:** $2 buy-in, ID `14288a88-8883-4ccc-b7b9-e1e5c7b8225d`
+  (contest_date 2026-09-01, status open). Covers all 502 stocks + 5 cryptos cycled 16x.
+- **Scoring verified end-to-end:** locked, populated 960 picks with prices, ranked 80
+  entries. Top 3 paid $72/$43.20/$28.80 (50/30/20 of $144 pool). System correct.
+- **Test scripts added:** `scripts/generate-sddfs-teams.ts`, `scripts/test-sddfs-scoring.ts`
+  for future QA runs. Contest reset to open state for Monday lock.
 
 Verified running in production, not just built:
 
@@ -340,5 +349,6 @@ adding them requires a redeploy.**
 
 **Housekeeping:** all SDDFS beta data (180 contests / 737 entries / 8,820
 picks) was deleted 2026-08-30 at Jay's instruction; a JSON backup is at
-`~/Desktop/sddfs-backup-2026-08-30/`. `dfs_price_audits` and `dfs_audit_runs`
+`~/Desktop/sddfs-backup-2026-08-30/`. New Monday QA contest created same day
+with 80 teams as pool coverage test. `dfs_price_audits` and `dfs_audit_runs`
 history was left in place.
