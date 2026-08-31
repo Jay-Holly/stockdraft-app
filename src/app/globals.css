@@ -4343,7 +4343,7 @@ body:has(.landing-screen.sides-always) {
 
 @media (max-width: 640px) {
   .landing-tagline {
-    font-size: clamp(0.6rem, 3.2vw, 1.35rem);
+    font-size: clamp(0.54rem, 2.88vw, 1.2rem);
   }
 
   .landing-tagline-kicker {
