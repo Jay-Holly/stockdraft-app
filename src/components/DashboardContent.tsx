@@ -438,22 +438,22 @@ export function DashboardContent({
         <PendingLeagueInviteBanner invites={pendingInvites} />
       )}
 
-      <section className="crest-card bg-black p-4">
-        <div className="flex flex-col gap-2 items-center text-center">
+      <section className="crest-card bg-black p-3">
+        <div className="flex flex-col gap-1.5 items-center text-center">
           <Image
             src="/images/brand/wide-logo.jpeg"
             alt="StockDuel"
             width={600}
-            height={50}
+            height={38}
             className="w-full h-auto"
             priority
           />
-          <div className="space-y-0.5">
-            <h1 className="text-2xl font-bold">{profile.team_name}</h1>
-            <p className="text-muted text-sm">@{profile.username}</p>
+          <div className="space-y-0">
+            <h1 className="text-xl font-bold">{profile.team_name}</h1>
+            <p className="text-muted text-xs">@{profile.username}</p>
             <p className="text-muted text-xs">Member since {createdDate}</p>
           </div>
-          <div className="flex items-center gap-4 pt-2">
+          <div className="flex items-center gap-3 pt-1.5">
             <Link
               href="/profile"
               className="text-xs font-semibold text-gold hover:underline"
