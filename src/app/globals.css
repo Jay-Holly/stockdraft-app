@@ -823,11 +823,11 @@ body:has(.landing-screen) {
 
 @media (max-width: 640px) {
   .landing-screen.sides-always {
-    --landing-ticker-width: 0px;
+    --landing-ticker-width: 18px;
   }
 
   .landing-screen.sides-always .ticker-orbit {
-    display: none;
+    inset: 0 -15px -15px -15px;
   }
 }
 
