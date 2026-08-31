@@ -827,7 +827,7 @@ body:has(.landing-screen) {
   }
 
   .landing-screen.sides-always .ticker-orbit {
-    inset: -30px -15px -30px -15px;
+    inset: -20px -15px -20px -15px;
   }
 }
 
