@@ -438,13 +438,13 @@ export function DashboardContent({
         <PendingLeagueInviteBanner invites={pendingInvites} />
       )}
 
-      <section className="crest-card p-4">
+      <section className="bg-black rounded-xl border border-gold/20 p-4">
         <div className="flex flex-col gap-2 items-center text-center">
           <Image
             src="/images/brand/wide-logo.jpeg"
             alt="StockDuel"
             width={600}
-            height={60}
+            height={50}
             className="w-full h-auto"
             priority
           />
