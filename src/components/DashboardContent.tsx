@@ -438,7 +438,7 @@ export function DashboardContent({
         <PendingLeagueInviteBanner invites={pendingInvites} />
       )}
 
-      <section className="crest-card bg-black p-3">
+      <section className="bg-black rounded-xl border-2 border-gold/30 p-3">
         <div className="flex flex-col gap-1.5 items-center text-center">
           <Image
             src="/images/brand/wide-logo.jpeg"
