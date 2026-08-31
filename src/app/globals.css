@@ -800,7 +800,6 @@ body:has(.landing-screen) {
    selector specificity, regardless of viewport width. */
 .landing-screen.sides-always {
   --landing-ticker-width: 18px;
-  height: auto;
   /* No min-height here on purpose: the frame (including its black
      background and the ticker strips, which are sized off this box) used
      to be forced to fill the whole device height even when the actual
@@ -819,6 +818,17 @@ body:has(.landing-screen) {
   align-items: center;
   justify-content: center;
   padding-block: 2dvh;
+  height: auto;
+}
+
+@media (max-width: 640px) {
+  .landing-screen.sides-always {
+    --landing-ticker-width: 0px;
+  }
+
+  .landing-screen.sides-always .ticker-orbit {
+    display: none;
+  }
 }
 
 body:has(.landing-screen.sides-always) {
