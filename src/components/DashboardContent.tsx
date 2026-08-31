@@ -444,7 +444,7 @@ export function DashboardContent({
             src="/images/brand/wide-logo.jpeg"
             alt="StockDuel"
             width={600}
-            height={80}
+            height={60}
             className="w-full h-auto"
             priority
           />
