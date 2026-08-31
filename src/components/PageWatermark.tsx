@@ -23,7 +23,7 @@ export function PageWatermark({
           className={`${sizeClassName} h-auto ${opacityClassName}`}
         />
       ) : (
-        <span className="text-[26vw] font-black tracking-tight leading-none opacity-[0.03] select-none whitespace-nowrap">
+        <span className="text-[18vw] font-black tracking-tight leading-none opacity-[0.03] select-none whitespace-nowrap">
           StockDuel
         </span>
       )}

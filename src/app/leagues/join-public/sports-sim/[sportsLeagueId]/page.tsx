@@ -3,6 +3,7 @@ import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
+import { PageWatermark } from "@/components/PageWatermark";
 import { PublicLeagueList } from "@/components/leagues/PublicLeagueList";
 import { listPublicHumanLeagues } from "@/lib/league/human-league";
 import {
@@ -46,6 +47,7 @@ export default async function JoinPublicSportsSimLeaguePage({ params }: PageProp
 
   return (
     <div className="min-h-screen flex flex-col" data-league-theme={themeId}>
+      <PageWatermark />
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <Logo size="sm" />

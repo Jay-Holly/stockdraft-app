@@ -1,11 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Logo } from "@/components/Logo";
+import { PageWatermark } from "@/components/PageWatermark";
 import { SPORTS_LEAGUE_FORMATS } from "@/lib/league/league-config";
 
 export default function JoinPublicSportsSimPage() {
   return (
     <div className="min-h-screen flex flex-col">
+      <PageWatermark />
       <header className="px-4 py-4 border-b border-dark-border">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <Logo size="sm" />
