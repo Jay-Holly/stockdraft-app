@@ -262,6 +262,32 @@ async function upsertRun(
 }
 
 /**
+ * The oldest of the last few Eastern dates whose round is still stuck at
+ * `"running"` — a date the cron's normal "today only" pass fell through the
+ * cracks on once the calendar rolled past it. `runAuditRound1`/`runAuditRound2`
+ * are already resumable given any date; this just gives them a reason to be
+ * called again for one instead of only ever chasing today.
+ */
+export async function findStaleRunningAuditDate(
+  round: 1 | 2,
+  recentDates: string[]
+): Promise<string | null> {
+  if (recentDates.length === 0) return null;
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("dfs_audit_runs")
+    .select("audit_date")
+    .eq("round", round)
+    .eq("status", "running")
+    .in("audit_date", recentDates)
+    .order("audit_date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  return data?.audit_date ?? null;
+}
+
+/**
  * Round 1 — completeness, with recovery.
  *
  * A pick missing its open or close is not written off. Twelve Data's 1-minute
