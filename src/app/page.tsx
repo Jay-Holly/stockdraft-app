@@ -81,7 +81,7 @@ export default function HomePage() {
                     visible around the text and buttons instead of a gap. */}
                 <div className="landing-hero-overlay">
                   <p className="landing-tagline">
-                    Draft stocks like players. Win your league. Learn the markets.
+                    Draft stocks like players. Win your league. Learn&nbsp;the&nbsp;markets.
                     <span className="landing-tagline-kicker">
                       You&rsquo;ve never seen a season like this!
                     </span>
