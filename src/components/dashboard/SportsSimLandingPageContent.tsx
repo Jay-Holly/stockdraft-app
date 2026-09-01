@@ -50,7 +50,11 @@ export function SportsSimLandingPageContent({
       <div className="grid grid-cols-2 gap-3">
         {SPORTS_LEAGUE_FORMATS.map((format) => {
           const teamCount = countByLeagueId[format.id] || 0;
-          const comingSoon = format.id === "sdhl" || format.id === "sdba";
+          const comingSoon =
+        format.id === "sdhl" ||
+        format.id === "sdba" ||
+        format.id === "sdcup" ||
+        format.id === "sdps";
           const comingNextSpring = format.id === "sdlb";
           const signUpNow = format.id === "sdfl";
           return (

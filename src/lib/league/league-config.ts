@@ -28,6 +28,8 @@ export const SPORTS_LEAGUE_REQUIRED_PLAYER_COUNT: Record<
   sdhl: 32,
   sdba: 30,
   sdlb: 30,
+  sdcup: 32,
+  sdps: 30,
 };
 
 export const SPORTS_LEAGUE_FORMATS = [
@@ -54,6 +56,18 @@ export const SPORTS_LEAGUE_FORMATS = [
     label: "SDLB",
     description: "StockDuel League Baseball",
     logoSrc: "/images/leagues/sdlb.png" as string | null,
+  },
+  {
+    id: "sdcup",
+    label: "SDCUP",
+    description: "StockDuel Racing League",
+    logoSrc: "/images/leagues/sdcup.png" as string | null,
+  },
+  {
+    id: "sdps",
+    label: "SDPS",
+    description: "StockDuel Premier Soccer",
+    logoSrc: "/images/leagues/sdps.png" as string | null,
   },
 ] as const;
 
