@@ -6,6 +6,7 @@ import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import { HumanLeagueInvitePanel } from "@/components/league/HumanLeagueInvitePanel";
 import { ScheduledDraftCountdown } from "@/components/league/ScheduledDraftCountdown";
 import { DraftScheduleControl } from "@/components/league/DraftScheduleControl";
+import { FixStuckLeaguePrompt } from "@/components/league/FixStuckLeaguePrompt";
 import { ResetDraftClockButton } from "@/components/league/ResetDraftClockButton";
 import { ResetEntireDraftButton } from "@/components/league/ResetEntireDraftButton";
 
@@ -63,6 +64,14 @@ export function HumanLeagueCard({
     formatType: item.league.format_type,
     sportsLeagueId: item.league.sports_league_id,
   });
+  const draftWithin24h = Boolean(
+    item.league.scheduled_draft_at &&
+      new Date(item.league.scheduled_draft_at).getTime() - Date.now() <=
+        24 * 60 * 60 * 1000
+  );
+  const shortOnSignups =
+    item.league.opponent_type === "all_human" &&
+    item.memberCount < item.league.player_count;
 
   return (
     <div
@@ -121,6 +130,14 @@ export function HumanLeagueCard({
           leagueId={item.league.id}
           scheduledDraftAt={item.league.scheduled_draft_at}
           compact
+        />
+      )}
+
+      {waiting && isOwner && !isSportsSim && draftWithin24h && shortOnSignups && (
+        <FixStuckLeaguePrompt
+          leagueId={item.league.id}
+          memberCount={item.memberCount}
+          playerCount={item.league.player_count}
         />
       )}
 
