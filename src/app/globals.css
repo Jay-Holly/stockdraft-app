@@ -4231,8 +4231,12 @@ body:has(.landing-screen.sides-always) {
   /* Clears the bottom ticker strip, which sits only ~4px below this box's
      own bottom edge (it's part of an overlay inset -30px from the frame,
      with the strip itself 26px tall) — without this, whatever the last
-     piece of content is collides with the ticker running behind it. */
-  padding-bottom: 3rem;
+     piece of content is collides with the ticker running behind it.
+     3rem wasn't enough: the overlay (tagline + buttons + "How to Play")
+     is absolutely positioned inside .landing-shield-stage and its real
+     content height routinely runs past the stage's own bottom edge, so
+     the old padding left almost no actual gap before the strip. */
+  padding-bottom: 4rem;
 }
 
 .landing-headline {
