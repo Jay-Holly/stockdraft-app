@@ -473,7 +473,16 @@ export function DashboardContent({
         </div>
       </section>
 
-      <LiveTickerTape />
+      <section className="crest-card px-4 py-3 space-y-1">
+        <p className="text-gold font-semibold">
+          Welcome to the Pittsburgh beta test!
+        </p>
+        <p className="text-muted text-sm">
+          Draft a free Sim League and learn how the world of StockDuel
+          works. And just in time for Football season, join an SDFL and
+          play along with your friends!
+        </p>
+      </section>
 
       <section className="crest-card p-0.5 space-y-4">
         <DashboardSheet
