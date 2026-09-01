@@ -76,7 +76,7 @@ export function AiLeagueCard({
               <p className="text-[10px] text-muted uppercase tracking-wider">W-L</p>
             </div>
           )}
-          <div className="relative hide-sparkle">
+          <div className="relative">
             <Image
               src="/images/leagues/sdai.png"
               alt=""

@@ -152,11 +152,11 @@ body {
 .hide-sparkle::after {
   content: "";
   position: absolute;
-  bottom: 8%;
-  right: 8%;
+  bottom: 1%;
+  right: 3%;
   width: 24px;
   height: 24px;
-  background-color: #000;
+  background-color: #050b1a;
   border-radius: 50%;
 }
 
