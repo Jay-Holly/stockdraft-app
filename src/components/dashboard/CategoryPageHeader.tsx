@@ -1,11 +1,9 @@
 import Link from "next/link";
-import { Logo } from "@/components/Logo";
 
 export function CategoryPageHeader({ title }: { title: string }) {
   return (
     <header className="px-4 py-4 border-b border-dark-border">
-      <div className="max-w-lg mx-auto flex items-center justify-between">
-        <Logo size="sm" />
+      <div className="max-w-lg mx-auto">
         <span className="text-xs text-gold font-semibold uppercase tracking-wider">
           {title}
         </span>
