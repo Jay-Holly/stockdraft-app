@@ -266,12 +266,18 @@ async function scoreClosedContests(
 
   if (todaysContests.length > 0) {
     const symbols = symbolsFor(todaysContests.map((c) => c.id));
-    const live =
+    // getOpeningPricesWithRetry always reads the "open" anchor no matter what
+    // it's asked for — it ignores the isDailyContest flag entirely, so calling
+    // it here silently scored every same-day contest against its own open,
+    // writing close_price === open_price on every pick (0.00% for everyone).
+    // The close anchor is the same one the logger already wrote for today's
+    // session — read it directly instead of going through the open-only helper.
+    const closes =
       symbols.length > 0
-        ? await getOpeningPricesWithRetry(symbols, { isDailyContest: true })
+        ? await fetchContestAnchors(symbols, contestDate, "close", "sddfs-close")
         : {};
     for (const contest of todaysContests) {
-      pricesByContest.set(contest.id, live);
+      pricesByContest.set(contest.id, closes);
     }
   }
 

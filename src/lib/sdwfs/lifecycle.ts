@@ -256,12 +256,18 @@ async function scoreClosedContests(
 
   if (currentWeek.length > 0) {
     const symbols = symbolsFor(currentWeek.map((c) => c.id));
-    const live =
+    // getOpeningPricesWithRetry always reads the "open" anchor regardless of
+    // the isDailyContest flag — using it here silently scored a same-day
+    // finalize against its own open, writing close_price === open_price on
+    // every pick (0.00% for everyone). Confirmed live in the SDDFS twin of
+    // this code path 2026-09-01/02; applying the same fix here before it can
+    // do the same to a weekly contest.
+    const closes =
       symbols.length > 0
-        ? await getOpeningPricesWithRetry(symbols, { isDailyContest: false })
+        ? await fetchContestAnchors(symbols, todayIso, "close", "sdwfs-close")
         : {};
     for (const contest of currentWeek) {
-      pricesByContest.set(contest.id, live);
+      pricesByContest.set(contest.id, closes);
     }
   }
 
