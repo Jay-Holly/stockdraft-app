@@ -549,22 +549,28 @@ export async function runSweep(options: {
       const batch = batchValues.get(symbol);
       const rows: Observation[] = [];
 
-      /** Build one anchor: consolidated price first, batch value as the check. */
+      /**
+       * Build one anchor: Alpaca (the live batch already in hand) is the
+       * price that's written; Finnhub is the immediate cross-check against
+       * it, same instant, same call, no extra API cost. If Alpaca has
+       * nothing for this symbol, Finnhub's consolidated print is used as the
+       * fallback and the anchor is labeled accordingly.
+       */
       const buildAnchor = (
         kind: "open" | "close",
-        consolidated: number | null,
-        batchValue: number | null,
+        primary: { price: number | null; source: "alpaca" | "finnhub" },
+        secondary: { price: number | null; source: "alpaca" | "finnhub" },
         asOf: Date
       ): Observation | null => {
-        const usingFallback = !(typeof consolidated === "number" && consolidated > 0);
-        const price = usingFallback ? batchValue : consolidated;
+        const usingFallback = !(typeof primary.price === "number" && primary.price > 0);
+        const price = usingFallback ? secondary.price : primary.price;
         // No price from either source: write nothing. A missing anchor holds
         // the contest, which is the whole point — it is never filled in with
         // whatever number happened to be nearby.
         if (!(typeof price === "number" && price > 0)) return null;
 
-        const secondary = usingFallback ? null : batchValue;
-        const v = verifyAnchor(price, secondary, usingFallback);
+        const checkValue = usingFallback ? null : secondary.price;
+        const v = verifyAnchor(price, checkValue, usingFallback);
 
         return {
           symbol,
@@ -575,10 +581,10 @@ export async function runSweep(options: {
           dayHigh: batch?.dayHigh ?? undefined,
           dayLow: batch?.dayLow ?? undefined,
           asOf,
-          source: usingFallback ? "alpaca" : "finnhub",
+          source: usingFallback ? secondary.source : primary.source,
           sweepId,
-          verifiedPrice: secondary ?? undefined,
-          verifiedSource: secondary != null ? "alpaca" : undefined,
+          verifiedPrice: checkValue ?? undefined,
+          verifiedSource: checkValue != null ? secondary.source : undefined,
           verifyDiffPct: v.diffPct,
           verifyStatus: v.status,
         };
@@ -587,8 +593,8 @@ export async function runSweep(options: {
       if (!haveClose.has(symbol)) {
         const row = buildAnchor(
           "close",
-          fh.status === "ok" ? fh.quote.price : null,
-          batch?.price ?? null,
+          { price: batch?.price ?? null, source: "alpaca" },
+          { price: fh.status === "ok" ? fh.quote.price : null, source: "finnhub" },
           nySessionMoment(sessionDate, 16, 0)
         );
         if (row) {
