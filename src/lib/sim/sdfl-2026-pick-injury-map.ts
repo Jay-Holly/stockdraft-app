@@ -14,7 +14,7 @@ import { isCryptoSymbol } from "@/lib/draft/engine";
 // does not read or write that table. It is not wired into any live draft
 // flow yet — a deliberate future cutover, not automatic.
 
-export const SDFL_2026_FALLBACK_RANK_START = 600;
+export const SDFL_2026_FALLBACK_RANK_START = 700;
 export const SDFL_2026_FALLBACK_RANK_FLOOR = 504;
 
 export type Sdfl2026PickInjuryMapRow = {
@@ -93,7 +93,7 @@ export async function lookupSdfl2026PickInjuryMapForSymbol(
 /**
  * Seeds the off-S&P-500 fallback pool for one SDFL 2026 league's finished
  * draft: every drafted symbol that isn't an S&P 500 stock gets the next
- * rank counting down from 600, in draft order. S&P symbols get no row here
+ * rank counting down from 700, in draft order. S&P symbols get no row here
  * — they're covered by sim_stock_player_map directly.
  */
 export async function seedSdfl2026PickInjuryMapIfMissing(

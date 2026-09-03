@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/price-logger",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/injury-logger",
+      "schedule": "0 13 * * *"
     }
   ]
 }

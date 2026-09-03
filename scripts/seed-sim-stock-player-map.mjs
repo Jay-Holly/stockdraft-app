@@ -9,12 +9,14 @@
  * Usage:
  *   node --env-file=.env.local scripts/seed-sim-stock-player-map.mjs --sport nfl --season 2024
  *   node --env-file=.env.local scripts/seed-sim-stock-player-map.mjs --sport mlb --season 2024
- *   (defaults to --sport nfl --season 2024 if omitted)
+ *   node --env-file=.env.local scripts/seed-sim-stock-player-map.mjs --sport nfl --season 2026 --total-ranks 503
+ *   (defaults to --sport nfl --season 2024 --total-ranks 384 if omitted)
  *
  * Prerequisites:
  *   - Migration 049_sports_sim_ir_slots.sql applied (sim_stock_player_map table)
- *   - scripts/seed-sim-<sport>-2024.mjs run (sim_players + sim_player_rankings, ranks 1-384 complete)
- *   - src/data/sp500-market-cap-ranks.json present (503 S&P ranks; 1-384 required)
+ *   - sim_players + sim_player_rankings seeded with ranks 1..--total-ranks complete
+ *     (e.g. scripts/seed-sim-nfl-2024.mjs, or scripts/seed-sim-nfl-2026-br1000.mjs)
+ *   - src/data/sp500-market-cap-ranks.json present (503 S&P ranks; 1..--total-ranks required)
  */
 
 import fs from "node:fs";
@@ -23,7 +25,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const DEFAULT_SPORT = "nfl";
 const DEFAULT_SEASON = "2024";
-const TOTAL_RANKS = 384;
+const DEFAULT_TOTAL_RANKS = 384;
 
 const RANKS_JSON_PATH = path.join(
   process.cwd(),
@@ -36,19 +38,22 @@ function parseArgs() {
   const args = process.argv.slice(2);
   let sport = DEFAULT_SPORT;
   let season = DEFAULT_SEASON;
+  let totalRanks = DEFAULT_TOTAL_RANKS;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--sport" && args[i + 1]) {
       sport = args[++i].toLowerCase();
     } else if (args[i] === "--season" && args[i + 1]) {
       season = args[++i];
+    } else if (args[i] === "--total-ranks" && args[i + 1]) {
+      totalRanks = Number(args[++i]);
     }
   }
 
-  return { sport, season };
+  return { sport, season, totalRanks };
 }
 
-function loadStockRankToSymbol() {
+function loadStockRankToSymbol(totalRanks) {
   if (!fs.existsSync(RANKS_JSON_PATH)) {
     throw new Error(
       `Missing ${RANKS_JSON_PATH}. Run: npm run fetch:market-cap-ranks`
@@ -76,17 +81,17 @@ function loadStockRankToSymbol() {
   }
 
   const missingStockRanks = [];
-  for (let rank = 1; rank <= TOTAL_RANKS; rank++) {
+  for (let rank = 1; rank <= totalRanks; rank++) {
     if (!rankToSymbol.has(rank)) missingStockRanks.push(rank);
   }
 
   return { rankToSymbol, missingStockRanks, totalSymbols: Object.keys(ranks).length };
 }
 
-async function loadPlayerRankings(supabase, sport, season) {
-  const { data: players, error: playersError } = await supabase
+async function loadPlayerRankings(supabase, sport, season, totalRanks) {
+  const { count: playerCount, error: playersError } = await supabase
     .from("sim_players")
-    .select("player_id")
+    .select("*", { count: "exact", head: true })
     .eq("sport", sport)
     .eq("season", season);
 
@@ -102,18 +107,20 @@ async function loadPlayerRankings(supabase, sport, season) {
     throw new Error(`sim_players query failed: ${playersError.message}`);
   }
 
-  if (!players?.length) {
+  if (!playerCount) {
     throw new Error(
       `No sim_players for sport=${sport} season=${season}. Run scripts/seed-sim-nfl-2024.mjs first.`
     );
   }
 
-  const playerIds = players.map((row) => row.player_id);
-
+  // Joins through sim_players for the sport/season filter instead of an
+  // .in("player_id", [...ids]) list — with 500+ players that list overflows
+  // PostgREST's ~16KB request-header limit (UND_ERR_HEADERS_OVERFLOW).
   const { data: rankings, error: rankingsError } = await supabase
     .from("sim_player_rankings")
-    .select("player_id, rank, tier")
-    .in("player_id", playerIds)
+    .select("player_id, rank, tier, sim_players!inner(sport, season)")
+    .eq("sim_players.sport", sport)
+    .eq("sim_players.season", season)
     .order("rank", { ascending: true });
 
   if (rankingsError) {
@@ -137,11 +144,11 @@ async function loadPlayerRankings(supabase, sport, season) {
   }
 
   const missingPlayerRanks = [];
-  for (let rank = 1; rank <= TOTAL_RANKS; rank++) {
+  for (let rank = 1; rank <= totalRanks; rank++) {
     if (!rankToPlayer.has(rank)) missingPlayerRanks.push(rank);
   }
 
-  return { rankToPlayer, missingPlayerRanks, playerCount: players.length };
+  return { rankToPlayer, missingPlayerRanks, playerCount };
 }
 
 async function verifyDraftPoolSymbols(supabase, symbols) {
@@ -159,7 +166,7 @@ async function verifyDraftPoolSymbols(supabase, symbols) {
 }
 
 async function main() {
-  const { sport, season } = parseArgs();
+  const { sport, season, totalRanks } = parseArgs();
 
   if (!["nfl", "mlb", "nba", "nhl"].includes(sport)) {
     console.error(
@@ -183,14 +190,14 @@ async function main() {
     "Stock rank source: src/data/sp500-market-cap-ranks.json (S&P 500 market-cap order used by SDFL)"
   );
 
-  const { rankToSymbol, missingStockRanks, totalSymbols } = loadStockRankToSymbol();
+  const { rankToSymbol, missingStockRanks, totalSymbols } = loadStockRankToSymbol(totalRanks);
   console.log(
-    `Loaded ${totalSymbols} S&P market-cap ranks; ranks 1-${TOTAL_RANKS} missing: ${missingStockRanks.length}`
+    `Loaded ${totalSymbols} S&P market-cap ranks; ranks 1-${totalRanks} missing: ${missingStockRanks.length}`
   );
 
   if (missingStockRanks.length > 0) {
     console.error(
-      "PREREQUISITE FAILED: SDFL stock pool is not rank-ordered 1-384.",
+      `PREREQUISITE FAILED: SDFL stock pool is not rank-ordered 1-${totalRanks}.`,
       "Missing market-cap ranks:",
       missingStockRanks.slice(0, 20).join(", "),
       missingStockRanks.length > 20 ? "…" : ""
@@ -203,15 +210,15 @@ async function main() {
   });
 
   const { rankToPlayer, missingPlayerRanks, playerCount } =
-    await loadPlayerRankings(supabase, sport, season);
+    await loadPlayerRankings(supabase, sport, season, totalRanks);
 
   console.log(
-    `Loaded ${playerCount} sim_players; player ranks 1-${TOTAL_RANKS} missing: ${missingPlayerRanks.length}`
+    `Loaded ${playerCount} sim_players; player ranks 1-${totalRanks} missing: ${missingPlayerRanks.length}`
   );
 
   if (missingPlayerRanks.length > 0) {
     console.error(
-      "PREREQUISITE FAILED: sim_player_rankings is not complete 1-384.",
+      `PREREQUISITE FAILED: sim_player_rankings is not complete 1-${totalRanks}.`,
       "Missing ranks:",
       missingPlayerRanks.slice(0, 20).join(", "),
       missingPlayerRanks.length > 20 ? "…" : ""
@@ -222,7 +229,7 @@ async function main() {
   const draftPoolSymbols = await verifyDraftPoolSymbols(
     supabase,
     [...rankToSymbol.entries()]
-      .filter(([rank]) => rank <= TOTAL_RANKS)
+      .filter(([rank]) => rank <= totalRanks)
       .map(([, symbol]) => symbol)
   );
 
@@ -230,7 +237,7 @@ async function main() {
   const rows = [];
   const unmatchedStockRanks = [];
 
-  for (let rank = 1; rank <= TOTAL_RANKS; rank++) {
+  for (let rank = 1; rank <= totalRanks; rank++) {
     const symbol = rankToSymbol.get(rank);
     const player = rankToPlayer.get(rank);
 
@@ -299,10 +306,10 @@ async function main() {
 
   console.log("\n--- Summary ---");
   console.log(`Rows inserted: ${inserted}`);
-  console.log(`Unmatched stock ranks (1-${TOTAL_RANKS}): ${unmatchedStockRanks.length}`);
+  console.log(`Unmatched stock ranks (1-${totalRanks}): ${unmatchedStockRanks.length}`);
   console.log(`Sample: rank 1 → ${rankToSymbol.get(1)} / ${rankToPlayer.get(1)?.player_id}`);
   console.log(
-    `Sample: rank ${TOTAL_RANKS} → ${rankToSymbol.get(TOTAL_RANKS)} / ${rankToPlayer.get(TOTAL_RANKS)?.player_id}`
+    `Sample: rank ${totalRanks} → ${rankToSymbol.get(totalRanks)} / ${rankToPlayer.get(totalRanks)?.player_id}`
   );
   console.log("Done.");
 }
