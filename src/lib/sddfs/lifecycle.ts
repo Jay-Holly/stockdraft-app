@@ -30,6 +30,9 @@ const MARKET_CLOSE_HOUR_ET = 16;
  */
 const UPDATE_CHUNK_SIZE = 200;
 
+/** PostgREST's own response ceiling for a plain SELECT — page past it or rows silently go missing. */
+const SELECT_PAGE_SIZE = 1000;
+
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -77,12 +80,32 @@ async function lockDueContests(
       continue;
     }
 
-    const { data: picks } = await supabase
-      .from("sddfs_entry_picks")
-      .select("id, symbol")
-      .in("entry_id", entryIds);
+    // PostgREST caps a response at 1,000 rows. A contest with more than ~83
+    // entries (83 * 12 > 1,000) silently lost every pick past that row, which
+    // never got an opening price and scored a flat 0% forever — confirmed
+    // live on the 150-team $2 contest 2026-09-03 (779 of 1,800 picks null).
+    // The lock's own hold check never caught it because the query itself
+    // came back "successfully" with a truncated set, not an error. Page
+    // through in 1,000-row windows so nothing past the first page goes
+    // missing.
+    const picks: { id: string; symbol: string }[] = [];
+    for (let from = 0; ; from += SELECT_PAGE_SIZE) {
+      const { data: page, error: picksError } = await supabase
+        .from("sddfs_entry_picks")
+        .select("id, symbol")
+        .in("entry_id", entryIds)
+        .range(from, from + SELECT_PAGE_SIZE - 1);
 
-    picksByContest.set(contest.id, picks ?? []);
+      if (picksError) {
+        throw new Error(
+          `Failed to load picks for contest ${contest.id}: ${picksError.message}`
+        );
+      }
+      picks.push(...(page ?? []));
+      if (!page || page.length < SELECT_PAGE_SIZE) break;
+    }
+
+    picksByContest.set(contest.id, picks);
   }
 
   const allSymbols = [
@@ -223,12 +246,30 @@ async function scoreClosedContests(
       continue;
     }
 
-    const { data: picks } = await supabase
-      .from("sddfs_entry_picks")
-      .select("id, symbol, open_price, close_price")
-      .in("entry_id", entryIds);
+    // Same 1,000-row PostgREST cap as the lock step above — page through it.
+    const picks: {
+      id: string;
+      symbol: string;
+      open_price: number | null;
+      close_price: number | null;
+    }[] = [];
+    for (let from = 0; ; from += SELECT_PAGE_SIZE) {
+      const { data: page, error: picksError } = await supabase
+        .from("sddfs_entry_picks")
+        .select("id, symbol, open_price, close_price")
+        .in("entry_id", entryIds)
+        .range(from, from + SELECT_PAGE_SIZE - 1);
 
-    picksByContest.set(contest.id, picks ?? []);
+      if (picksError) {
+        throw new Error(
+          `Failed to load picks for contest ${contest.id}: ${picksError.message}`
+        );
+      }
+      picks.push(...(page ?? []));
+      if (!page || page.length < SELECT_PAGE_SIZE) break;
+    }
+
+    picksByContest.set(contest.id, picks);
   }
 
   // A contest's close must come from ITS OWN trading day, not from whatever

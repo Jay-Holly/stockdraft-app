@@ -28,6 +28,9 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
  */
 const UPDATE_CHUNK_SIZE = 200;
 
+/** PostgREST's own response ceiling for a plain SELECT — page past it or rows silently go missing. */
+const SELECT_PAGE_SIZE = 1000;
+
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -78,12 +81,29 @@ async function lockDueContests(
       continue;
     }
 
-    const { data: picks } = await supabase
-      .from("sdwfs_entry_picks")
-      .select("id, symbol")
-      .in("entry_id", entryIds);
+    // PostgREST caps a plain SELECT at 1,000 rows — confirmed live on the
+    // SDDFS twin of this lock 2026-09-03, where a 150-entry contest (1,800
+    // picks) silently lost everything past row 1,000: those picks never got
+    // an opening price and scored a flat 0% forever, with no error anywhere
+    // to catch it. Page through so nothing past the first 1,000 goes missing.
+    const picks: { id: string; symbol: string }[] = [];
+    for (let from = 0; ; from += SELECT_PAGE_SIZE) {
+      const { data: page, error: picksError } = await supabase
+        .from("sdwfs_entry_picks")
+        .select("id, symbol")
+        .in("entry_id", entryIds)
+        .range(from, from + SELECT_PAGE_SIZE - 1);
 
-    picksByContest.set(contest.id, picks ?? []);
+      if (picksError) {
+        throw new Error(
+          `Failed to load picks for contest ${contest.id}: ${picksError.message}`
+        );
+      }
+      picks.push(...(page ?? []));
+      if (!page || page.length < SELECT_PAGE_SIZE) break;
+    }
+
+    picksByContest.set(contest.id, picks);
   }
 
   const allSymbols = [
@@ -217,12 +237,30 @@ async function scoreClosedContests(
       continue;
     }
 
-    const { data: picks } = await supabase
-      .from("sdwfs_entry_picks")
-      .select("id, symbol, open_price, close_price")
-      .in("entry_id", entryIds);
+    // Same 1,000-row PostgREST cap as the lock step above — page through it.
+    const picks: {
+      id: string;
+      symbol: string;
+      open_price: number | null;
+      close_price: number | null;
+    }[] = [];
+    for (let from = 0; ; from += SELECT_PAGE_SIZE) {
+      const { data: page, error: picksError } = await supabase
+        .from("sdwfs_entry_picks")
+        .select("id, symbol, open_price, close_price")
+        .in("entry_id", entryIds)
+        .range(from, from + SELECT_PAGE_SIZE - 1);
 
-    picksByContest.set(contest.id, picks ?? []);
+      if (picksError) {
+        throw new Error(
+          `Failed to load picks for contest ${contest.id}: ${picksError.message}`
+        );
+      }
+      picks.push(...(page ?? []));
+      if (!page || page.length < SELECT_PAGE_SIZE) break;
+    }
+
+    picksByContest.set(contest.id, picks);
   }
 
   // A week's close belongs to the session it actually ended on — score_at is
