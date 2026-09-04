@@ -9,8 +9,17 @@
  * LB, S/CB, K/P included) with an explicit, complete 1-1000 order, which is
  * the shape SDFL's stock-to-player pairing needs.
  *
- * Rankings only — no injuries. A separate, real-time injury source will
- * populate sim_player_injuries later; this script does not touch that table.
+ * Also excludes anyone already on IR/PUP/etc. as of the moment this runs
+ * (see IR_EXCLUDE_STATUSES below) — pulled live from the same RotoWire feed
+ * src/lib/injuries/logger.ts polls. IR only exists for the surprise it
+ * creates: a player already out for a known minimum stretch before the
+ * season even starts isn't a surprise, it's public information anyone
+ * drafting could look up, so those stocks would never actually get picked.
+ * Run this again close to kickoff to re-clear whoever's healthy by then.
+ *
+ * Rankings only otherwise. sim_player_injuries itself is populated
+ * separately, in-season, by the injury logger — this script doesn't touch
+ * that table beyond cascading away rows for whoever it excludes here.
  *
  * Usage:
  *   node --env-file=.env.local scripts/seed-sim-nfl-2026-br1000.mjs [--dry-run]
@@ -31,6 +40,50 @@ const RANKS_JSON_PATH = path.join(process.cwd(), "src", "data", "br-nfl1000-2026
 // 32 real teams sim data aligns against (bye weeks, schedule), so it's dropped.
 const TEAM_ALIAS = { LAR: "LA" };
 const DROP_TEAMS = new Set(["FA"]);
+
+// Two distinct real players share this name once suffixes are stripped
+// (Byron Murphy II, DL/SEA, rank 120; Byron Murphy Jr., CB/MIN, rank 194) —
+// the injury logger's name matching (src/lib/injuries/logger.ts) can't tell
+// them apart. IR only exists for the chaos it creates, not for who the
+// player is, so rather than build name-disambiguation just drop both and
+// backfill from the rest of the list. Full name strings, not normalized —
+// keep in sync with br-nfl1000-2026-ranks.json if B/R changes their listing.
+const DROP_NAMES = new Set(["Byron Murphy II", "Byron Murphy Jr."]);
+
+// Same source and status family as src/lib/injuries/logger.ts's
+// ON_IR_STATUSES — anyone already on one of these when this script runs
+// gets excluded from the pool entirely (see the file header comment).
+const ROTOWIRE_URL = "https://www.rotowire.com/football/tables/injury-report.php?team=ALL&pos=ALL";
+const IR_EXCLUDE_STATUSES = new Set(["IR", "IR-R", "PUP-R", "PUP-P", "NFI-R", "Reserve-DNR"]);
+
+function normalizeNameKey(fullName) {
+  return fullName
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+(Jr\.?|Sr\.?|II|III|IV)$/i, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+async function fetchCurrentlyInjuredNameKeys() {
+  const res = await fetch(ROTOWIRE_URL, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      Referer: "https://www.rotowire.com/football/injury-report.php",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`RotoWire fetch failed: ${res.status} ${res.statusText}`);
+  }
+  const entries = await res.json();
+  const keys = new Set();
+  for (const entry of entries) {
+    if (!IR_EXCLUDE_STATUSES.has(entry.status)) continue;
+    keys.add(normalizeNameKey(`${entry.firstname} ${entry.lastname}`));
+  }
+  return keys;
+}
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -135,8 +188,14 @@ async function main() {
   const raw = loadBr1000().sort((a, b) => a.rank - b.rank);
   const usedPlayerIds = new Set();
 
+  console.log("Fetching current RotoWire injury statuses to exclude pre-existing IR/PUP...");
+  const injuredNameKeys = await fetchCurrentlyInjuredNameKeys();
+  console.log(`RotoWire reports ${injuredNameKeys.size} players currently on IR/PUP/NFI-R/DNR.\n`);
+
   const candidates = raw
     .filter((p) => typeof p.team === "string" && p.team && !DROP_TEAMS.has(p.team))
+    .filter((p) => !DROP_NAMES.has(p.name))
+    .filter((p) => !injuredNameKeys.has(normalizeNameKey(p.name)))
     .slice(0, TOTAL_RANKS);
 
   if (candidates.length < TOTAL_RANKS) {
@@ -181,6 +240,12 @@ async function main() {
     console.log(`  ${row.full_name} (${row.position}, ${row.real_team})`);
   }
   console.log(`Dropped (no valid team, e.g. FA): ${raw.filter((p) => DROP_TEAMS.has(p.team)).length} within scanned range`);
+  console.log(`Dropped (ambiguous duplicate name): ${raw.filter((p) => DROP_NAMES.has(p.name)).length}`);
+  console.log(
+    `Dropped (already on IR/PUP/NFI-R/DNR): ${
+      raw.filter((p) => injuredNameKeys.has(normalizeNameKey(p.name))).length
+    } within scanned range`
+  );
 
   if (DRY_RUN) {
     console.log("\n--dry-run set, not writing to the database.");
