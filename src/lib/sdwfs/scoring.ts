@@ -109,16 +109,26 @@ export async function finalizeSdwfsContest(
     return { entriesScored: 0 };
   }
 
-  const { data: picks, error: picksError } = await supabase
-    .from("sdwfs_entry_picks")
-    .select("entry_id, pct_change")
-    .in(
-      "entry_id",
-      entries.map((e) => e.id)
-    );
+  // Same 1,000-row PostgREST cap as the SDDFS twin of this function — a
+  // contest over ~83 entries would silently lose picks past that row and
+  // wrongly exclude their entries from ranking and payout. Not yet triggered
+  // here (no SDWFS contest has crossed that size), but the failure mode is
+  // identical, so fixed the same way pre-emptively.
+  const entryIds = entries.map((e) => e.id);
+  const picks: { entry_id: string; pct_change: number | null }[] = [];
+  const SELECT_PAGE_SIZE = 1000;
+  for (let from = 0; ; from += SELECT_PAGE_SIZE) {
+    const { data: page, error: picksError } = await supabase
+      .from("sdwfs_entry_picks")
+      .select("entry_id, pct_change")
+      .in("entry_id", entryIds)
+      .range(from, from + SELECT_PAGE_SIZE - 1);
 
-  if (picksError) {
-    throw new Error(`Failed to load picks: ${picksError.message}`);
+    if (picksError) {
+      throw new Error(`Failed to load picks: ${picksError.message}`);
+    }
+    picks.push(...(page ?? []));
+    if (!page || page.length < SELECT_PAGE_SIZE) break;
   }
 
   const pickCountByEntry = new Map<string, number>();

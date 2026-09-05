@@ -109,16 +109,29 @@ export async function finalizeSddfsContest(
     return { entriesScored: 0 };
   }
 
-  const { data: picks, error: picksError } = await supabase
-    .from("sddfs_entry_picks")
-    .select("entry_id, pct_change")
-    .in(
-      "entry_id",
-      entries.map((e) => e.id)
-    );
+  // PostgREST caps a plain SELECT at 1,000 rows with no error. A contest over
+  // ~83 entries (83 * 12 > 1,000) silently lost every pick past that row, and
+  // every entry those picks belonged to then failed the "exactly 12 picks"
+  // check below and got excluded from ranking and payout entirely — even
+  // though its picks were real and correctly priced. Confirmed live on the
+  // 2026-09-04 $2 (150 entries) and $5 (100 entries) contests: 67 and 93
+  // entries respectively wrongly shut out this way. Page through so nothing
+  // past the first page goes missing.
+  const entryIds = entries.map((e) => e.id);
+  const picks: { entry_id: string; pct_change: number | null }[] = [];
+  const SELECT_PAGE_SIZE = 1000;
+  for (let from = 0; ; from += SELECT_PAGE_SIZE) {
+    const { data: page, error: picksError } = await supabase
+      .from("sddfs_entry_picks")
+      .select("entry_id, pct_change")
+      .in("entry_id", entryIds)
+      .range(from, from + SELECT_PAGE_SIZE - 1);
 
-  if (picksError) {
-    throw new Error(`Failed to load picks: ${picksError.message}`);
+    if (picksError) {
+      throw new Error(`Failed to load picks: ${picksError.message}`);
+    }
+    picks.push(...(page ?? []));
+    if (!page || page.length < SELECT_PAGE_SIZE) break;
   }
 
   const pickCountByEntry = new Map<string, number>();
