@@ -224,6 +224,7 @@ export function DashboardContent({
   dayTrader,
   dfsEntryCount = 0,
   wfsEntryCount = 0,
+  accountEmail = null,
 }: {
   profile: Profile;
   leagues?: AiLeagueListItem[];
@@ -236,6 +237,12 @@ export function DashboardContent({
   dayTrader?: DayTraderDashboardSummary;
   dfsEntryCount?: number;
   wfsEntryCount?: number;
+  /**
+   * The signed-in user's address, read from the auth session rather than from
+   * `profile`. Migration 083 revoked `profiles.email` from the `authenticated`
+   * role, so `profile.email` is always undefined in the browser.
+   */
+  accountEmail?: string | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -420,7 +427,7 @@ export function DashboardContent({
 
       <ContactUsModal
         open={contactUsOpen}
-        email={profile.email}
+        email={accountEmail}
         onClose={() => setContactUsOpen(false)}
       />
 

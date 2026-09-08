@@ -35,7 +35,12 @@ export async function POST(request: Request) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!profile?.email) {
+    // The auth session's address is the fallback: a signup that created the
+    // account but not the profile row would otherwise be locked out of support
+    // for a reason the user can neither see nor fix.
+    const replyTo = profile?.email ?? user.email;
+
+    if (!replyTo) {
       return NextResponse.json(
         { error: "Your account has no email on file — contact support directly." },
         { status: 400 }
@@ -44,7 +49,7 @@ export async function POST(request: Request) {
 
     const { error } = await supabase.from("support_requests").insert({
       user_id: user.id,
-      email: profile.email,
+      email: replyTo,
       support_code: body.supportCode?.trim() || null,
       message: body.message.trim(),
     });
@@ -57,7 +62,7 @@ export async function POST(request: Request) {
     // convenience on top of it, so a failure here is logged and swallowed
     // rather than shown to a user whose message was already saved.
     const notified = await sendSupportEmail({
-      userEmail: profile.email,
+      userEmail: replyTo,
       userId: user.id,
       supportCode: body.supportCode?.trim() || null,
       message: body.message.trim(),

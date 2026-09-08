@@ -136,6 +136,7 @@ export default async function DashboardPage() {
         <Suspense fallback={<p className="text-muted text-sm py-12 text-center">Loading dashboard…</p>}>
           <DashboardContent
             profile={profile as Profile}
+            accountEmail={user.email ?? null}
             leagues={aiLeagues}
             humanLeagues={humanLeagues}
             activeHumanLeague={activeHumanLeague ?? null}
