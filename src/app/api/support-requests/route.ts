@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/draft/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { sendSupportEmail } from "@/lib/support/notify";
 
 export async function POST(request: Request) {
   try {
@@ -50,6 +51,20 @@ export async function POST(request: Request) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // The row above is the record of the request. Emailing support is a
+    // convenience on top of it, so a failure here is logged and swallowed
+    // rather than shown to a user whose message was already saved.
+    const notified = await sendSupportEmail({
+      userEmail: profile.email,
+      userId: user.id,
+      supportCode: body.supportCode?.trim() || null,
+      message: body.message.trim(),
+    });
+
+    if (!notified.sent) {
+      console.error("[support-requests] email not sent:", notified.reason);
     }
 
     return NextResponse.json({ ok: true });

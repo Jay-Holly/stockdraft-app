@@ -1288,12 +1288,14 @@ export async function setPickWeekBaselineOpenClose(
     pick_id: string;
     value_at_open: number;
     value_at_close?: number | null;
+    captured_at: string;
   } = {
     league_id: leagueId,
     user_id: userId,
     week_number: weekNumber,
     pick_id: pickId,
     value_at_open: valueAtOpen,
+    captured_at: new Date().toISOString(),
   };
 
   if (valueAtClose !== undefined) {
