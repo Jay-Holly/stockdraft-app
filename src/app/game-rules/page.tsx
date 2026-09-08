@@ -164,10 +164,10 @@ export default function GameRulesPage() {
               doesn&apos;t take weekends off.
             </>,
             <>
-              No injuries — in the base game. You&apos;re #1 overall pick
-              isn&apos;t landing on the 10-day DL because it &quot;felt
-              tightness.&quot; (Sports Sim leagues bring this back on purpose.
-              More on that shortly.)
+              No injuries — in the base game. Your #1 overall pick
+              isn&apos;t landing on IR and out for the season with a blown
+              knee. (Sports Sim leagues bring this back on purpose. More on
+              that shortly.)
             </>,
             <>
               No coaching decisions, no contract disputes, no weather.
@@ -199,10 +199,10 @@ export default function GameRulesPage() {
           same coin. Draft smart. Don&apos;t chase the crowd.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          And always bear in mind. Is a league based on making the most
+          And always bear in mind: is a league based on making the most
           dollars to win, or is it based on having the highest percentage
-          gain to win. A $5 stock or crypto can out gain a $1000 stock
-          percentage wise with ease. That&apos;s what makes StockDuel so
+          gain to win? A $5 stock or crypto can out-gain a $1,000 stock
+          percentage-wise with ease. That&apos;s what makes StockDuel so
           fun!
         </p>
 
@@ -250,12 +250,12 @@ export default function GameRulesPage() {
             </p>
             <p className="text-sm text-white/90 leading-relaxed">
               Same engine as SDPL, mirrored onto the NFL. 32 franchises, real
-              injury data, real bye weeks, real schedule.
+              cities, real injury data, real bye weeks, real schedule.
             </p>
           </LeagueCard>
 
           <LeagueCard
-            eyebrow="SDHL · SDBA · SDLB — Daily / Series · Sunday Close"
+            eyebrow="SDHL · SDBA · SDLB — Coming Soon"
             title="Hockey, Basketball &amp; Baseball"
             linkLabel="Read the full Sports Sim rules →"
             rulesKey="sim"
@@ -270,7 +270,7 @@ export default function GameRulesPage() {
             <p className="text-sm text-white/90 leading-relaxed">
               Hockey and basketball throw a new opponent at you almost
               daily; baseball runs series like the real thing, 3–4 days per
-              matchup. And because these leagues cryptos score straight
+              matchup. And because these leagues&apos; cryptos score straight
               through the weekend, free agency doesn&apos;t open until
               Sunday 4:00 PM ET — the one scheduling quirk that trips up
               everybody&apos;s first week.
@@ -311,10 +311,12 @@ export default function GameRulesPage() {
             onOpenRules={setOpenRules}
           >
             <p className="text-sm text-white/90 leading-relaxed">
-              Put your money where your mouth is! Daily contests. Add money
-              to your wallet and invest $2-$100 into a pool to see who wins.
-              Your skill wins you real MONEY! No bench. No free agency. No
-              do-overs. Twelve picks, one morning, one closing bell.
+              Put your money where your mouth is! Daily contests. Our beta
+              gives you $1,000 in StockDuel Bucks to start — once beta
+              testing wraps, you&apos;ll be able to add money to your wallet
+              and invest $2–$100 into a pool to see who wins. Your skill
+              wins you real money! No bench. No free agency. No do-overs.
+              Twelve picks, one morning, one closing bell.
             </p>
             <p className="text-sm text-white/90 leading-relaxed">
               One from each of 11 GICS sectors, plus a crypto wildcard —
