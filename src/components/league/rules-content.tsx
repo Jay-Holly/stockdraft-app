@@ -824,8 +824,9 @@ export function DayTraderRulesContent() {
         <p>
           Day Trader is a free weekly contest open to anyone with a
           StockDuel team. No new draft required — just pick one of your
-          existing league teams as your entry. And it&rsquo;s not just bragging
-          rights — real, sponsor-funded prizes are on the line every week.
+          existing league teams as your entry. During beta, it&rsquo;s bragging
+          rights only — sponsor-funded prizes begin once beta testing
+          concludes.
         </p>
       </RuleSection>
 
@@ -856,7 +857,9 @@ export function DayTraderRulesContent() {
 
       <RuleSection title="Prizes & Eligibility">
         <p>
-          Weekly prizes are sponsor-funded and announced each Monday. No
+          No prizes are awarded during the beta period — Day Trader is
+          bragging rights only for now. Once beta testing concludes, weekly
+          prizes will be sponsor-funded and announced each Monday. No
           purchase necessary. Free to enter. One entry per user per week.
         </p>
         <p>
@@ -866,12 +869,13 @@ export function DayTraderRulesContent() {
 
       <RuleSection title="Sweepstakes Disclaimer">
         <p>
-          No purchase necessary to enter or win. StockDuel is the sole
-          sponsor of the Day Trader contest and any associated prizes.
-          Prizes may be funded or provided by third-party sponsors named in
-          that week&rsquo;s contest, but StockDuel is solely responsible for
-          administering the contest, determining winners, and awarding
-          prizes.
+          No prizes are offered or awarded during the beta period. Once
+          prizes begin after beta, no purchase will be necessary to enter or
+          win, StockDuel will be the sole sponsor of the Day Trader contest
+          and any associated prizes, and prizes may be funded or provided by
+          third-party sponsors named in that week&rsquo;s contest, with
+          StockDuel solely responsible for administering the contest,
+          determining winners, and awarding prizes.
         </p>
         <p>
           This promotion is in no way sponsored, endorsed, administered by,

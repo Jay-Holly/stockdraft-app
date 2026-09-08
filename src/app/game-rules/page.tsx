@@ -296,10 +296,11 @@ export default function GameRulesPage() {
               to enter.
             </p>
             <p className="text-sm text-white/90 leading-relaxed">
-              Your one entry is competing for that week&apos;s sponsor
-              prize — two winners every week: Top $ Gainer (most total
-              dollar gain) and Top % Gainer (best percentage gain), both
-              measured against everyone else entered.
+              During beta, it&apos;s bragging rights only — sponsor prizes
+              begin once beta testing concludes. Right now you&apos;re just
+              climbing two leaderboards: Top $ Gainer (most total dollar
+              gain) and Top % Gainer (best percentage gain), both measured
+              against everyone else entered.
             </p>
           </LeagueCard>
 
@@ -362,10 +363,12 @@ export default function GameRulesPage() {
           prohibited by law.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
-          No purchase necessary to enter or win. StockDuel is the sole
-          sponsor of the Day Trader contest and any associated prizes — not
-          affiliated with, endorsed by, or administered by Apple Inc. or
-          Google LLC.
+          Day Trader is bragging rights only during beta — no prizes are
+          awarded until beta testing concludes. Once prizes begin, no
+          purchase will be necessary to enter or win, and StockDuel will be
+          the sole sponsor of the Day Trader contest and any associated
+          prizes — not affiliated with, endorsed by, or administered by
+          Apple Inc. or Google LLC.
         </p>
         <p className="text-sm text-white/90 leading-relaxed mt-3">
           Platform Fee: StockDuel keeps 10% of each contest&apos;s prize
