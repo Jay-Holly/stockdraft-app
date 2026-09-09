@@ -482,7 +482,7 @@ export function DashboardContent({
 
       <section className="crest-card px-4 py-3 space-y-1">
         <p className="text-gold font-semibold">
-          Welcome to the Pittsburgh beta test!
+          Welcome to the StockDuel Beta Test
         </p>
         <p className="text-muted text-sm">
           Draft a free Sim League and learn how the world of StockDuel
