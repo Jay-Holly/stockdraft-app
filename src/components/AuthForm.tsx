@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getAuthErrorMessage } from "@/lib/auth/error-message";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/Button";
 
@@ -49,7 +50,7 @@ export function AuthForm({
       });
 
       if (error) {
-        setMessage({ type: "error", text: error.message });
+        setMessage({ type: "error", text: getAuthErrorMessage(error) });
         setLoading(false);
         return;
       }
@@ -68,7 +69,7 @@ export function AuthForm({
     });
 
     if (error) {
-      setMessage({ type: "error", text: error.message });
+      setMessage({ type: "error", text: getAuthErrorMessage(error) });
       setLoading(false);
       return;
     }
@@ -103,7 +104,7 @@ export function AuthForm({
     });
 
     if (error) {
-      setMessage({ type: "error", text: error.message });
+      setMessage({ type: "error", text: getAuthErrorMessage(error) });
       setLoading(false);
     }
   }
@@ -111,7 +112,7 @@ export function AuthForm({
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="text-center mb-8">
-        <Logo size="lg" />
+        <Logo size="xl" />
         <p className="text-muted mt-3 text-sm">
           {mode === "login"
             ? "Welcome back, trader."

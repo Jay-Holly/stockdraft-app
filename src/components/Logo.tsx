@@ -7,11 +7,12 @@ const SHIELD = {
   height: 500,
 } as const;
 
-export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
+export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" | "xl" }) {
   const heights = {
     sm: 32,
     md: 44,
     lg: 64,
+    xl: 300,
   };
 
   const h = heights[size];

@@ -1,5 +1,4 @@
 import { AuthForm } from "@/components/AuthForm";
-import { Logo } from "@/components/Logo";
 import { resolveSafeRedirectPath } from "@/lib/auth/redirect-path";
 
 export default async function AuthPage({
@@ -15,10 +14,6 @@ export default async function AuthPage({
 
   return (
     <div className="min-h-screen flex flex-col bg-dark">
-      <header className="px-4 py-4">
-        <Logo />
-      </header>
-
       <main className="flex-1 flex items-center justify-center px-4 py-8">
         <AuthForm
           initialMode={mode}
