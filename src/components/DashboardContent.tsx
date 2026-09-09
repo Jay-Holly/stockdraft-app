@@ -486,8 +486,9 @@ export function DashboardContent({
         </p>
         <p className="text-muted text-sm">
           Draft a free Sim League and learn how the world of StockDuel
-          works. And just in time for Football season, join an SDFL and
-          play along with your friends!
+          works. And just in time for Football season, join a StockDuel
+          Football league in the Sports Sim and play along with your
+          friends!
         </p>
       </section>
 
