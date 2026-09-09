@@ -215,14 +215,23 @@ export async function orderByStaleness(
  * the observation itself was malformed, which should never happen if the
  * logger built it correctly, but the write must survive it if it does).
  */
+export type ObservedValue = { price: number; dayHigh: number | null; dayLow: number | null };
+export type ObservedValueCache = Map<string, ObservedValue>;
+
 /**
  * The last recorded price, high and low for each symbol — used to decide
  * whether a new sample says anything new.
+ *
+ * Callers writing many symbols in one sweep (the logger) should fetch this
+ * once for the whole universe and pass it into writeObservations as
+ * `previousValuesCache` instead of letting each call fetch it again — see
+ * that function's doc comment for why the per-call version silently became
+ * ~552 separate queries a minute.
  */
-async function lastObservedValues(
+export async function lastObservedValues(
   symbols: readonly string[]
-): Promise<Map<string, { price: number; dayHigh: number | null; dayLow: number | null }>> {
-  const out = new Map<string, { price: number; dayHigh: number | null; dayLow: number | null }>();
+): Promise<ObservedValueCache> {
+  const out: ObservedValueCache = new Map();
   if (symbols.length === 0) return out;
 
   const supabase = createServiceClient();
@@ -293,7 +302,22 @@ async function lastObservedValues(
 export type WrittenTick = { symbol: string; price: number; changePercent: number | null };
 
 export async function writeObservations(
-  observations: readonly Observation[]
+  observations: readonly Observation[],
+  /**
+   * Skips the per-call `lastObservedValues` fetch when provided, reading and
+   * updating this map in place instead.
+   *
+   * Without this, a sweep that writes one symbol at a time (the logger's
+   * close-anchor and open-verification passes did, before this was added)
+   * calls `lastObservedValues` once per symbol — a single-symbol query that
+   * looked cheap in isolation but added up to ~552 separate round trips a
+   * minute. Confirmed live 2026-09-09: that one query pattern accounted for
+   * 45% of all database time on the project, 5.7M calls in a week, and was
+   * the actual driver behind CPU/Disk IO pressure that an earlier compute
+   * upgrade only partially masked. Fetch this once per sweep for the whole
+   * universe and thread it through instead.
+   */
+  previousValuesCache?: ObservedValueCache
 ): Promise<{
   written: number;
   rejected: number;
@@ -314,7 +338,8 @@ export async function writeObservations(
     o.kind === "sample" && "price" in o;
 
   const candidates = observations.filter(isRedundantCandidate);
-  const previous = await lastObservedValues(candidates.map((o) => o.symbol));
+  const previous =
+    previousValuesCache ?? (await lastObservedValues(candidates.map((o) => o.symbol)));
 
   const same = (a: number | null | undefined, b: number | null): boolean => {
     const av = a ?? null;
@@ -390,6 +415,19 @@ export async function writeObservations(
     .from("price_log")
     .insert(rows, { count: "exact" });
 
+  // Keep a shared cache current for the rest of this sweep — a symbol
+  // written twice in one sweep (e.g. a sample, then later a corroborated
+  // anchor) needs the second write compared against the first, not against
+  // whatever was true when the sweep started.
+  const cacheWritten = (o: Observation) => {
+    if (!previousValuesCache || o.kind !== "sample" || !("price" in o)) return;
+    previousValuesCache.set(o.symbol, {
+      price: o.price,
+      dayHigh: o.dayHigh ?? null,
+      dayLow: o.dayLow ?? null,
+    });
+  };
+
   if (error) {
     // Batch insert failed as a whole (e.g. a constraint violation on one row
     // took the statement with it under Postgres' default atomicity). Retry
@@ -408,6 +446,7 @@ export async function writeObservations(
         );
       } else {
         written++;
+        cacheWritten(toWrite[i]);
         // Only a row that actually landed may be broadcast. Pushing a rejected
         // one would announce a price no reader can find, and the next refresh
         // would snap the page back to the old value.
@@ -417,6 +456,8 @@ export async function writeObservations(
     }
     return { written, rejected, skipped, writtenTicks: landed };
   }
+
+  for (const o of toWrite) cacheWritten(o);
 
   return {
     written: count ?? rows.length,

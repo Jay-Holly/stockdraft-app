@@ -17,7 +17,9 @@ import {
   writeObservations,
   updateSweepProgress,
   orderByStaleness,
+  lastObservedValues,
   type Observation,
+  type ObservedValueCache,
 } from "@/lib/pricing/log-store";
 
 /**
@@ -181,6 +183,12 @@ export async function runSweep(options: {
     stocks = stocks.slice(0, options.limitStocks);
   }
 
+  // Fetched once for the whole sweep and threaded through every write below
+  // instead of letting writeObservations re-fetch it per call — see that
+  // function's doc comment for why the per-call version silently became
+  // ~552 separate queries a minute.
+  const previousValues: ObservedValueCache = await lastObservedValues(stocks);
+
   const symbolsRequested = stocks.length + crypto.length;
   const sweepId = await startSweep({
     kind: "sample",
@@ -259,7 +267,7 @@ export async function runSweep(options: {
 
   /** writeObservations, plus a note of what changed so it can be pushed. */
   async function writeAndTrack(observations: readonly Observation[]) {
-    const result = await writeObservations(observations);
+    const result = await writeObservations(observations, previousValues);
     changedTicks.push(...result.writtenTicks);
     return result;
   }
