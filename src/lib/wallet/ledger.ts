@@ -27,6 +27,48 @@ export type WalletTransaction = {
 
 export type WalletRange = "month" | "year" | "all";
 
+export const BETA_WELCOME_CREDIT_AMOUNT = 1000;
+/** Exact match used as the idempotency key — never change this string without migrating existing rows. */
+export const BETA_WELCOME_CREDIT_DESCRIPTION = "StockDuel Bucks beta welcome credit";
+
+/**
+ * Grants the one-time beta welcome credit if this user hasn't received it yet.
+ *
+ * New signups get it from the `handle_new_user` DB trigger (migration 098)
+ * the moment their profile row is created. This is the catch-up path for
+ * every account that already existed before that trigger shipped — called
+ * from league creation so nobody has to do anything to get it, and safe to
+ * call as often as needed since it no-ops once the credit exists.
+ */
+export async function ensureBetaWelcomeCredit(userId: string): Promise<void> {
+  const supabase = createServiceClient();
+
+  const { data: existing, error: checkError } = await supabase
+    .from("wallet_transactions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("description", BETA_WELCOME_CREDIT_DESCRIPTION)
+    .maybeSingle();
+
+  if (checkError) {
+    console.error(`[wallet] beta credit check failed for ${userId}: ${checkError.message}`);
+    return;
+  }
+  if (existing) return;
+
+  const { error: insertError } = await supabase.from("wallet_transactions").insert({
+    user_id: userId,
+    type: "deposit",
+    amount: BETA_WELCOME_CREDIT_AMOUNT,
+    status: "completed",
+    description: BETA_WELCOME_CREDIT_DESCRIPTION,
+  });
+
+  if (insertError) {
+    console.error(`[wallet] beta credit grant failed for ${userId}: ${insertError.message}`);
+  }
+}
+
 /** Balance counts completed rows plus pending withdrawals (held the moment
  * a payout is requested, before it's actually paid). */
 export async function getWalletBalance(userId: string): Promise<number> {

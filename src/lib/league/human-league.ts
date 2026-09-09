@@ -22,6 +22,7 @@ import {
 import { parseDraftOrderMethodSetting } from "@/lib/league/draft-order";
 import { maybeStartHumanLeagueDraft } from "@/lib/league/draft-scheduler";
 import { isSdflLeague, sdflIdentityPath } from "@/lib/league/sdfl-divisions";
+import { ensureBetaWelcomeCredit } from "@/lib/wallet/ledger";
 import { isGenericMapLeague } from "@/lib/league/generic-team-map";
 import { loadStandingSeeds } from "@/lib/matchup/league-teams";
 import { sortStandingsForSeeding } from "@/lib/matchup/schedule";
@@ -499,6 +500,11 @@ export async function createHumanLeague(
   if (draftError) {
     return { error: draftError.message };
   }
+
+  // Catch-up path for any account that signed up before the beta welcome
+  // credit existed as a signup-time trigger — see ensureBetaWelcomeCredit.
+  // No-ops if this user already has it, so safe to call on every league.
+  await ensureBetaWelcomeCredit(userId);
 
   return {
     league: league as HumanLeague,

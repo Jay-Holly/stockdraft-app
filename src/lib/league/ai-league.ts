@@ -35,6 +35,7 @@ import {
 } from "@/lib/season/beta-schedule";
 import { getLeagueTeamIds, loadStandingSeeds } from "@/lib/matchup/league-teams";
 import { sortStandingsForSeeding } from "@/lib/matchup/schedule";
+import { ensureBetaWelcomeCredit } from "@/lib/wallet/ledger";
 import {
   findHumanMatchupForWeek,
   getOpponentUserId,
@@ -290,6 +291,11 @@ export async function createFreeAiLeague(
       current_week: 1,
     });
   }
+
+  // Catch-up path for any account that signed up before the beta welcome
+  // credit existed as a signup-time trigger — see ensureBetaWelcomeCredit.
+  // No-ops if this user already has it, so safe to call on every league.
+  await ensureBetaWelcomeCredit(userId);
 
   return { league: league as AiLeague };
 }
