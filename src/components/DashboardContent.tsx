@@ -551,7 +551,7 @@ export function DashboardContent({
         />
 
         <div className="mx-4 mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 text-center">
-          During the Pittsburgh beta, we&rsquo;ll credit you $1,000 in
+          During the beta test, we&rsquo;ll credit you $1,000 in
           StockDuel bucks so you can play the Daily and Weekly Fantasy
           Sports games for free.
         </div>
