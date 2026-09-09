@@ -15,9 +15,16 @@ const RANGE_LABELS: Record<WalletRange, string> = {
   all: "All Time",
 };
 
-function formatSignedUsd(amount: number): string {
+function formatBucks(amount: number): string {
+  return Math.abs(amount).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatSignedBucks(amount: number): string {
   const sign = amount >= 0 ? "+" : "-";
-  return `${sign}$${Math.abs(amount).toFixed(2)}`;
+  return `${sign}${formatBucks(amount)} StockDuel Bucks`;
 }
 
 function transactionLabel(tx: WalletTransaction): string {
@@ -90,10 +97,10 @@ export default async function MyAccountPage({
             Account Balance
           </p>
           <p className="text-4xl font-black text-gold mt-1">
-            ${balance.toFixed(2)}
+            {formatBucks(balance)}
           </p>
           <p className="text-xs text-muted mt-1">
-            Includes any winnings credited to your account
+            StockDuel Bucks — includes any winnings credited to your account
           </p>
         </div>
 
@@ -148,7 +155,7 @@ export default async function MyAccountPage({
                       tx.amount >= 0 ? "text-green-400" : "text-red-400"
                     }`}
                   >
-                    {formatSignedUsd(tx.amount)}
+                    {formatSignedBucks(tx.amount)}
                   </div>
                 </div>
               ))
