@@ -36,40 +36,43 @@ export function AuthForm({
     setMessage(null);
 
     if (mode === "signup") {
-      // Email confirmation is temporarily off (no auth SMTP wired up yet),
-      // so the account is created pre-confirmed server-side and signed in
-      // immediately below. Revert to supabase.auth.signUp() once that's in place.
-      const signupRes = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          username,
-          teamName,
-          dayTraderSignup: variant === "daytrader",
-        }),
-      });
-      const signupData = await signupRes.json();
-
-      if (!signupRes.ok) {
-        setMessage({ type: "error", text: signupData.error ?? "Something went wrong. Please try again." });
-        setLoading(false);
-        return;
+      // Supabase emails a confirmation link and the account cannot sign in
+      // until it is clicked. The link lands on /auth/callback, which exchanges
+      // the code for a session and honours `next` / `daytrader` the same way
+      // the Google flow does.
+      const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+      if (redirectTo !== "/dashboard") {
+        callbackUrl.searchParams.set("next", redirectTo);
+      }
+      if (variant === "daytrader") {
+        callbackUrl.searchParams.set("daytrader", "1");
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: callbackUrl.toString(),
+          data: {
+            username,
+            team_name: teamName,
+            avatar_color: "blue",
+            day_trader_signup: variant === "daytrader" ? "true" : "false",
+          },
+        },
       });
 
-      if (signInError) {
-        setMessage({ type: "error", text: getAuthErrorMessage(signInError) });
+      if (signUpError) {
+        setMessage({ type: "error", text: getAuthErrorMessage(signUpError) });
         setLoading(false);
         return;
       }
 
-      window.location.href = redirectTo;
+      setMessage({
+        type: "success",
+        text: `Almost there — check ${email} for a confirmation link. You can sign in once you've clicked it.`,
+      });
+      setLoading(false);
       return;
     }
 
