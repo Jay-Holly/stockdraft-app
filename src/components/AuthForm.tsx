@@ -36,30 +36,40 @@ export function AuthForm({
     setMessage(null);
 
     if (mode === "signup") {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            username,
-            team_name: teamName,
-            avatar_color: "blue",
-            day_trader_signup: variant === "daytrader" ? "true" : "false",
-          },
-        },
+      // Email confirmation is temporarily off (no auth SMTP wired up yet),
+      // so the account is created pre-confirmed server-side and signed in
+      // immediately below. Revert to supabase.auth.signUp() once that's in place.
+      const signupRes = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          username,
+          teamName,
+          dayTraderSignup: variant === "daytrader",
+        }),
       });
+      const signupData = await signupRes.json();
 
-      if (error) {
-        setMessage({ type: "error", text: getAuthErrorMessage(error) });
+      if (!signupRes.ok) {
+        setMessage({ type: "error", text: signupData.error ?? "Something went wrong. Please try again." });
         setLoading(false);
         return;
       }
 
-      setMessage({
-        type: "success",
-        text: "Account created! Check your email to confirm, then log in.",
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
-      setLoading(false);
+
+      if (signInError) {
+        setMessage({ type: "error", text: getAuthErrorMessage(signInError) });
+        setLoading(false);
+        return;
+      }
+
+      window.location.href = redirectTo;
       return;
     }
 
