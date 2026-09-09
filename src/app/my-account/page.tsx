@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Logo } from "@/components/Logo";
 import { WalletActions } from "@/components/wallet/WalletActions";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -66,8 +65,7 @@ export default async function MyAccountPage({
   return (
     <div className="min-h-screen flex flex-col">
       <header className="px-4 py-4 border-b border-dark-border">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <Logo size="sm" />
+        <div className="max-w-lg mx-auto flex items-center justify-end">
           {profile?.username && (
             <Link
               href="/profile"

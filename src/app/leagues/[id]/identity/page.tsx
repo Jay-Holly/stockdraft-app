@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Logo } from "@/components/Logo";
 import { SdflIdentityForm } from "@/components/league/SdflIdentityForm";
 import { GenericTeamMapForm } from "@/components/league/GenericTeamMapForm";
 import {
@@ -62,8 +61,7 @@ export default async function LeagueIdentityPage({ params }: PageProps) {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="px-4 py-4 border-b border-dark-border">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <Logo size="sm" />
+        <div className="max-w-3xl mx-auto flex items-center justify-end">
           <Link
             href="/dashboard"
             className="text-xs text-muted hover:text-gold transition-colors"

@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Logo } from "@/components/Logo";
 import { PageWatermark } from "@/components/PageWatermark";
 import { STANDARD_PLAYER_COUNTS } from "@/lib/league/league-config";
 
@@ -9,8 +8,7 @@ export default function JoinPublicPlayerPage() {
     <div className="min-h-screen flex flex-col">
       <PageWatermark />
       <header className="px-4 py-4 border-b border-dark-border">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <Logo size="sm" />
+        <div className="max-w-lg mx-auto flex items-center justify-end">
           <Link
             href="/dashboard"
             className="text-xs text-muted hover:text-gold transition-colors"

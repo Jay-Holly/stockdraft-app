@@ -14,7 +14,6 @@ import {
   memberNeedsGenericMapClaim,
 } from "@/lib/league/generic-team-map";
 import { DraftRoom } from "@/components/draft/DraftRoom";
-import { Logo } from "@/components/Logo";
 import { LeagueSupportId } from "@/components/league/LeagueSupportId";
 import type { Draft } from "@/lib/draft/types";
 import type { Profile } from "@/lib/types";
@@ -132,8 +131,7 @@ export default async function DraftPage({
   return (
     <div className="min-h-screen flex flex-col">
       <header className="px-4 py-4 border-b border-dark-border">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <Logo size="sm" />
+        <div className="max-w-5xl mx-auto flex items-center justify-end">
           <div className="flex items-center gap-4">
             {leagueSupportCode ? (
               <LeagueSupportId code={leagueSupportCode} />

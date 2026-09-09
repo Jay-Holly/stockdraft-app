@@ -2,7 +2,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getLeagueInvitePreview } from "@/lib/league/human-league";
 import { JoinLeaguePanel } from "@/components/league/JoinLeaguePanel";
-import { Logo } from "@/components/Logo";
 import { PageWatermark } from "@/components/PageWatermark";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +15,7 @@ function JoinPageShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col">
       <PageWatermark />
       <header className="px-4 py-4 border-b border-dark-border">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <Logo size="sm" />
+        <div className="max-w-lg mx-auto flex items-center justify-end">
           <Link
             href="/dashboard"
             className="text-xs text-muted hover:text-gold transition-colors"

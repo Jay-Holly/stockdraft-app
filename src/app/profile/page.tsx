@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileContent } from "@/components/profile/ProfileContent";
-import { Logo } from "@/components/Logo";
 import type { Profile } from "@/lib/types";
 import { PROFILE_COLUMNS } from "@/lib/profile/columns";
 
@@ -65,8 +64,7 @@ export default async function ProfilePage() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="px-4 py-4 border-b border-dark-border">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <Logo size="sm" />
+        <div className="max-w-lg mx-auto">
           <span className="text-xs text-gold font-semibold uppercase tracking-wider">
             Manager Profile
           </span>

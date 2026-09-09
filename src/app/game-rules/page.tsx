@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Logo } from "@/components/Logo";
 import { LeagueRulesModal } from "@/components/league/LeagueRulesModal";
 import {
   SdplRulesContent,
@@ -114,10 +113,6 @@ export default function GameRulesPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-dark">
-      <header className="px-4 py-4 border-b border-dark-border">
-        <Logo />
-      </header>
-
       {openRules && (
         <LeagueRulesModal
           title={RULES_TITLES[openRules]}
@@ -313,7 +308,7 @@ export default function GameRulesPage() {
           >
             <p className="text-sm text-white/90 leading-relaxed">
               Put your money where your mouth is! Daily contests. Our beta
-              gives you $1,000 in StockDuel Bucks to start — once beta
+              gives you 1,000 StockDuel Bucks to start — once beta
               testing wraps, you&apos;ll be able to add money to your wallet
               and invest $2–$100 into a pool to see who wins. Your skill
               wins you real money! No bench. No free agency. No do-overs.

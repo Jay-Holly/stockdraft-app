@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { CreateLeagueForm } from "@/components/league/CreateLeagueForm";
-import { Logo } from "@/components/Logo";
 
 export default async function CreateLeaguePage() {
   const supabase = await createClient();
@@ -25,8 +24,7 @@ export default async function CreateLeaguePage() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="px-4 py-4 border-b border-dark-border">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <Logo size="sm" />
+        <div className="max-w-lg mx-auto flex items-center justify-end">
           <Link
             href="/dashboard"
             className="text-xs text-muted hover:text-gold transition-colors"
