@@ -11,9 +11,14 @@
  * fantasy formula. Re-run this once 2026-27 games are on the board to
  * refresh ranks from the actual current season.
  *
- * Rankings only — no injuries. sim_player_injuries is untouched; see
- * seed-sim-nhl-2024.mjs's header for why no free scriptable NHL injury
- * source exists yet.
+ * Ranked 700 deep (matching SDFL 2026's model, not the 2024-era 100-player
+ * cycle) so SDHL's injury system draws from a real, distinct player for
+ * every drafted stock instead of recycling the same 100 names — see
+ * src/lib/sim/sdhl-2026-injury-status.ts. Every rank is tagged tier
+ * "editorial"; there is no editorial/production split in this model.
+ *
+ * Rankings only — no injuries. sim_player_injuries is populated separately,
+ * in-season, by src/lib/injuries/nhl-logger.ts (RotoWire poll).
  *
  * Usage:
  *   node scripts/seed-sim-nhl-2026.mjs [--dry-run]
@@ -28,8 +33,7 @@ import { createClient } from "@supabase/supabase-js";
 const SPORT = "nhl";
 const SEASON = "2026";
 const NHL_STATS_SEASON_ID = "20252026";
-const EDITORIAL_MAX_RANK = 100;
-const TOTAL_RANKS = 384;
+const TOTAL_RANKS = 700;
 const RANK_SOURCE = "computed-2025-26-nhl-points";
 
 const NHL_STATS_API = "https://api.nhle.com/stats/rest/en";
@@ -87,9 +91,6 @@ function slugify(fullName) {
     .replace(/^-+|-+$/g, "");
 }
 
-function tierForRank(rank) {
-  return rank <= EDITORIAL_MAX_RANK ? "editorial" : "production";
-}
 
 function makePlayerId(fullName, team, usedIds) {
   let base = `nhl-${SEASON}-${slugify(fullName)}`;
@@ -160,9 +161,23 @@ function buildRankedCandidates(skaters, goalies) {
         (row.shutouts ?? 0) * GOALIE_SCORING.shutout,
     }));
 
-  return [...skaterCandidates, ...goalieCandidates]
+  const ranked = [...skaterCandidates, ...goalieCandidates]
     .filter((row) => row.team)
     .sort((a, b) => b.score - a.score);
+
+  // Two players sharing a name (after suffix-stripping) can't be told apart
+  // by the RotoWire injury poller, which matches by normalized name — see
+  // nhl-logger.ts's "Duplicate name key" warning. Keep only the
+  // higher-scoring one instead of seeding both under an ambiguous name.
+  const seenNames = new Set();
+  const deduped = [];
+  for (const candidate of ranked) {
+    const key = normalizeDisplayName(candidate.full_name).toLowerCase();
+    if (seenNames.has(key)) continue;
+    seenNames.add(key);
+    deduped.push(candidate);
+  }
+  return deduped;
 }
 
 async function clearNhl2026SimData() {
@@ -247,7 +262,7 @@ async function main() {
     simRankings.push({
       player_id: playerId,
       rank,
-      tier: tierForRank(rank),
+      tier: "editorial",
       rank_source: RANK_SOURCE,
     });
   }
@@ -275,16 +290,14 @@ async function main() {
   console.log("Inserting sim_player_rankings...");
   await insertBatched("sim_player_rankings", simRankings);
 
-  const editorialCount = simRankings.filter((r) => r.tier === "editorial").length;
-  const productionCount = simRankings.filter((r) => r.tier === "production").length;
   const goalieCount = simPlayers.filter((p) => p.position === "G").length;
 
   console.log("\n=== Seed summary ===");
   console.log(
-    `Players: ${simPlayers.length} ranked (${editorialCount} editorial ranks 1-${EDITORIAL_MAX_RANK}, ${productionCount} production ranks ${EDITORIAL_MAX_RANK + 1}-${TOTAL_RANKS}; ${goalieCount} goalies included)`
+    `Players: ${simPlayers.length} ranked 1-${simRankings.length}, all tier "editorial" (${goalieCount} goalies included)`
   );
   console.log(
-    "Injuries: not seeded (no free scriptable NHL injury source found yet)."
+    "Injuries: not seeded here — run src/lib/injuries/nhl-logger.ts (via cron or the admin poll) separately."
   );
 }
 

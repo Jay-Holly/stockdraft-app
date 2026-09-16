@@ -8,18 +8,23 @@ import {
   isSdfl2026StockIrEligible,
   loadSdfl2026InjuredSymbolsForLeague,
 } from "@/lib/sim/sdfl-2026-injury-status";
+import {
+  isSdhl2026StockIrEligible,
+  loadSdhl2026InjuredSymbolsForLeague,
+} from "@/lib/sim/sdhl-2026-injury-status";
 import { sportsLeagueIdToSimSport, defaultSimSeason } from "@/lib/sim/sport";
 import type { IrEligibilityResult } from "@/lib/sim/types";
 
 // Single dispatch point used by every call site instead of importing
-// injury-status.ts's 2024-era functions directly. Routes SDFL (once its
-// season resolves to 2026, which it now does via CURRENT_SIM_SEASON) to the
-// isolated sdfl-2026-injury-status.ts path; every other sports-sim league
-// (still on 2024 data) keeps using the original 2024 mechanism unchanged.
+// injury-status.ts's 2024-era functions directly. Routes SDFL and SDHL (once
+// each one's season resolves to 2026, which it now does via
+// CURRENT_SIM_SEASON) to their own isolated 2026-injury-status path; every
+// other sports-sim league (SDBA, SDLB — still on 2024 data, deliberately left
+// alone) keeps using the original 2024 mechanism unchanged.
 //
 // Lives in its own file rather than inside injury-status.ts to avoid a
-// circular import: sdfl-2026-injury-status.ts already imports shared
-// week/date-window helpers from injury-status.ts.
+// circular import: the per-league 2026 injury-status files already import
+// shared week/date-window helpers from injury-status.ts.
 
 type LeagueRef = {
   sports_league_id: string | null;
@@ -32,6 +37,12 @@ function isSdfl2026(league: LeagueRef): boolean {
   return sport === "nfl" && defaultSimSeason(league.sports_standings_season) === "2026";
 }
 
+function isSdhl2026(league: LeagueRef): boolean {
+  const sport = sportsLeagueIdToSimSport(league.sports_league_id);
+  if (!sport) return false;
+  return sport === "nhl" && defaultSimSeason(league.sports_standings_season) === "2026";
+}
+
 export async function isStockIrEligibleForLeague(
   supabase: SupabaseClient,
   leagueId: string,
@@ -42,6 +53,9 @@ export async function isStockIrEligibleForLeague(
 ): Promise<IrEligibilityResult> {
   if (isSdfl2026(league)) {
     return isSdfl2026StockIrEligible(supabase, leagueId, symbol, leagueWeekNumber, options);
+  }
+  if (isSdhl2026(league)) {
+    return isSdhl2026StockIrEligible(supabase, leagueId, symbol, leagueWeekNumber, options);
   }
   return isStockIrEligibleForLeague2024(supabase, leagueId, league, symbol, leagueWeekNumber, options);
 }
@@ -56,6 +70,9 @@ export async function loadInjuredSymbolsForLeague(
 ): Promise<Set<string>> {
   if (isSdfl2026(league)) {
     return loadSdfl2026InjuredSymbolsForLeague(supabase, leagueId, symbols, leagueWeekNumber, options);
+  }
+  if (isSdhl2026(league)) {
+    return loadSdhl2026InjuredSymbolsForLeague(supabase, leagueId, symbols, leagueWeekNumber, options);
   }
   return loadInjuredSymbolsForLeague2024(supabase, leagueId, league, symbols, leagueWeekNumber, options);
 }

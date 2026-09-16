@@ -20,6 +20,7 @@ import {
 } from "@/lib/season/sdpl-league";
 import { seedSportsLeaguePickInjuryMapIfMissing } from "@/lib/sim/pick-injury-map";
 import { seedSdfl2026PickInjuryMapIfMissing } from "@/lib/sim/sdfl-2026-pick-injury-map";
+import { seedSdhl2026PickInjuryMapIfMissing } from "@/lib/sim/sdhl-2026-pick-injury-map";
 import { generateSportsSimRegularSeasonSchedule } from "@/lib/matchup/sdfl-schedule";
 import {
   generateMultiAssetRegularSeasonSchedule,
@@ -273,7 +274,9 @@ export async function finalizeHumanLeagueAfterDraft(
     const mapResult =
       leagueRow?.sports_league_id === "sdfl"
         ? await seedSdfl2026PickInjuryMapIfMissing(leagueId)
-        : await seedSportsLeaguePickInjuryMapIfMissing(leagueId);
+        : leagueRow?.sports_league_id === "sdhl"
+          ? await seedSdhl2026PickInjuryMapIfMissing(leagueId)
+          : await seedSportsLeaguePickInjuryMapIfMissing(leagueId);
     if (mapResult.error) {
       console.error(
         `[finalizeHumanLeagueAfterDraft] injury map seed failed league=${leagueId}:`,
