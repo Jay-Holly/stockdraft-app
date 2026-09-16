@@ -118,12 +118,12 @@ function SportsLeaguePicker({
         {SPORTS_LEAGUE_FORMATS.map((format) => {
           const selected = value === format.id;
           const comingSoon =
-            format.id === "sdhl" ||
             format.id === "sdba" ||
             format.id === "sdcup" ||
             format.id === "sdps";
           const comingNextSpring = format.id === "sdlb";
           const signUpNow = format.id === "sdfl";
+          const draftNowSeasonStarts = format.id === "sdhl";
           return (
             <div
               key={format.id}
@@ -169,6 +169,11 @@ function SportsLeaguePicker({
               {signUpNow && (
                 <span className="block text-[0.6875rem] font-semibold mt-1 text-emerald-400">
                   Sign Up Now
+                </span>
+              )}
+              {draftNowSeasonStarts && (
+                <span className="block text-[0.6875rem] font-semibold mt-1 text-emerald-400">
+                  Draft Now — Season Starts 9/29
                 </span>
               )}
               {selected && (
